@@ -58,7 +58,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: aiverify-portal
-          image: aiverify-portal:0.10-amd64
+          image: aiverify-portal:0.10
           args:
             - "bash"
             - "-c"

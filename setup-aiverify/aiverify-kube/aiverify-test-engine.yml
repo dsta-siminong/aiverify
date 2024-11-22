@@ -56,7 +56,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: aiverify-test-engine
-          image: aiverify-test-engine:0.10-amd64
+          image: aiverify-test-engine:0.10
           args:
             - "bash"
             - "-c"

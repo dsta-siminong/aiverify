@@ -130,14 +130,13 @@ RUN chown -R 1000:1000 ./test-engine-app
 # Nextjs cache.
 RUN chown 1000:1000 ./ai-verify-portal/.next/cache
 
+# WORKDIR /app/aiverify/ai-verify-apigw/lib
+# COPY ./report.mjs .
 # WORKDIR /app/aiverify/ai-verify-apigw
+# COPY ./app.mjs .
 # # COPY ../../../../ai-verify-apigw/app.mjs .
 # COPY ./upload.mjs ./routes
 # COPY ./testEngineWorker.mjs ./lib
-
-# WORKDIR /app/aiverify/ai-verify-portal
-# COPY ../../../../ai-verify-portal/next.config.js .
-
 
 # Run containers with non-root user
 USER $USER

@@ -45,6 +45,9 @@ RUN apt-get install -y gcc g++ python3.11-dev
 # Install libmagicwand for Environment Corruption
 RUN apt-get install libmagickwand-dev -y
 
+# Install OpenGL libraries for OpenCV 
+RUN apt-get install -y libgl1-mesa-glx libglib2.0-0 
+
 # Set python3.11 as default python3
 RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.10 1
 RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 2
@@ -89,6 +92,8 @@ RUN pip install -r requirements.txt
 
 ############## Stock plugins #################
 # Unzip stock plugin bundles into the plugins folder
+WORKDIR /app/aiverify/stock-plugins/aiverify.stock.shap-toolbox/dist
+RUN rm -f aiverify.stock.shap_toolbox-1.0.0.zip
 WORKDIR /app/aiverify/stock-plugins
 RUN mkdir ../stock-plugins-unzip
 RUN for plugin_dir in *; do \
@@ -127,6 +132,20 @@ RUN mkdir -p ./ai-verify-portal/plugins
 RUN chown -R 1000:1000 ./ai-verify-portal
 
 # RUN ls
+#RUN pip install deepchecks==0.18.0
+# RUN pip install deepchecks[nlp]==0.18.1
+# RUN pip install deepchecks[vision]==0.18.1
+#RUN pip install torch==2.1.0
+#RUN pip install sentence_transformers==2.2.2
+#RUN pip install Wand
+#RUN apt-get -y install libmagickwand-dev
+#RUN pip install opencv-python==4.7.0.72
+#RUN pip install lazy_loader==0.3
+# RUN pip install adversarial-robustness-toolbox==1.18.0
+# RUN pip install pillow==10.4.0
+# RUN pip install tensorflow_addons==0.23.0
+# RUN pip install minio==7.2.9
+# RUN pip install tensorflow[and-cuda]
 
 WORKDIR /app/aiverify/test-engine-app/test_engine_app
 # change number of cpu workers so that it doesnt hang
@@ -140,9 +159,12 @@ COPY ./task_processing.py ./
 
 # for kubectl or helm install
 WORKDIR /app/aiverify/test-engine-app
-COPY ./aiverify-job.yml ./
-COPY mychart/ ./mychart/
-
+# COPY ./aiverify-job.yml ./
+# COPY mychart/ ./mychart/
+COPY deepcheckschart/ ./deepcheckschart/
+# COPY test_images/ ./test_images/
+# COPY xception_test_annotated_labels.csv ./
+# COPY Xception-10-0.74.hdf5 ./
 # Run containers with non-root user
 USER $USER
 

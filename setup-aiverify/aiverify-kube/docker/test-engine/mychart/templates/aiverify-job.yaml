@@ -10,9 +10,9 @@ spec:
         - name: {{ .Release.Name }}
           image: {{ .Values.image }}
           env:
-            - name: var_one
-              value: {{ .Values.varOne }}
-            - name: var_two
-              value: {{ .Values.varTwo }}
+            {{- range .Values.items }} 
+            - name: {{ .name }}
+              value: {{ .value }}
+            {{- end }}
       restartPolicy: {{ .Values.restartPolicy }}
   backoffLimit: {{ .Values.backoffLimit }}
