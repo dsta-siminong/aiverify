@@ -1,4 +1,0 @@
-deepchecks==0.18.1
-numpy==1.26.4
-pandas==2.1.4
-redis==5.2.0
