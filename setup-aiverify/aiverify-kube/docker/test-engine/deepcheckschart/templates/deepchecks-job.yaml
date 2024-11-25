@@ -1,0 +1,31 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Name }}
+  namespace: {{ .Values.namespace }}
+spec:
+  ttlSecondsAfterFinished: {{ .Values.ttlSeconds }}
+  template:
+    spec:
+      containers:
+        - name: {{ .Release.Name }}
+          image: {{ .Values.image }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          env:
+            {{- range .Values.items }} 
+            - name: {{ .name }}
+              value: {{ .value }}
+            {{- end }}
+          volumeMounts:
+            - name: aiverify-shared-data
+              mountPath: /app/aiverify/uploads/data
+              subPath: data
+            - name: aiverify-shared-data
+              mountPath: /app/aiverify/uploads/model
+              subPath: model
+      volumes:
+        - name: aiverify-shared-data
+          persistentVolumeClaim:
+            claimName: aiverify-shared-pvc
+      restartPolicy: {{ .Values.restartPolicy }}
+  backoffLimit: {{ .Values.backoffLimit }}

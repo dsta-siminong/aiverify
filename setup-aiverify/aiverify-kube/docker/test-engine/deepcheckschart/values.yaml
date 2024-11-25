@@ -1,0 +1,23 @@
+replicaCount: 1
+
+image: docker.io/siminong/deepchecks_job:v1
+namespace: aiverify
+ttlSeconds: 60
+restartPolicy: Never
+backoffLimit: 5
+imagePullPolicy: Always
+http_url: http_url
+
+items:
+  - name: test_name
+    value: "Tabular Feature Drift"
+  - name: label
+    value: "default"
+  - name: background_path
+    value: "/app/aiverify/uploads/data/sample_mc_toxic_data.sav"
+  - name: drifted_path
+    value: "/app/aiverify/uploads/data/sample_mc_toxic_data.sav"
+  - name: job_id
+    value: "redis_job"
+
+
