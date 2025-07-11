@@ -62,6 +62,7 @@ class PluginManager:
     _pipeline_priority_list: List = [
         PipelinePluginType.SKLEARN,
         PipelinePluginType.PYTORCH,
+        PipelinePluginType.CUSTOM,
     ]
     _plugins: Dict = {plugin_type.name: dict() for plugin_type in PluginType}
     lock: Lock = Lock()
@@ -352,6 +353,7 @@ class PluginManager:
         """
         # Pass the information to PipelineManager to process and return the detected pipeline instance
         pipeline_path = arguments.get("pipeline_path", "")
+        
         (
             is_success,
             pipeline_instance,
