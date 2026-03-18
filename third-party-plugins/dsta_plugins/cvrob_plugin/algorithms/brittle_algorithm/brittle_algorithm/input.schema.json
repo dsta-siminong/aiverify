@@ -1,0 +1,46 @@
+{
+    "title": "Algorithm Plugin Input Arguments",
+    "description": "A schema for algorithm plugin input arguments",
+    "type": "object",
+    "required": [
+        "aug_library",
+        "aug_method"
+    ],
+    "properties": {
+        "aug_library": {
+            "title": "Augmentation Library Name",
+            "description": "Indicate the augmentation library to extract from",
+            "type": "string"
+        }, 
+        "aug_method": {
+            "title": "Augmentation Method Name",
+            "description": "Indicate the augmentation method",
+            "type": "string"
+        },
+        "severity_before": {
+            "title": "Before Severity",
+            "description": "Indicate the extent of severity to compare to (before)",
+            "type": "string"
+        },
+        "severity_after": {
+            "title": "After Severity",
+            "description": "Indicate the extent of severity to compare to (after)",
+            "type": "string"
+        },
+        "severity_before_idx": {
+            "title": "Before Severity (integer)",
+            "description": "Indicate the extent of severity to compare to (before, as integer index)",
+            "type": "integer"
+        },
+        "severity_after_idx": {
+            "title": "After Severity (integer)",
+            "description": "Indicate the extent of severity to compare to (after, as integer index)",
+            "type": "integer"
+        },
+        "custom_parameters": {
+            "title": "Custom Parameters",
+            "description": "Custom parameters for the augmentation_method",
+            "type": "string"
+        }
+    }
+}

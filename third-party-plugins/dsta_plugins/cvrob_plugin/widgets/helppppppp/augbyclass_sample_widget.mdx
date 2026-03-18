@@ -1,0 +1,158 @@
+export const algo_cid = "augmentation_by_class_algorithm"
+export const ib_cid = "augbyclass_inputblock"
+export const cid = "augmentation_by_class_algorithm"
+
+# {props.properties.title}
+
+import {
+  transformData,
+  ClassLineChart,
+  PopulationChart,
+  StackedBarChart,
+  ClassMetricsTable
+} from './augbyclass-chart.jsx';
+
+export const AugmentationSeverityPanel = ({ props }) => {
+  const resultsData = props.getResults ? props.getResults(cid).results : null;
+
+  if (!resultsData || resultsData.length === 0) {
+    return <div>No results data available</div>;
+  }
+
+  const augmentationPanels = resultsData.map((augmentationItem, index) => {
+    const { Augmentation, display_info } = augmentationItem;
+
+    if (!display_info) return null;
+
+    // Sort severity keys properly
+    const severityKeys = Object.keys(display_info).sort((a, b) => {
+      if (a === "severityNone") return -1;
+      if (b === "severityNone") return 1;
+
+      const numA = parseFloat(a.match(/[\d.]+/)?.[0] || 0);
+      const numB = parseFloat(b.match(/[\d.]+/)?.[0] || 0);
+
+      return numA - numB;
+    });
+
+    const severityEntries = severityKeys.map((severityKey) => {
+      const [imagePath, groundTruth, prediction] =
+        display_info[severityKey] || [];
+
+      if (!imagePath) return null;
+
+      let imageUrl = null;
+
+      try {
+        imageUrl = props.getArtifactURL(cid, imagePath);
+      } catch (error) {
+        console.error(`Error getting URL for ${imagePath}`, error);
+      }
+
+      // Extract filename from path
+      const fileName = imagePath.split("/").pop();
+
+      return {
+        severityKey,
+        imageUrl,
+        groundTruth,
+        prediction,
+        fileName,
+      };
+    });
+
+    return (
+      <div
+        key={index}
+        style={{
+          border: "1px solid #ddd",
+          borderRadius: "8px",
+          padding: "1.5rem",
+          marginBottom: "3rem",
+        }}
+      >
+        {/* 🔴 Centered Bold Underlined Red Title */}
+        <h2
+          style={{
+            textAlign: "center",
+            fontWeight: "bold",
+            textDecoration: "underline",
+            color: "red",
+            marginBottom: "0.5rem",
+          }}
+        >
+          {Augmentation}
+        </h2>
+
+        {/* Subtitle: filename */}
+        {severityEntries[0] && (
+          <div
+            style={{
+              textAlign: "center",
+              marginBottom: "1.5rem",
+              fontStyle: "italic",
+              color: "#666",
+            }}
+          >
+            {severityEntries[0].fileName}
+          </div>
+        )}
+
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: "2rem",
+            justifyContent: "center",
+          }}
+        >
+          {severityEntries.map((entry, i) => {
+            if (!entry) return null;
+
+            const isCorrect = entry.groundTruth === entry.prediction;
+
+            return (
+              <div key={i} style={{ textAlign: "center" }}>
+                <h4>{entry.severityKey}</h4>
+
+                <img
+                  src={entry.imageUrl}
+                  alt={entry.severityKey}
+                  style={{
+                    maxWidth: "300px",   // 👈 no fixed width/height
+                    height: "auto",      // 👈 keeps original aspect ratio
+                    borderRadius: "6px",
+                    border: isCorrect
+                      ? "3px solid #4CAF50"
+                      : "3px solid #F44336",
+                  }}
+                />
+
+                <div style={{ marginTop: "0.5rem" }}>
+                  <div>
+                    <strong>GT:</strong> {entry.groundTruth}
+                  </div>
+                  <div>
+                    <strong>Pred:</strong>{" "}
+                    <span
+                      style={{
+                        color: isCorrect ? "#4CAF50" : "#F44336",
+                        fontWeight: "bold",
+                      }}
+                    >
+                      {entry.prediction}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  });
+
+  return <div>{augmentationPanels}</div>;
+};
+
+<AugmentationSeverityPanel props={props} />

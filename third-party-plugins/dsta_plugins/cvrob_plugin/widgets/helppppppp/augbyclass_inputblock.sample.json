@@ -1,0 +1,5 @@
+{
+  "aug_library": "albumentations",
+  "aug_methods": "GaussianBlur,GaussianNoise",
+  "num_epochs": 30
+}

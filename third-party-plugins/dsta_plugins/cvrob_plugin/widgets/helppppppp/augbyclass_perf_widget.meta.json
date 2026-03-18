@@ -1,0 +1,39 @@
+{
+  "cid": "augbyclass_perf_widget",
+  "widgetSize": {
+    "minW": 12,
+    "minH": 1,
+    "maxW": 12,
+    "maxH": 36
+  },
+  "name": "Augmentations By Class Model Performance Widget",
+  "description": "Augmentations By Class Model Performance",
+  "dynamicHeight": true,
+  "dependencies": [
+    {
+      "cid": "augmentation_by_class_algorithm"
+    },
+    {
+      "cid": "augbyclass_inputblock"
+    }
+  ],
+  "mockdata": [
+    {
+      "type": "Algorithm",
+      "cid": "augmentation_by_class_algorithm",
+      "datapath": "augmentation_by_class_algorithm.sample.json"
+    },
+    {
+      "type": "InputBlock",
+      "cid": "augbyclass_inputblock",
+      "datapath": "augbyclass_inputblock.sample.json"
+    }
+  ],
+  "properties": [
+    {
+      "key": "title",
+      "helper": "Set the widget title (default \"AUGMENTATIONS BY CLASS\")",
+      "default": "AUGMENTATIONS BY CLASS - MODEL PERFORMANCE"
+    }
+  ]
+}

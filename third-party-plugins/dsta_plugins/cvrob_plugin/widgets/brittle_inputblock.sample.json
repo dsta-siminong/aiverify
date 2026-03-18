@@ -1,0 +1,8 @@
+{
+  "aug_library": "albumentations",
+  "aug_method": "GaussianBlur",
+  "severityb4": "",
+  "severitaf": "",
+  "severityb4i": 0,
+  "severityafi": 1
+}

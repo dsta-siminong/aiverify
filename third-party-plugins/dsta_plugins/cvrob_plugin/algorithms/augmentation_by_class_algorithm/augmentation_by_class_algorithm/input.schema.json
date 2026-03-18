@@ -1,0 +1,32 @@
+{
+    "title": "Algorithm Plugin Input Arguments",
+    "description": "A schema for algorithm plugin input arguments",
+    "type": "object",
+    "required": [
+        "aug_library",
+        "aug_methods",
+        "num_epochs"
+    ],
+    "properties": {
+        "aug_library": {
+            "title": "Augmentation Library Name",
+            "description": "Indicate the augmentation library to extract from",
+            "type": "string"
+        }, 
+        "aug_methods": {
+            "title": "Augmentation Method Name",
+            "description": "Indicate the augmentation methods to run through (separated by commas)",
+            "type": "string"
+        },
+        "num_epochs": {
+            "title": "Number of epochs",
+            "description": "Indicate the number of epochs you're using",
+            "type": "integer"
+        },
+        "custom_parameters": {
+            "title": "Custom Parameters",
+            "description": "Custom parameters for the augmentation_method",
+            "type": "string"
+        }
+    }
+}

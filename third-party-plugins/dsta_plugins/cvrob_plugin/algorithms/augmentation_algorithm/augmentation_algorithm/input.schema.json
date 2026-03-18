@@ -1,0 +1,25 @@
+{
+    "title": "Algorithm Plugin Input Arguments",
+    "description": "A schema for algorithm plugin input arguments",
+    "type": "object",
+    "required": [
+        "aug_library"
+    ],
+    "properties": {
+        "aug_library": {
+            "title": "Augmentation Library Name",
+            "description": "Indicate the augmentation library to extract from",
+            "type": "string"
+        },
+        "aug_methods": {
+            "title": "Augmentation Method(s) Name",
+            "description": "Indicate the augmentation functions separated by commas",
+            "type": "string"
+        },
+        "custom_parameters": {
+            "title": "Custom Parameters",
+            "description": "Custom parameters for the augmentation_method(s)",
+            "type": "string"
+        }
+    }
+}

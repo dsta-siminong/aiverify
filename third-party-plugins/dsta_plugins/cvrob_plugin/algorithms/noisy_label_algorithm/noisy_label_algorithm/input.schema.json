@@ -1,0 +1,15 @@
+{
+    "title": "Algorithm Plugin Input Arguments",
+    "description": "A schema for algorithm plugin input arguments",
+    "type": "object",
+    "required": [
+        "num_epochs"
+    ],
+    "properties": {
+        "num_epochs": {
+            "title": "Number of epochs",
+            "description": "Indicate the number of epochs you're using",
+            "type": "integer"
+        }
+    }
+}

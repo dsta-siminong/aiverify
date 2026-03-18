@@ -1,0 +1,11 @@
+[project]
+name = "tutorial_algorithm"
+version = "0.1.0"
+description = "This algorithm returns the value of the feature name selected by the user."
+authors = [{ name = "Example Author" }]
+readme = "README.md"
+dependencies = ["aiverify-test-engine[all]"]
+requires-python = ">=3.10,<3.12"
+license = { file = "LICENSE" }
+[tool.setuptools.packages.find]
+include = ["tutorial_algorithm"] 

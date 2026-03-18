@@ -1,0 +1,51 @@
+{
+  "results": [
+    {
+      "Augmentation": "hahahaha",
+      "display_info": {
+        "severity1": [
+          "images/Random Rain/severity1/51.png",
+          0,
+          7
+        ],
+        "severity2": [
+          "images/Random Rain/severity2/51.png",
+          0,
+          7
+        ],
+        "severity3": [
+          "images/Random Rain/severity3/51.png",
+          0,
+          7
+        ],
+        "severity4": [
+          "images/Random Rain/severity4/51.png",
+          0,
+          7
+        ],
+        "severity5": [
+          "images/Random Rain/severity5/51.png",
+          0,
+          7
+        ]
+      },
+      "accuracies": {
+        "0": 1,
+        "1": 2,
+        "2": 3,
+        "3": 4,
+        "4": 5,
+        "5": 6
+      }
+    }
+  ],
+  "gradients": [
+    -3
+  ],
+  "first_drops": [
+    -6
+  ],
+  "augmentation_names": [
+    "hahahaha"
+  ]
+}

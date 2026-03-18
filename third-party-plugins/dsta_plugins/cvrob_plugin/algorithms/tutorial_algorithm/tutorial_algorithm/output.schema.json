@@ -1,0 +1,15 @@
+{
+    "title": "Algorithm Plugin Output Arguments",
+    "description": "A schema for algorithm plugin output arguments",
+    "type": "object",
+    "required": ["my_expected_results"],
+    "minProperties": 1,
+    "properties": {
+        "my_expected_results": {
+            "description": "Algorithm Output",
+            "type": "array",
+            "minItems": 10,
+            "items": {"type": "number"}
+        }
+    }
+}

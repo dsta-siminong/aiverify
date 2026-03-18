@@ -1,0 +1,26 @@
+{
+  "cid": "noisy_label_algorithm",
+  "gid": "cvrob_plugin",
+  "name": "Noisy Label Algorithm",
+  "modelType": [
+    "classification"
+  ],
+  "version": "0.1.0",
+  "author": "Example Author",
+  "description": "This algorithm looks for the noisy labels within a dataset",
+  "tags": [
+    "Noisy Label Algorithm",
+    "classification"
+  ],
+  "requireGroundTruth": true,
+  "requiredFiles": [
+    "AUTHORS.rst",
+    "CHANGELOG.md",
+    "pyproject.toml",
+    "LICENSE",
+    "noisy_label_algorithm",
+    "README.md",
+    "requirements.txt",
+    "syntax_checker.py"
+  ]
+}

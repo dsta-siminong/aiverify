@@ -1,0 +1,51 @@
+{
+    "title": "Algorithm Plugin Output Arguments",
+    "description": "A schema for algorithm plugin output arguments",
+    "type": "object",
+    "required": ["final_noisy_indices", "evaluate_stats", "correctd_filenames", "correctd_noisy_labels", "correctd_corrected_labels", "combined_results", "method_names"],
+    "minProperties": 7,
+    "properties": {
+        "correctd_filenames": {
+            "description": "Algorithm Output - prediction of noisy labels",
+            "type": "array",
+            "minItems": 1,
+            "items": {"type": "string"}
+        },
+        "correctd_noisy_labels": {
+            "description": "Algorithm Output - prediction of noisy labels",
+            "type": "array",
+            "minItems": 1,
+            "items": {"type": "number"}
+        },
+        "correctd_corrected_labels": {
+            "description": "Algorithm Output - prediction of noisy labels",
+            "type": "array",
+            "minItems": 1,
+            "items": {"type": "number"}
+        },
+        "combined_results": {
+            "description": "Algorithm Output - prediction of noisy labels",
+            "type": "array",
+            "minItems": 1,
+            "items": {"type": "object"}
+        },
+        "method_names": {
+            "description": "Algorithm Output - prediction of noisy labels",
+            "type": "array",
+            "minItems": 1,
+            "items": {"type": "string"}
+        },
+        "final_noisy_indices": {
+            "description": "Algorithm Output - prediction of noisy labels",
+            "type": "array",
+            "minItems": 1,
+            "items": {"type": "number"}
+        },
+        "evaluate_stats": {
+            "description": "Algorithm Output - evaluation of noisy labels",
+            "type": "array",
+            "minItems": 1,
+            "items": {"type": "number"}
+        }
+    }
+}

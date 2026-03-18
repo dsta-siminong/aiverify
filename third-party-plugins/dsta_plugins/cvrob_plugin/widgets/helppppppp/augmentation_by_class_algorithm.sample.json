@@ -1,0 +1,17 @@
+{
+    "combined_results": 
+    [{
+        "display_info": {
+            "severity": ["test", 1, 1]
+        },
+        "Augmentation": "lol",
+        "classification_report": [{"Class": {"metric": 0.0}}],
+        "conf_matrix": [{"Class": {"metric": 0.0}}]
+    }],
+
+    "augmentation_names": ["label_update"], 
+
+    "class_names": {
+        "0": "lol"
+    }
+}

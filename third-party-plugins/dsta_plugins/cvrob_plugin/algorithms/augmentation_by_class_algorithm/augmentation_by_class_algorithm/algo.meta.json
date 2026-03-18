@@ -1,0 +1,26 @@
+{
+  "cid": "augmentation_by_class_algorithm",
+  "gid": "cvrob_plugin",
+  "name": "Augmentation by Class Algorithm",
+  "modelType": [
+    "classification"
+  ],
+  "version": "0.1.0",
+  "author": "Example Author",
+  "description": "This algorithm runs the augmentations and visualizes the trends of metrics by class",
+  "tags": [
+    "Augmentation by Class Algorithm",
+    "classification"
+  ],
+  "requireGroundTruth": true,
+  "requiredFiles": [
+    "AUTHORS.rst",
+    "CHANGELOG.md",
+    "pyproject.toml",
+    "LICENSE",
+    "augmentation_by_class_algorithm",
+    "README.md",
+    "requirements.txt",
+    "syntax_checker.py"
+  ]
+}
