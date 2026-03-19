@@ -405,8 +405,8 @@ class Plugin(IAlgorithm):
         import json 
         current_file_dir = Path(__file__).parent
 
-        with open(current_file_dir / 'boat_classes.json', 'r') as f:
-            class_names = json.load(f)
+        class_names_arr = self._input_arguments['class_names'].split(',')
+        class_names = {str(i): x for i,x in enumerate(class_names_arr) }
 
         # labels = [k for k in class_names]
         class_names = {int(k): v for k, v in class_names.items()}
@@ -501,12 +501,6 @@ class Plugin(IAlgorithm):
             {"display_info": display_info}
         )
 
-        print("OUTPUT RESULTS")
-        # print(output_results.keys())
-        # for k in output_results:
-        #     print(k)
-        #     print(np.array(output_results[k]).shape)
-        # pprint(output_results)
         results = [
             r for r in b_result.results
             if r.predA == r.label and r.predB != r.label

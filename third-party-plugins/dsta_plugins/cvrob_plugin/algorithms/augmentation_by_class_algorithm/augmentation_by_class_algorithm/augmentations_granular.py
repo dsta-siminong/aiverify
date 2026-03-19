@@ -5,8 +5,6 @@ import torch
 import matplotlib.pyplot as plt
 from sklearn.metrics import classification_report, confusion_matrix
 import numpy as np
-# from sklearn.metrics import precision_score, recall_score  , f1_score  , roc_auc_score
-# from sklearn.preprocessing import label_binarize
 from .cvrob_util import evaluate_1img, get_metric_dict
 from torch.utils.data import TensorDataset
 from .augmentations_class import *
@@ -137,11 +135,7 @@ def plot_corrupted_images_mpl(list_of_images, severities, filename=None, pred_la
             horizontalalignment='center', verticalalignment='top', 
             transform=axes[0, j].transAxes , fontsize=60, color=border_color
         )
-        #axes[i, j].axis('off')
-        # if j == 0:
-        #     axes[0, j].set_ylabel(aug_names[i], fontsize=12, rotation=0, labelpad=40, verticalalignment='center')
-    
-    # for j, severity in enumerate(severities):
+
         axes[0, j].set_title(f'Severity {severity}', fontsize=75)
     
     plt.tight_layout()
@@ -200,7 +194,6 @@ def augmentation_granular_method_1img(
         pred_label_list = [(probs, pred, label)]
         for k2 in aug_class.severities:
             corrupted_img = aug_class.corr_func_one_img(img_array, k2)
-            # corrupted_img = augmentation_granular_one_image(img_array, augmentation=(aug_class, k2))
             probs, pred = evaluate_1img(model, device, corrupted_img)
             ppl = (probs, pred, label)
             img_list.append(corrupted_img)
@@ -418,9 +411,6 @@ if __name__ == "__main__":
 
     metric_dict = get_metric_dict()
     metric_dict = {k:v for k,v in metric_dict.items() if k not in ['auc', 'recall']}
-    # augmentation_dict_old = get_augmentation_dict()
-    # all_aug_methods = list(augmentation_dict_old.keys())
-
     augmentation_dict = make_augmentation_dict_album2()
 
     augmentation_dict = {'GaussianBlur': augmentation_dict['GaussianBlur']}
@@ -439,77 +429,3 @@ if __name__ == "__main__":
         json.dump(report, f, indent=4)
     with open("sklearn_report2.json", 'w') as f:
         json.dump(report2, f, indent=4)
-    # augmentation_granular_method_1img(
-    #     img_array, 
-    #     metric_dict,
-    #     augmentation_dict,
-    #     model,
-    #     device,
-    #     path=args.image_file_path.split('.')[0],
-    #     class_names=class_names,
-    #     label=7
-    # )
-
-    # old_df = pd.read_csv("aug_metric_df.csv")
-    # df = augmentation_granular_method(
-    #     model, 
-    #     test_loader, 
-    #     device, 
-    #     metric_dict, #dict of functions
-    #     augmentation_dict,
-    #     old_df = None,
-    #     replace = False
-    # )
-    # df.to_csv("aug_metric_df_gaussianblur.csv", index=False)
-
-    # classes_to_omit = []
-
-    # for i in class_names:
-    #     print('filtered df to be done for class', i)
-    #     data, targets = test_dataset.tensors
-    #     mask = targets == i 
-    #     filtered_data = data[mask]; filtered_targets = targets[mask]
-    #     if len(filtered_data) == 0:
-    #         print(f"no data for class {i} or name {class_names[i]}")
-    #         classes_to_omit.append(i)
-    #         continue
-
-    #     filtered_dataset  = TensorDataset(filtered_data, filtered_targets)
-    #     filtered_loader = torch.utils.data.DataLoader(
-    #         filtered_dataset, 
-    #         batch_size=param_dict['batch_size'], 
-    #         shuffle=False
-    #     )
-    #     filtered_df = augmentation_granular_method(
-    #         model, 
-    #         filtered_loader, 
-    #         device, 
-    #         metric_dict, #dict of functions
-    #         augmentation_dict,
-    #         old_df = None,
-    #         replace = False
-    #     )
-    #     filtered_df.to_csv(f"aug_metric_df_{i}.csv", index=False)
-
-
-    # df = pd.read_csv("aug_metric_df.csv")
-    # df = df.where(df.notnull(), "None")
-    # for aug in all_aug_methods:
-    #     if aug == "None":
-    #         continue
-    #     print('making image graph for augmentation:', aug)
-    #     visualize_metric_dataframe(df, aug, 'absolute')
-    #     visualize_metric_dataframe(df, aug, 'ratio')    
-
-
-    # for i in class_names:
-    #     if i in classes_to_omit:
-    #         continue
-    #     df = pd.read_csv(f"aug_metric_df_{i}.csv")
-    #     df = df.where(df.notnull(), "None")
-    #     for aug in all_aug_methods:
-    #         if aug == "None":
-    #             continue
-    #         print('making image graph for augmentation:', aug)
-    #         visualize_metric_dataframe(df, aug, 'absolute', class_names[i])
-    #         visualize_metric_dataframe(df, aug, 'ratio', class_names[i])

@@ -355,10 +355,9 @@ class Plugin(IAlgorithm):
         print(df)
         print("filenames")
         print(file_names)
-        self._file_name_label = "file_name" #self._input_arguments["file_name_label"]
+        self._file_name_label = "file_name" 
         self._ordered_ground_truth_df = df.set_index(self._file_name_label).reindex(file_names) 
 
-        # num_epochs = self._input_arguments['num_epochs']
         # Initialise main image directory
         if self._save_folder.exists():
             shutil.rmtree(self._save_folder)
@@ -386,7 +385,7 @@ class Plugin(IAlgorithm):
         image_paths : list[str] = self._data_instance.get_data()["image_directory"].tolist()
         ground_truths = self._ordered_ground_truth_df[self._ground_truth_label].tolist()
         test_dataset, test_loader = self._load_images(image_paths, ground_truths)
-        np.random.seed(42) #to be set manually next
+        np.random.seed(42)
         display_idx = np.random.choice(len(image_paths))
         output_results = dict()
 
@@ -399,16 +398,13 @@ class Plugin(IAlgorithm):
         import json 
         current_file_dir = Path(__file__).parent
 
-        with open(current_file_dir / 'boat_classes.json', 'r') as f:
-            class_names = json.load(f)
+        class_names_arr = self._input_arguments['class_names'].split(',')
+        class_names = {str(i): x for i,x in enumerate(class_names_arr) }
 
         labels = [k for k in class_names]
         target_names = [class_names[k] for k in class_names]
 
-
-        # _, predictions, _ = evaluate(model, test_loader, None)
-        combined_results = []; combined_results2 = []#gradients = []; first_drops = []
-        # for k, (m,d) in zip(augmentation_str, augmentation_list):
+        combined_results = []; combined_results2 = []
         for aug_name, aug_class in aug_dict.items():
             if aug_name not in self._input_arguments['aug_methods']:
                 continue
@@ -476,7 +472,7 @@ class Plugin(IAlgorithm):
                 random_display = [
                     str(Path(corrupted_image_paths[display_idx]).relative_to(self._output_folder)),
                     ground_truths[display_idx],
-                    predictions[display_idx],
+                    prediction,
                 ]
                 display_info.update({str(severity_name): random_display})
                 cm_dict.update({str(severity_name): [

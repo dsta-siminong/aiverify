@@ -19,6 +19,7 @@ binary_classification_pipeline = {
     "model_type": ModelType.CLASSIFICATION,
     "ground_truth": "label",
     "plugin_argument_values": {
+        "class_names": "Barge,CG-P,ContainerShip,Cruise,Dredger,Ferry,LNG-LPG,RORO,Sampan,Trawler-FishingVessel,Tugboat,Warship,Yacht",
         "aug_library": 'albumentations',
         "aug_methods": 'GaussianBlur,GaussianNoise',
         "num_epochs": 2,

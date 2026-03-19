@@ -3,11 +3,17 @@
     "description": "A schema for algorithm plugin input arguments",
     "type": "object",
     "required": [
+        "class_names",
         "aug_library",
         "aug_methods",
         "num_epochs"
     ],
     "properties": {
+        "class_names": {
+            "title": "Class Names",
+            "description": "Names for every class according to their index of the model prediction (separated by commas)",
+            "type": "string"
+        },
         "aug_library": {
             "title": "Augmentation Library Name",
             "description": "Indicate the augmentation library to extract from",
