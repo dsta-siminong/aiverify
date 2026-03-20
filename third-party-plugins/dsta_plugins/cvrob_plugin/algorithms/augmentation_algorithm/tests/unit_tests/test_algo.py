@@ -78,6 +78,7 @@ class ObjectTest:
         ground_truth = "label"
         model_type = ModelType.CLASSIFICATION
         input_args = {
+            "class_names": "13",
             "aug_library": "albumentations",
             'aug_methods': 'Erasing,Rain,ScaleDown',
             'custom_parameters': 'None'

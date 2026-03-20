@@ -19,6 +19,7 @@ binary_classification_pipeline = {
     "model_type": ModelType.CLASSIFICATION,
     "ground_truth": "label",
     "plugin_argument_values": {
+        "class_names": "13", 
         "aug_library": 'albumentations',
         'aug_methods': 'Erasing,Rain,ScaleDown',
         'custom_parameters': 'None'

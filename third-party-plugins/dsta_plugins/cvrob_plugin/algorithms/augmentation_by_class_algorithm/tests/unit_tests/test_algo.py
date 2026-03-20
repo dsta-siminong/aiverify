@@ -78,7 +78,7 @@ class ObjectTest:
         ground_truth = "label"
         model_type = ModelType.CLASSIFICATION
         input_args = {
-            "class_names": "Barge,CG-P,ContainerShip,Cruise,Dredger,Ferry,LNG-LPG,RORO,Sampan,Trawler-FishingVessel,Tugboat,Warship,Yacht",
+            "class_names": "13",
             "aug_library": "albumentations",
             "aug_methods": "GaussianBlur,GaussianNoise",
             "num_epochs": 2,

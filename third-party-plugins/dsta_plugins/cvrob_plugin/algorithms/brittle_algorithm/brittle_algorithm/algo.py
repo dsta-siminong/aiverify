@@ -364,7 +364,6 @@ class Plugin(IAlgorithm):
         self._file_name_label = "file_name" #self._input_arguments["file_name_label"]
         self._ordered_ground_truth_df = df.set_index(self._file_name_label).reindex(file_names) 
 
-        # num_epochs = self._input_arguments['num_epochs']
         # Initialise main image directory
         if self._save_folder.exists():
             shutil.rmtree(self._save_folder)
@@ -405,12 +404,17 @@ class Plugin(IAlgorithm):
         import json 
         current_file_dir = Path(__file__).parent
 
-        class_names_arr = self._input_arguments['class_names'].split(',')
-        class_names = {str(i): x for i,x in enumerate(class_names_arr) }
 
-        # labels = [k for k in class_names]
-        class_names = {int(k): v for k, v in class_names.items()}
-        target_names = [class_names[k] for k in class_names]
+        class_names_arr = self._input_arguments['class_names'].split(',')
+        if len(class_names_arr) == 1:
+            num_classes = int(class_names_arr[0])
+            class_names = {str(i): f"class_{i}" for i in range(num_classes) }
+        else:
+            class_names = {str(i): x for i,x in enumerate(class_names_arr) }
+
+        #labels = [k for k in class_names]
+        #class_names = {int(k): v for k, v in class_names.items()}
+        #target_names = [class_names[k] for k in class_names]
 
         aug_name = self._input_arguments['aug_method']
         if aug_name not in aug_dict:
@@ -467,12 +471,16 @@ class Plugin(IAlgorithm):
             probs_B = probs_B,
             labels = labels
         )
+
+        #define the top_k value here; if want to make custom then we change this
+        TOPK_SAFE = 15
+        TOPK = 10
         
         display_info = []      
         output_results = brittle_res_to_dict(b_result)
         output_results = {k:v for k,v in output_results.items() if k not in ["imgsA", "imgsB"]}
         results_list = output_results['results']
-        top_k = sorted(results_list, key=lambda x: x["brittleness"], reverse=True)[:min(15, len(results_list))]
+        top_k = sorted(results_list, key=lambda x: x["brittleness"], reverse=True)[:min(TOPK_SAFE, len(results_list))]
         top_k_indices = [item["index"] for item in top_k]
         
         _, predictions, _ = evaluate(model, test_loader, None)
@@ -489,11 +497,13 @@ class Plugin(IAlgorithm):
                 _, prediction = torch.max(outputs, 1)
             prediction = prediction.item()
 
+            ground_truth = ground_truths[idx]
+
             for i,idx in enumerate(top_k_indices):
                 random_display = [
                     str(Path(corrupted_image_paths[idx]).relative_to(self._output_folder)),
-                    ground_truths[idx],
-                    predictions[idx],
+                    class_names[str(ground_truth)],
+                    class_names[str(prediction)],
                 ]
                 display_info.append({f"severity_{s}_number_{i+1}": random_display})
 
@@ -516,7 +526,7 @@ class Plugin(IAlgorithm):
             b_result.imgsB, 
             b_result.probs_A, 
             b_result.probs_B,  
-            K=min(10, len(results)),
+            K=min(TOPK, len(results)),
             class_names=class_names, 
             transform=None,
             directory=mpl_dir,
@@ -528,7 +538,7 @@ class Plugin(IAlgorithm):
             b_result.imgsB, 
             b_result.probs_A, 
             b_result.probs_B, 
-            K=min(10, len(results)),
+            K=min(TOPK, len(results)),
             class_names=class_names, 
             transform=None,
             directory = plotly_dir,

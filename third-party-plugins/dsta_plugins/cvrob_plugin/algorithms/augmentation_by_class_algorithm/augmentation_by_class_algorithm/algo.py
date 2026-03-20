@@ -355,7 +355,7 @@ class Plugin(IAlgorithm):
         print(df)
         print("filenames")
         print(file_names)
-        self._file_name_label = "file_name" 
+        self._file_name_label = "file_name" #self._input_arguments["file_name_label"]
         self._ordered_ground_truth_df = df.set_index(self._file_name_label).reindex(file_names) 
 
         # Initialise main image directory
@@ -399,7 +399,11 @@ class Plugin(IAlgorithm):
         current_file_dir = Path(__file__).parent
 
         class_names_arr = self._input_arguments['class_names'].split(',')
-        class_names = {str(i): x for i,x in enumerate(class_names_arr) }
+        if len(class_names_arr) == 1:
+            num_classes = int(class_names_arr[0])
+            class_names = {str(i): f"class_{i}" for i in range(num_classes) }
+        else:
+            class_names = {str(i): x for i,x in enumerate(class_names_arr) }
 
         labels = [k for k in class_names]
         target_names = [class_names[k] for k in class_names]
@@ -466,15 +470,16 @@ class Plugin(IAlgorithm):
                     outputs = model(image)
                     _, prediction = torch.max(outputs, 1)
                 prediction = prediction.item()
-
-                cm_path, cm_path1 = self._save_cm_path(avg_cm, target_names,  corrupted_dir)
+                ground_truth = ground_truths[display_idx]
 
                 random_display = [
                     str(Path(corrupted_image_paths[display_idx]).relative_to(self._output_folder)),
-                    ground_truths[display_idx],
-                    prediction,
+                    class_names[str(ground_truth)],
+                    class_names[str(prediction)],
                 ]
                 display_info.update({str(severity_name): random_display})
+
+                cm_path, cm_path1 = self._save_cm_path(avg_cm, target_names,  corrupted_dir)
                 cm_dict.update({str(severity_name): [
                     str(Path(cm_path).relative_to(self._output_folder)),
                     str(Path(cm_path1).relative_to(self._output_folder))
@@ -482,7 +487,6 @@ class Plugin(IAlgorithm):
                 crs.append(avg_report) ; cms.append(cm_stats)
 
             path_dict = self._sklearn_method(crs, cms, severities, class_names, Path(aug_name), aug_name)
-            # [y_true, y_pred, labels])
             individual_results.update(
                 {
                     "display_info": display_info, 

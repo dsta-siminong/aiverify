@@ -362,7 +362,6 @@ class Plugin(IAlgorithm):
 
         # Apply user defined parameters to default parameters
         aug_dict = make_augmentation_dict(self._input_arguments['aug_library'])
-        # print("?????",aug_dict["Erasing"].severities)
         custom_parameters = None
         try:
             custom_parameters = self._input_arguments['custom_parameters']
@@ -374,13 +373,6 @@ class Plugin(IAlgorithm):
             print("No custom parameter_change")
             print(f"Custom parameters exception: {e} , {custom_parameters}")
             print()
-
-        #{name: noisy_labels.METHOD_FN[name] for name in self._input_arguments["corruptions"]}
-        # DEFAULT_PARAMS = noisy_labels.get_default_params()
-        # user_params = {k: v for k, v in self._input_arguments.items() if k in DEFAULT_PARAMS and v}
-        # parameters = copy.deepcopy(DEFAULT_PARAMS)
-        # parameters['num_epochs'] = num_epochs
-        # parameters.update(user_params)
 
         self._augmentation_method(aug_dict)
 
@@ -396,11 +388,6 @@ class Plugin(IAlgorithm):
         display_idx = np.random.choice(len(image_paths))
         output_results = dict()
 
-        # augmentation_list, augmentation_str, corrupt_func = augmentations.get_corruption_helpers(aug_dict)
-        # assert len(augmentation_list) == len(augmentation_str)
-        # augmentation_dict = dict() 
-        # augmentation_fig_dict = {}
-
         if "_model" in dir(self._model_instance):
             model = self._model_instance._model
         elif "_pipeline" in dir(self._model_instance):
@@ -409,38 +396,31 @@ class Plugin(IAlgorithm):
             raise ValueError("idk what the", type(self._model_instance),"model instance is supposed to be ", dir(self._model_instance))
 
         combined_results = []; gradients = []; first_drops = []
-        # for k, (m,d) in zip(augmentation_str, augmentation_list):
-
 
         aug_methods = [x for x in aug_dict]
         aug_methods = self._input_arguments['aug_methods'].split(',')
         print("Augmentation methods:", aug_methods)
 
+        class_names_arr = self._input_arguments['class_names'].split(',')
+        if len(class_names_arr) == 1:
+            num_classes = int(class_names_arr[0])
+            class_names = {str(i): f"class_{i}" for i in range(num_classes) }
+        else:
+            class_names = {str(i): x for i,x in enumerate(class_names_arr) }
+
         for aug_name, aug_class in aug_dict.items():
             
-            #TODO: change this to include the below for aug_methods please please please
-            #TODO: ALSO ALSO custom parameters somewhere PLEASE
-            
-            # aug_methods = self._input_arguments['aug_methods'].split(",")  #placeholder for when we want to be more refined with it
             if aug_name not in aug_methods and aug_methods != ["all"]:
                 continue
             individual_results = dict() 
             individual_results.update({"Augmentation": aug_name})
-            # severity_params = dict()
-            # accuracies = dict()
-            display_info = dict()
 
-            # d['aug_method'] = m
-            # print("what's this model??")
-            # print(dir(self._model_instance))
-            # print()
+            display_info = dict()
             aug_dir =  self._output_folder / aug_name
             os.makedirs(aug_dir, exist_ok=True)
             
             gradient, accuracies, fig_path = augmentations.augmentation_gradient(model, test_loader, None, aug_class, 'matplotlib', aug_dir)
             first_drop = accuracies[1] - accuracies[0]
-            # severities = [0, 1, 2, 3, 4, 5]
-            # for severity in severities[:-1]:
             severities = ["None"] + aug_class.severities
             for severity_idx, severity in enumerate(severities):
                 corrupted_images = self._get_corrupted_images(test_loader, aug_class, severity)
@@ -454,25 +434,26 @@ class Plugin(IAlgorithm):
                     outputs = model(image)
                     _, prediction = torch.max(outputs, 1)
                 prediction = prediction.item()
+                ground_truth = ground_truths[display_idx]
 
                 random_display = [
                     str(Path(corrupted_image_paths[display_idx]).relative_to(self._output_folder)),
-                    ground_truths[display_idx],
-                    prediction#predictions[display_idx],
+                    class_names[str(ground_truth)],
+                    class_names[str(prediction)],
                 ]
                 display_info.update({str(severity): random_display})
             print(accuracies, first_drop)
             accuracies_dict = {k:v for k,v in zip(severities, accuracies)}
             print(aug_name, 'augmentation method gradient:', gradient)
             individual_results.update(
-                {"display_info": display_info, "accuracies": accuracies_dict, "fig_img": str(fig_path.relative_to(self._output_folder))}
+                {"display_info": display_info, 
+                "accuracies": accuracies_dict, 
+                "fig_img": str(fig_path.relative_to(self._output_folder))}
             )
             combined_results.append(individual_results)
             gradients.append(gradient)
             first_drops.append(first_drop)
             self._progress_inst.update(1)
-            # augmentation_dict[k] = (gradient, first_drop)
-            # augmentation_fig_dict[k] = fig
             print()
 
         output_results.update({
@@ -481,9 +462,6 @@ class Plugin(IAlgorithm):
             "first_drops": first_drops,
             "augmentation_names": [x["Augmentation"] for x in combined_results]
         })
-        # import pprint
-        # print("OUTPUT RESULTS")
-        # pprint.pprint(output_results)
 
         self._results = output_results
 
