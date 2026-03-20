@@ -44,12 +44,18 @@ export function ClassLineChart({ combined, className, metrics }) {
   const margin = { top: 20, right: 40, bottom: 40, left: 50 };
   const width = 500;
   const height = 200;
+  const allValues = metrics.flatMap((metric) =>
+    sub_df.map((r) => r[metric] ?? 0)
+  );
+  const min = 0;
+  const max = Math.max(...allValues, 1); // avoid divide-by-zero
+  const numTicks = 5;
+  const tickStep = max / (numTicks - 1);
+  const ticks = Array.from({ length: numTicks }, (_, i) => i * tickStep);
 
   // For each metric, compute scaled y values
   const datasets = metrics.map((metric) => {
     const values = sub_df.map((r) => r[metric] ?? 0);
-    const min = 0;
-    const max = 1;
     const y = values.map((v) => {
       const t = (v - min) / (max - min);
       return height - margin.bottom - t * (height - margin.top - margin.bottom);
@@ -72,6 +78,11 @@ export function ClassLineChart({ combined, className, metrics }) {
       TN: "#e377c2",
     };
     return colors[metric] || "#777";
+  };
+
+  const yScale = (v) => {
+    const t = (v - min) / (max - min);
+    return height - margin.bottom - t * (height - margin.top - margin.bottom);
   };
 
   return (
@@ -98,9 +109,9 @@ export function ClassLineChart({ combined, className, metrics }) {
           strokeWidth={1}
         />
 
-        {/* Y axis ticks (0–1) */}
-        {[0, 0.25, 0.5, 0.75, 1].map((v) => {
-          const y = height - margin.bottom - v * (height - margin.top - margin.bottom);
+        {/* Y axis ticks */}
+        {ticks.map((v) => {
+          const y = yScale(v);
           return (
             <g key={v}>
               <line
@@ -181,12 +192,17 @@ export function PopulationChart({ combined, className }) {
   const preds = sub_df.map((r) => r.preds_population ?? 0);
   const actual = sub_df.map((r) => r.actual_population ?? 0);
 
+  //const allValues = [...preds, ...actual];
   const min = 0;
-  const max = 1;
+  const max = Math.max(...preds, ...actual); 
   const y = (v) => {
     const t = (v - min) / (max - min);
     return height - margin.bottom - t * (height - margin.top - margin.bottom);
   };
+
+  const numTicks = 5;
+  const tickStep = max / (numTicks - 1);
+  const ticks = Array.from({ length: numTicks }, (_, i) => i * tickStep);
 
   const xStep = (width - margin.left - margin.right) / Math.max(n - 1, 1);
   const x = (i) => margin.left + i * xStep;
@@ -216,7 +232,7 @@ export function PopulationChart({ combined, className }) {
         />
 
         {/* Y axis ticks (0–1) */}
-        {[0, 0.25, 0.5, 0.75, 1].map((v) => {
+        {ticks.map((v) => {
           const yv = y(v);
           return (
             <g key={v}>

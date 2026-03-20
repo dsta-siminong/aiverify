@@ -393,7 +393,7 @@ class Plugin(IAlgorithm):
         ground_truths = self._ordered_ground_truth_df[self._ground_truth_label].tolist()
         test_dataset, test_loader = self._load_images(image_paths, ground_truths)
         np.random.seed(42) #to be set manually next
-        display_idx = np.random.choice(len(image_paths))
+        # display_idx = np.random.choice(len(image_paths))
 
         if "_model" in dir(self._model_instance):
             model = self._model_instance._model
@@ -413,7 +413,7 @@ class Plugin(IAlgorithm):
             class_names = {str(i): x for i,x in enumerate(class_names_arr) }
 
         #labels = [k for k in class_names]
-        #class_names = {int(k): v for k, v in class_names.items()}
+        class_names_int = {int(k): v for k, v in class_names.items()}
         #target_names = [class_names[k] for k in class_names]
 
         aug_name = self._input_arguments['aug_method']
@@ -489,17 +489,16 @@ class Plugin(IAlgorithm):
             corrupted_dir = Path(aug_name) / f"severity_{s}"
             corrupted_image_paths = self._save_images(corrupted_images, str(corrupted_dir))
 
-            image = torch.tensor(corrupted_images[display_idx]).unsqueeze(0)  # shape [1, C, H, W]
-
-            model.eval()
-            with torch.no_grad():
-                outputs = model(image)
-                _, prediction = torch.max(outputs, 1)
-            prediction = prediction.item()
-
-            ground_truth = ground_truths[idx]
-
             for i,idx in enumerate(top_k_indices):
+                image = torch.tensor(corrupted_images[idx]).unsqueeze(0)  # shape [1, C, H, W]
+
+                model.eval()
+                with torch.no_grad():
+                    outputs = model(image)
+                    _, prediction = torch.max(outputs, 1)
+                prediction = prediction.item()
+                ground_truth = ground_truths[idx]
+
                 random_display = [
                     str(Path(corrupted_image_paths[idx]).relative_to(self._output_folder)),
                     class_names[str(ground_truth)],
@@ -527,7 +526,7 @@ class Plugin(IAlgorithm):
             b_result.probs_A, 
             b_result.probs_B,  
             K=min(TOPK, len(results)),
-            class_names=class_names, 
+            class_names=class_names_int, 
             transform=None,
             directory=mpl_dir,
             image_paths=image_paths
@@ -539,7 +538,7 @@ class Plugin(IAlgorithm):
             b_result.probs_A, 
             b_result.probs_B, 
             K=min(TOPK, len(results)),
-            class_names=class_names, 
+            class_names=class_names_int, 
             transform=None,
             directory = plotly_dir,
             image_paths=image_paths
@@ -551,7 +550,7 @@ class Plugin(IAlgorithm):
             b_result.probs_A, 
             b_result.probs_B, 
             b_result.labels, 
-            class_names=class_names, 
+            class_names=class_names_int, 
             transform=None,
             directory = plotly_dir,
             image_paths=image_paths

@@ -42,7 +42,7 @@ import {
           );
 
           return (
-            <div key={idx} style={{marginBottom: "3em",breakInside: "avoid",}}>
+            <div key={idx} style={{marginBottom: "3em"}}>
               <h2 style={{textAlign: "center",fontWeight: "bold",textDecoration: "underline",color: "red",margin: "0.5em 0",}}>{aug.Augmentation}</h2>
               {Object.values(class_names).map((className) => (
                 <div key={className}>
@@ -184,7 +184,7 @@ export const AugmentationClassPlots = ({ props }) => {
 
             {/* 🔹 Final Plotly Summary (HTML) */}
             {plotlyPath && (
-              <div style={{ textAlign: "center", marginTop: "2rem" , overflowX: "auto"}}>
+              <div style={{ textAlign: "center", marginTop: "2rem" , overflowX: "auto", width: "100%", overflow: "hidden"}}>
                 <h3 style={{ marginBottom: "1rem" }}>
                   Overall Plotly Summary for {Augmentation}
                 </h3>
@@ -194,7 +194,6 @@ export const AugmentationClassPlots = ({ props }) => {
                   title={`plotly-summary-${Augmentation}`}
                   style={{
                     width: "100%",
-                    maxWidth: "1000px",
                     height: "700px",
                     border: "none",
                     display: "block",

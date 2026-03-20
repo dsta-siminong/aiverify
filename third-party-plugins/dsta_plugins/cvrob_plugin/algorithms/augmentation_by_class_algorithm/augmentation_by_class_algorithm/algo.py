@@ -505,7 +505,7 @@ class Plugin(IAlgorithm):
 
         output_results.update({
             "results": combined_results,
-            "augmentation_names": [x for x in aug_dict],
+            "augmentation_names": [x["Augmentation"] for x in combined_results],
             "class_names": class_names
         })
         print("OUTPUT RESULTS")
