@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 from tqdm import tqdm
 import torch.nn as nn
+from pathlib import Path
 
 class SimpleCNN(nn.Module):
     def __init__(self):
@@ -224,3 +225,106 @@ def triplets(s):
     items = s.split()
     assert len(items) % 3 == 0, "Input length must be a multiple of 3"
     return [items[i:i+3] for i in range(0, len(items), 3)]
+
+def augmentation_gradient(model, test_loader, device, aug_class, plot_graphs=False, directory=Path()):
+    """
+    Evaluates how the model performance varies against the given augmentation/corruption
+
+    Augments across severity 1-5 (and 0) and outputs the performance change
+
+    Args:
+        model: model
+        test_loader (torch.dataloader): test data loader
+        device (torch.device): device model is on
+        corr_func (function): corruption function to take in images (np array) / give corrupted dataloader
+        plot_graphs: either False for no graph, or string for which graphing library to use
+        corr_kwargs (dict): corruption arguments
+
+    Returns:
+        Tuple:
+            best_fit_gradient (float): best fit line gradient of graph of performance vs severity (of augmentation)
+            accuracies (list): list of floats of performance metric 
+            fig (figure): outputs figure of plot_graphs library if not plot_graphs not False, else None
+    """
+    print("===")
+    print("Aug name", aug_class.name)
+    print(f"Evaluating on severity 0/None...")
+    base_acc, _ , _ = evaluate(model, test_loader, device)
+    print(f"Accuracy at severity 0/None: {base_acc:.4f}")
+    severities = aug_class.severities #[x for x in range(len(aug_class.severities))]
+    accuracies = [base_acc]
+    for severity in severities:
+        print(f"Evaluating on severity {severity}...")
+        corrupted_loader = aug_class.corr_func_dataloader(test_loader, severity_idx=severity)
+        acc, _,_ = evaluate(model, corrupted_loader, device)
+        accuracies.append(acc)
+        print(f"Accuracy at severity {severity}: {acc:.4f}")
+
+    # Plot results
+    fig = None
+    if plot_graphs is not False:
+        fig = plot_accuracy_vs_severity(accuracies, ["None"]+severities, plot_graphs)  
+    fig_path = directory / f"accuracy_vs_severity_{aug_class.name}.png"
+    fig.savefig(fig_path)
+    plt.close()
+    return best_fit_gradient(list(range(len(severities)+1)), accuracies), accuracies, fig_path
+
+def get_num_classes(model: nn.Module) -> int:
+    """
+    Try to infer the number of output classes from a PyTorch image classification model.
+    Works for most architectures by inspecting the last linear/conv layer.
+    """
+    # 1. Look for last Linear layer
+    last_linear = None
+    for module in model.modules():
+        if isinstance(module, nn.Linear):
+            last_linear = module
+    if last_linear is not None:
+        return last_linear.out_features
+
+    # 2. Fallback: look for last Conv layer (e.g., some classifiers end with conv)
+    last_conv = None
+    for module in model.modules():
+        if isinstance(module, nn.Conv2d):
+            last_conv = module
+    if last_conv is not None:
+        return last_conv.out_channels
+
+    # 3. Fallback: try classifier / fc attributes
+    for attr in ["fc", "classifier", "head", "heads"]:
+        if hasattr(model, attr):
+            module = getattr(model, attr)
+            if isinstance(module, nn.Linear):
+                return module.out_features
+            elif isinstance(module, nn.Sequential):
+                for layer in reversed(module):
+                    if isinstance(layer, nn.Linear):
+                        return layer.out_features
+
+    raise RuntimeError("Could not determine number of classes.")
+
+def handle_class_names_arg(class_names_arg, model):
+    if class_names_arg is None or str(class_names_arg).strip() == "":
+        
+        print("# fallback: infer from model")
+        num_classes = get_num_classes(model)
+        class_names = {str(i): f"class_{i}" for i in range(num_classes)}
+
+    else:
+        class_names_arr = [x.strip() for x in class_names_arg.split(",") if x.strip()]
+
+        # Case 1: user provided number of classes
+        if len(class_names_arr) == 1:
+            try:
+                num_classes = int(class_names_arr[0])
+                class_names = {str(i): f"class_{i}" for i in range(num_classes)}
+            except ValueError:
+                raise ValueError(
+                    "class_names must be comma-separated names or a single integer"
+                )
+
+        # Case 2: user provided names
+        else:
+            class_names = {str(i): name for i, name in enumerate(class_names_arr)}
+
+    return class_names

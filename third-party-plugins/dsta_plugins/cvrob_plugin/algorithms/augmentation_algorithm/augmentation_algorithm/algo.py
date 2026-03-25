@@ -16,7 +16,7 @@ from aiverify_test_engine.plugins.metadata.plugin_metadata import PluginMetadata
 from aiverify_test_engine.utils.json_utils import load_schema_file, validate_json
 from aiverify_test_engine.utils.simple_progress import SimpleProgress
 
-from . import augmentations
+# from . import augmentations
 import numpy as np
 from PIL import Image
 import inspect
@@ -24,7 +24,7 @@ import numpy as np
 import torchvision.transforms as transforms
 import torch
 from torch.utils.data import DataLoader, TensorDataset
-from .cvrob_util import evaluate, triplets
+from .cvrob_util import evaluate, triplets, augmentation_gradient, handle_class_names_arg
 from .augmentations_class import make_augmentation_dict
 from pathlib import Path
 # =====================================================================================
@@ -347,24 +347,25 @@ class Plugin(IAlgorithm):
         #make ground truth
         file_names = [Path(i).name for i in self._data_instance.get_data()["image_directory"]]
         df: pd.DataFrame = self._ground_truth_instance.get_data()
-        print("~~~~ df ~~~~")
-        print(df)
-        print("filenames")
-        print(file_names)
+        # print("~~~~ df ~~~~")
+        # print(df)
+        # print("filenames")
+        # print(file_names)
         self._file_name_label = "file_name" #self._input_arguments["file_name_label"]
         self._ordered_ground_truth_df = df.set_index(self._file_name_label).reindex(file_names) 
 
-        # num_epochs = self._input_arguments['num_epochs']
         # Initialise main image directory
         if self._save_folder.exists():
             shutil.rmtree(self._save_folder)
         self._save_folder.mkdir(parents=True, exist_ok=True)
 
         # Apply user defined parameters to default parameters
-        aug_dict = make_augmentation_dict(self._input_arguments['aug_library'])
+        aug_library = self._input_arguments.get('aug_library') or "albumentations"
+        aug_dict = make_augmentation_dict(aug_library)
+
         custom_parameters = None
         try:
-            custom_parameters = self._input_arguments['custom_parameters']
+            custom_parameters = self._input_arguments.get('custom_parameters') or None
             custom_parameters = triplets(custom_parameters)
             for sublist in custom_parameters:
                 aug_name, param_name, parameters_in_string = sublist
@@ -375,7 +376,6 @@ class Plugin(IAlgorithm):
             print()
 
         self._augmentation_method(aug_dict)
-
 
         # Update progress (For 100% completion)
         self._progress_inst.update(1)
@@ -397,16 +397,24 @@ class Plugin(IAlgorithm):
 
         combined_results = []; gradients = []; first_drops = []
 
-        aug_methods = [x for x in aug_dict]
-        aug_methods = self._input_arguments['aug_methods'].split(',')
+        # aug_methods = [x for x in aug_dict]
+        aug_methods = self._input_arguments.get('aug_methods') or 'all'
+        aug_methods = [x.strip() for x in aug_methods.split(",") if x.strip()]
         print("Augmentation methods:", aug_methods)
 
-        class_names_arr = self._input_arguments['class_names'].split(',')
-        if len(class_names_arr) == 1:
-            num_classes = int(class_names_arr[0])
-            class_names = {str(i): f"class_{i}" for i in range(num_classes) }
-        else:
-            class_names = {str(i): x for i,x in enumerate(class_names_arr) }
+        class_names_arg = self._input_arguments['class_names'] or None 
+        class_names = handle_class_names_arg(class_names_arg, model)
+        print("Class names:", class_names)
+        # if class_names_arg is None: 
+        #     num_classes = get_num_classes(model)
+        #     class_names = {str(i): f"class_{i}" for i in range(num_classes) }
+        # else:
+        #     class_names_arr = class_names_arg.split(',')
+        #     if len(class_names_arr) == 1:
+        #         num_classes = int(class_names_arr[0])
+        #         class_names = {str(i): f"class_{i}" for i in range(num_classes) }
+        #     else:
+        #         class_names = {str(i): x for i,x in enumerate(class_names_arr) }
 
         for aug_name, aug_class in aug_dict.items():
             
@@ -419,7 +427,7 @@ class Plugin(IAlgorithm):
             aug_dir =  self._output_folder / aug_name
             os.makedirs(aug_dir, exist_ok=True)
             
-            gradient, accuracies, fig_path = augmentations.augmentation_gradient(model, test_loader, None, aug_class, 'matplotlib', aug_dir)
+            gradient, accuracies, fig_path = augmentation_gradient(model, test_loader, None, aug_class, 'matplotlib', aug_dir)
             first_drop = accuracies[1] - accuracies[0]
             severities = ["None"] + aug_class.severities
             for severity_idx, severity in enumerate(severities):

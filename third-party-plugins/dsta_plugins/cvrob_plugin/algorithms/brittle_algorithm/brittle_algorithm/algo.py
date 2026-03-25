@@ -15,14 +15,14 @@ from aiverify_test_engine.plugins.metadata.plugin_metadata import PluginMetadata
 from aiverify_test_engine.utils.json_utils import load_schema_file, validate_json
 from aiverify_test_engine.utils.simple_progress import SimpleProgress
 
-from . import augmentations
+# from . import augmentations
 import numpy as np
 from PIL import Image
 import inspect
 import torchvision.transforms as transforms
 import torch
 from torch.utils.data import DataLoader, TensorDataset
-from .cvrob_util import evaluate, collect_probs, triplets
+from .cvrob_util import evaluate, collect_probs, triplets, handle_class_names_arg
 from .augmentations_class import make_augmentation_dict, custom_parameter_change
 from .augmentations_brittle import (
     visualize_topk_matplotlib, 
@@ -393,7 +393,6 @@ class Plugin(IAlgorithm):
         ground_truths = self._ordered_ground_truth_df[self._ground_truth_label].tolist()
         test_dataset, test_loader = self._load_images(image_paths, ground_truths)
         np.random.seed(42) #to be set manually next
-        # display_idx = np.random.choice(len(image_paths))
 
         if "_model" in dir(self._model_instance):
             model = self._model_instance._model
@@ -405,16 +404,18 @@ class Plugin(IAlgorithm):
         current_file_dir = Path(__file__).parent
 
 
-        class_names_arr = self._input_arguments['class_names'].split(',')
-        if len(class_names_arr) == 1:
-            num_classes = int(class_names_arr[0])
-            class_names = {str(i): f"class_{i}" for i in range(num_classes) }
-        else:
-            class_names = {str(i): x for i,x in enumerate(class_names_arr) }
+        # class_names_arr = self._input_arguments['class_names'].split(',')
+        # if len(class_names_arr) == 1:
+        #     num_classes = int(class_names_arr[0])
+        #     class_names = {str(i): f"class_{i}" for i in range(num_classes) }
+        # else:
+        #     class_names = {str(i): x for i,x in enumerate(class_names_arr) }
 
-        #labels = [k for k in class_names]
+        class_names_arg = self._input_arguments['class_names'] or None 
+        class_names = handle_class_names_arg(class_names_arg, model)
+        print("Class names:", class_names)
+
         class_names_int = {int(k): v for k, v in class_names.items()}
-        #target_names = [class_names[k] for k in class_names]
 
         aug_name = self._input_arguments['aug_method']
         if aug_name not in aug_dict:
@@ -422,15 +423,53 @@ class Plugin(IAlgorithm):
         aug_class = aug_dict[aug_name]
 
         print("brittle stage 2")
-        severity0 = self._input_arguments['severity_before']
-        severity1 = self._input_arguments['severity_after']
-        if severity0 in ["", " ", "INTEGER", 'integer', 'int', "Integer"]:
-            assert severity1 in ["", " ", "INTEGER", 'integer', 'int', "Integer"]
-            severity0 = self._input_arguments['severity_before_idx']
-            severity1 = self._input_arguments['severity_after_idx']
-            all_severities = ["None"] + aug_class.severities
-            severity0 =  all_severities[severity0]
-            severity1 =  all_severities[severity1]
+        # severity0 = self._input_arguments['severity_before']
+        # severity1 = self._input_arguments['severity_after']
+        # if severity0 in ["", " ", "INTEGER", 'integer', 'int', "Integer"]:
+        #     assert severity1 in ["", " ", "INTEGER", 'integer', 'int', "Integer"]
+        #     severity0 = self._input_arguments['severity_before_idx']
+        #     severity1 = self._input_arguments['severity_after_idx']
+        #     all_severities = ["None"] + aug_class.severities
+        #     severity0 =  all_severities[severity0]
+        #     severity1 =  all_severities[severity1]
+        severity_before = self._input_arguments.get("severity_before")
+        severity_after = self._input_arguments.get("severity_after")
+        severity_before_idx = self._input_arguments.get("severity_before_idx")
+        severity_after_idx = self._input_arguments.get("severity_after_idx")
+
+        # normalize empty strings to None (important if UI sends "")
+        severity_before = severity_before if severity_before != "" else None
+        severity_after = severity_after if severity_after != "" else None
+
+        # ---- validation ----
+        if (
+            severity_before is None
+            and severity_after is None
+            and severity_before_idx is None
+            and severity_after_idx is None
+        ):
+            raise ValueError(
+                "Must provide either severity_before/after (string) "
+                "or severity_before_idx/after_idx (integer)"
+            )
+
+        # ---- choose strings if provided ----
+        if severity_before is not None or severity_after is not None:
+            if severity_before is None or severity_after is None:
+                raise ValueError(
+                    "Both severity_before and severity_after must be provided together"
+                )
+            severity0 = severity_before
+            severity1 = severity_after
+
+        # ---- otherwise use indices ----
+        else:
+            if severity_before_idx is None or severity_after_idx is None:
+                raise ValueError(
+                    "Both severity_before_idx and severity_after_idx must be provided together"
+                )
+            severity0 = severity_before_idx
+            severity1 = severity_after_idx
 
         severities = (severity0, severity1)
         print("SEVERITIES:", severities)

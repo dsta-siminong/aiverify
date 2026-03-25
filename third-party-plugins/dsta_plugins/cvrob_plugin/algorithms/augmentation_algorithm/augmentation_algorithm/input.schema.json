@@ -3,28 +3,33 @@
     "description": "A schema for algorithm plugin input arguments",
     "type": "object",
     "required": [
-        "aug_library"
+        "aug_library",
+        "aug_methods"
     ],
     "properties": {
         "class_names": {
             "title": "Class Names",
-            "description": "Names for every class according to their index of the model prediction (separated by commas)",
-            "type": "string"
+            "description": "Comma-separated class names, a single number for class count, or leave blank to infer from the model.",
+            "type": ["string", "null"],
+            "default": null
         },
         "aug_library": {
             "title": "Augmentation Library Name",
-            "description": "Indicate the augmentation library to extract from",
-            "type": "string"
+            "description": "Indicate the augmentation library to extract from (default and only available library: albumentations)",
+            "type": "string",
+            "default": "albumentations"
         },
         "aug_methods": {
             "title": "Augmentation Method(s) Name",
-            "description": "Indicate the augmentation functions separated by commas",
-            "type": "string"
+            "description": "Indicate the augmentation functions separated by commas (default: all)",
+            "type": "string",
+            "default": "all"
         },
         "custom_parameters": {
             "title": "Custom Parameters",
-            "description": "Custom parameters for the augmentation_method(s)",
-            "type": "string"
+            "description": "Custom parameters for the augmentation_method(s) (default for no custom params: None)",
+            "type": ["string", "null"],
+            "default": null
         }
     }
 }

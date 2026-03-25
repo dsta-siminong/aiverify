@@ -61,76 +61,6 @@ def brittle_res_to_dict(br):
     }
     return d
 
-# def brittle_method_simple(
-#     model, 
-#     test_loader, 
-#     device, 
-#     corr_func, 
-#     augmentation_list,
-#     augmentation_str,
-#     transform=None,
-#     augmentation_method=None,
-#     severities=(0,1),
-#     # top_proportion=0.05,
-#     class_names=None
-# ):  
-#     # _, y_preds, _ = evaluate(model, test_loader, device)
-#     corr_kwargs = None
-#     for k, (m,d) in zip(augmentation_str, augmentation_list):
-#         if k == augmentation_method:
-#             d['aug_method'] = m
-#             corr_kwargs = d 
-#     if corr_kwargs == None:
-#         raise ValueError("aug method not valid")
-
-#     if severities[0] == 0:
-#         loader_A = test_loader
-#     else: 
-#         loader_A = get_corrupted_dataloader(test_loader, 
-#                                             corr_func, 
-#                                             severity=severities[0],
-#                                             corr_kwargs=corr_kwargs)
-#     loader_B = get_corrupted_dataloader(test_loader, 
-#                                         corr_func, 
-#                                         severity=severities[1],
-#                                         corr_kwargs=corr_kwargs)
-
-#     imgs_A, probs_A, labels = collect_probs(model, loader_A, device)
-#     imgs_B, probs_B, _      = collect_probs(model, loader_B, device)
-
-#     N = len(labels)
-#     idx = torch.arange(N)
-
-#     pA = probs_A[idx, labels]
-#     pB = probs_B[idx, labels]
-
-#     brittleness = pA - pB
-
-#     results_all = [
-#         BrittlenessResultIndiv(
-#             index=i,
-#             label=int(labels[i]),
-#             predA=probs_A[i].argmax().item(),
-#             predB=probs_B[i].argmax().item(),
-#             pA=float(pA[i]),
-#             pB=float(pB[i]),
-#             brittleness=float(brittleness[i]),
-#         ) for i in range(N)
-#     ]
-#     # Sort (most brittle first)
-#     results_all_sorted = sorted(results_all, key=lambda x: x.brittleness, reverse=True)
-
-#     b_result = BrittlenessResult(
-#         results = results_all_sorted,
-#         imgsA = imgs_A, 
-#         imgsB = imgs_B, 
-#         probs_A = probs_A,
-#         probs_B = probs_B,
-#         labels = labels
-#     )
-
-#     return b_result
-
 def unnormalize(img_tensor, transform=None):
     """
     img_tensor: C,H,W tensor (possibly normalized)
@@ -198,15 +128,6 @@ def visualize_topk_matplotlib(
         if class_names is not None:
             classA = class_names[predA[0]]
             classB = class_names[predB[0]]
-
-        # axes[row, 0].imshow(imgA)
-        # axes[row, 0].set_title(
-        #     f"image idx: {idx}\n"
-        #     f"A (before) | pred={classA}\n"
-        #     f"\n"
-        #     f"pred_proba of classA={predA[1]:.3f}"
-        # )
-        # axes[row, 0].axis("off")
 
         axes[row, 0].imshow(imgA)
         axes[row, 0].axis("off")
@@ -514,16 +435,6 @@ def visualize_in_html(
 
     print("Saved brittleness_carousel.html")
     return save_path
-
-    # # Insert into HTML
-    # html_filled = html.replace("IMAGES_LIST", ",".join(img_base64_list))
-    # html_filled = html_filled.replace("INFOS_LIST", ",".join(info_list))
-
-    # # Save
-    # with open("brittle_images_carousel.html", "w") as f:
-    #     f.write(html_filled)
-
-    # print("Saved HTML file: brittle_images_carousel.html")
 
 def extract_normalize(transform):
     """

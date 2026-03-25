@@ -1,0 +1,39 @@
+{
+  "cid": "augmentations_sample_widget",
+  "widgetSize": {
+    "minW": 12,
+    "minH": 1,
+    "maxW": 12,
+    "maxH": 36
+  },
+  "name": "Augmentations Sample Widget",
+  "description": "Augmentations widget for sample images",
+  "dynamicHeight": true,
+  "dependencies": [
+    {
+      "cid": "augmentation_algorithm"
+    },
+    {
+      "cid": "augmentations_inputblock"
+    }
+  ],
+  "mockdata": [
+    {
+      "type": "Algorithm",
+      "cid": "augmentation_algorithm",
+      "datapath": "augmentation_algorithm.sample.json"
+    },
+    {
+      "type": "InputBlock",
+      "cid": "augmentations_inputblock",
+      "datapath": "augmentations_inputblock.sample.json"
+    }
+  ],
+  "properties": [
+    {
+      "key": "title",
+      "helper": "Set the widget title (default \"Augmentations Widget Title\")",
+      "default": "Augmentations Sample Widget Title"
+    }
+  ]
+}

@@ -9,43 +9,46 @@
     "properties": {
         "class_names": {
             "title": "Class Names",
-            "description": "Names for every class according to their index of the model prediction (separated by commas)",
-            "type": "string"
+            "description": "Names for every class according to their index of the model prediction (separated by commas). Otherwise, specify the number of classes.",
+            "type": ["string", "null"],
+            "default": null
         },
         "aug_library": {
             "title": "Augmentation Library Name",
-            "description": "Indicate the augmentation library to extract from",
-            "type": "string"
-        }, 
+            "description": "Indicate the augmentation library to extract from (default and only available library: albumentations)",
+            "type": "string",
+            "default": "albumentations"
+        },
         "aug_method": {
             "title": "Augmentation Method Name",
-            "description": "Indicate the augmentation method",
+            "description": "Indicate the augmentation function (One!)",
             "type": "string"
         },
         "severity_before": {
-            "title": "Before Severity",
-            "description": "Indicate the extent of severity to compare to (before)",
-            "type": "string"
+            "title": "Before Severity (string)",
+            "description": "Indicate the extent of severity to compare to (before) (leave blank if using integer)",
+            "type":  ["string", "null"]
         },
         "severity_after": {
-            "title": "After Severity",
-            "description": "Indicate the extent of severity to compare to (after)",
-            "type": "string"
+            "title": "After Severity (string)",
+            "description": "Indicate the extent of severity to compare to (after) (leave blank if using integer)",
+            "type":  ["string", "null"]
         },
         "severity_before_idx": {
             "title": "Before Severity (integer)",
-            "description": "Indicate the extent of severity to compare to (before, as integer index)",
-            "type": "integer"
+            "description": "Indicate the extent of severity to compare to (before, as integer index) (leave blank if using string)",
+            "type": ["integer", "null"]
         },
         "severity_after_idx": {
             "title": "After Severity (integer)",
-            "description": "Indicate the extent of severity to compare to (after, as integer index)",
-            "type": "integer"
+            "description": "Indicate the extent of severity to compare to (after, as integer index, if not using string) (leave blank if using string)",
+            "type": ["integer", "null"]
         },
         "custom_parameters": {
             "title": "Custom Parameters",
-            "description": "Custom parameters for the augmentation_method",
-            "type": "string"
+            "description": "Custom parameters for the augmentation_method(s) (default for no custom params: None)",
+            "type": ["string", "null"],
+            "default": null
         }
     }
 }

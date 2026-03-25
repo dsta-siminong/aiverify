@@ -22,10 +22,10 @@ binary_classification_pipeline = {
         "class_names": "Barge,CG-P,ContainerShip,Cruise,Dredger,Ferry,LNG-LPG,RORO,Sampan,Trawler-FishingVessel,Tugboat,Warship,Yacht",
         "aug_library": "albumentations",
         "aug_method": "GaussianBlur",
-        "severity_before": "None",
-        "severity_after": "sigma_limit_1.6",
-        "severity_before_idx": 67,
-        "severity_after_idx": 67,
+        "severity_before": None,
+        "severity_after": None,
+        "severity_before_idx": 0,
+        "severity_after_idx": 1,
         "custom_parameters": "GaussianBlur sigma_limit 1.6,2.6,3.6",
     }
 }

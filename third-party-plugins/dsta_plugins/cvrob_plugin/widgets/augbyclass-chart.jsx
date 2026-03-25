@@ -514,86 +514,91 @@ export function ClassMetricsTable({ combined, className , metrics }) {
   return (
     <>
       {severityChunks.map((chunk, chunkIndex) => (
-        <table
-          key={chunkIndex}
-          style={{
-            width: "100%",
-            borderCollapse: "collapse",
-            marginTop: "1em",
-            marginBottom: "2em",
-            tableLayout: "fixed",
-          }}
-        >
-          <thead>
-            <tr>
-              <th
-                style={{
-                  border: "1px solid #ccc",
-                  padding: "6px",
-                  width: "150px",
-                }}
-              >
-                Metric \ Severity
-              </th>
-
-              {chunk.map((sev) => (
+        <div style={{ width: "100%", overflowX: "auto", marginBottom: "1em" }}>
+          <table
+            key={chunkIndex}
+            style={{
+              width: "max-content",
+              borderCollapse: "collapse",
+              marginTop: "1em",
+              marginBottom: "2em",
+              tableLayout: "fixed",
+            }}
+          >
+            <thead>
+              <tr>
                 <th
-                  key={sev}
                   style={{
                     border: "1px solid #ccc",
                     padding: "6px",
+                    width: "150px",
                   }}
                 >
-                  {sev}
+                  Metric \ Severity
                 </th>
-              ))}
-            </tr>
-          </thead>
 
-          <tbody>
-            {metrics.map((metric) => (
-              <tr key={metric}>
-                <td
-                  style={{
-                    border: "1px solid #ccc",
-                    padding: "6px",
-                    fontWeight: "bold",
-                  }}
-                >
-                  {metric}
-                </td>
-
-                {chunk.map((sev) => {
-                  const row = classRows.find(
-                    (r) => r.severity === sev
-                  );
-
-                  let value = row?.[metric];
-
-                  if (
-                    typeof value === "number" &&
-                    !["TP", "FP", "FN", "TN"].includes(metric)
-                  ) {
-                    value = value.toFixed(3);
-                  }
-
-                  return (
-                    <td
-                      key={sev}
-                      style={{
-                        border: "1px solid #ccc",
-                        padding: "6px",
-                        textAlign: "center",
-                      }}
-                    >
-                      {value ?? "-"}
-                    </td>
-                  );
-                })}
+                {chunk.map((sev) => (
+                  <th
+                    key={sev}
+                    style={{
+                      border: "1px solid #ccc",
+                      padding: "6px",
+                      wordWrap: "break-word",
+                      whiteSpace: "normal",
+                      overflowWrap: "break-word",
+                    }}
+                  >
+                    {sev}
+                  </th>
+                ))}
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+
+            <tbody>
+              {metrics.map((metric) => (
+                <tr key={metric}>
+                  <td
+                    style={{
+                      border: "1px solid #ccc",
+                      padding: "6px",
+                      fontWeight: "bold",
+                    }}
+                  >
+                    {metric}
+                  </td>
+
+                  {chunk.map((sev) => {
+                    const row = classRows.find(
+                      (r) => r.severity === sev
+                    );
+
+                    let value = row?.[metric];
+
+                    if (
+                      typeof value === "number" &&
+                      !["TP", "FP", "FN", "TN"].includes(metric)
+                    ) {
+                      value = value.toFixed(3);
+                    }
+
+                    return (
+                      <td
+                        key={sev}
+                        style={{
+                          border: "1px solid #ccc",
+                          padding: "6px",
+                          textAlign: "center",
+                        }}
+                      >
+                        {value ?? "-"}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       ))}
     </>
   );

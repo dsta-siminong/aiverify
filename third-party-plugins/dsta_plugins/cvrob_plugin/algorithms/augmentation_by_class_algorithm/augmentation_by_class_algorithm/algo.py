@@ -15,14 +15,14 @@ from aiverify_test_engine.plugins.metadata.plugin_metadata import PluginMetadata
 from aiverify_test_engine.utils.json_utils import load_schema_file, validate_json
 from aiverify_test_engine.utils.simple_progress import SimpleProgress
 
-from . import augmentations
+# from . import augmentations
 import numpy as np
 from PIL import Image
 import inspect
 import torchvision.transforms as transforms
 import torch
 from torch.utils.data import DataLoader, TensorDataset
-from .cvrob_util import evaluate, triplets
+from .cvrob_util import evaluate, triplets, average_all_reports, handle_class_names_arg
 from .augmentations_class import make_augmentation_dict, custom_parameter_change
 from sklearn.metrics import classification_report, confusion_matrix, ConfusionMatrixDisplay
 
@@ -351,10 +351,10 @@ class Plugin(IAlgorithm):
         print(self._data_instance.get_data())
         file_names = [Path(i).name for i in self._data_instance.get_data()["image_directory"]]
         df: pd.DataFrame = self._ground_truth_instance.get_data()
-        print("~~~~ df ~~~~")
-        print(df)
-        print("filenames")
-        print(file_names)
+        # print("~~~~ df ~~~~")
+        # print(df)
+        # print("filenames")
+        # print(file_names)
         self._file_name_label = "file_name" #self._input_arguments["file_name_label"]
         self._ordered_ground_truth_df = df.set_index(self._file_name_label).reindex(file_names) 
 
@@ -364,10 +364,12 @@ class Plugin(IAlgorithm):
         self._save_folder.mkdir(parents=True, exist_ok=True)
 
         # Apply user defined parameters to default parameters
-        aug_dict = make_augmentation_dict(self._input_arguments['aug_library'])
+        aug_library = self._input_arguments.get('aug_library') or "albumentations"
+        aug_dict = make_augmentation_dict(aug_library)
+
         custom_parameters = None
         try:
-            custom_parameters = self._input_arguments['custom_parameters']
+            custom_parameters = self._input_arguments.get('custom_parameters') or None
             custom_parameters = triplets(custom_parameters)
             for sublist in custom_parameters:
                 aug_name, param_name, parameters_in_string = sublist
@@ -395,22 +397,31 @@ class Plugin(IAlgorithm):
             model = self._model_instance._pipeline
         else:
             raise ValueError("idk what the", type(self._model_instance),"model instance is supposed to be ", dir(self._model_instance))
-        import json 
-        current_file_dir = Path(__file__).parent
+        # import json 
+        # current_file_dir = Path(__file__).parent
 
-        class_names_arr = self._input_arguments['class_names'].split(',')
-        if len(class_names_arr) == 1:
-            num_classes = int(class_names_arr[0])
-            class_names = {str(i): f"class_{i}" for i in range(num_classes) }
-        else:
-            class_names = {str(i): x for i,x in enumerate(class_names_arr) }
+        # class_names_arr = self._input_arguments['class_names'].split(',')
+        # if len(class_names_arr) == 1:
+        #     num_classes = int(class_names_arr[0])
+        #     class_names = {str(i): f"class_{i}" for i in range(num_classes) }
+        # else:
+        #     class_names = {str(i): x for i,x in enumerate(class_names_arr) }
+
+        combined_results = []; combined_results2 = []
+
+        aug_methods = self._input_arguments.get('aug_methods') or 'all'
+        aug_methods = [x.strip() for x in aug_methods.split(",") if x.strip()]
+        print("Augmentation methods:", aug_methods)
+
+        class_names_arg = self._input_arguments['class_names'] or None 
+        class_names = handle_class_names_arg(class_names_arg, model)
+        print("Class names:", class_names)
 
         labels = [k for k in class_names]
         target_names = [class_names[k] for k in class_names]
 
-        combined_results = []; combined_results2 = []
         for aug_name, aug_class in aug_dict.items():
-            if aug_name not in self._input_arguments['aug_methods']:
+            if aug_name not in aug_methods and aug_methods != ["all"]:
                 continue
 
             individual_results = dict() ; display_info = dict(); cm_dict = dict() 
@@ -440,7 +451,7 @@ class Plugin(IAlgorithm):
                     cm = confusion_matrix(y_true, y_pred, labels=list(range(len(target_names))))
                     all_reports.append(report); all_cm.append(cm)
 
-                avg_report = augmentations.average_all_reports(all_reports)
+                avg_report = average_all_reports(all_reports)
                 avg_cm = np.mean(all_cm, axis=0)
                 TP = np.diag(avg_cm); FP = avg_cm.sum(axis=0) - TP; FN = avg_cm.sum(axis=1) - TP
                 TN = avg_cm.sum() - (TP+FP+FN); N = avg_cm.sum()
@@ -508,7 +519,7 @@ class Plugin(IAlgorithm):
             "augmentation_names": [x["Augmentation"] for x in combined_results],
             "class_names": class_names
         })
-        print("OUTPUT RESULTS")
+        # print("OUTPUT RESULTS")
         # pprint.pprint(output_results)
 
         self._results = output_results
@@ -641,7 +652,7 @@ class Plugin(IAlgorithm):
         path_dict['class_plot'] = temp
 
         plot_df = combined_df.pivot(index='severity', columns='class', values='preds_population')
-        plt.figure(figsize=(16,9))#, constrained_layout=True)
+        plt.figure(figsize=(16,9))
 
         colors = plt.cm.jet(np.linspace(0,1,len(class_names)))
 
@@ -656,7 +667,6 @@ class Plugin(IAlgorithm):
 
         plt.xlabel('severity', fontsize=20); plt.ylabel('fraction of all samples predicted', fontsize=20)
         plt.xticks(fontsize=18 , rotation=45); plt.yticks(fontsize=18)
-        # plt.title(f'{aug_name}: Predictions and Label Proportions per class vs Augmentation Severity', fontsize=24)
         plt.legend(title='class', bbox_to_anchor=(1.02,1), loc='upper left', fontsize=18)
         plt.title(f'{aug_name}: Predictions and Label Proportions per class vs Augmentation Severity', fontsize=24, pad=30)
         # plt.tight_layout()
@@ -689,7 +699,7 @@ class Plugin(IAlgorithm):
         ax.figure.set_size_inches(16,9)
         ax.set_title(f"Sklearn report statistics for {aug_name}, class = {class_names[i]}", fontsize=24)
         if np.isfinite(y_min) and np.isfinite(y_max) and y_min < y_max:
-            ax.set_ylim(y_min - 0.1, y_max + 0.1)#ax.set_ylim([0,1])
+            ax.set_ylim(y_min - 0.1, y_max + 0.1)
         ax_path = save_dir/ f"sklearn_figure_class_{class_names[i]}.png"
         ax.tick_params(axis='x', labelsize=20, labelrotation=45); ax.tick_params(axis='y', labelsize=20)
         plt.tight_layout()
@@ -704,15 +714,12 @@ class Plugin(IAlgorithm):
         ax1.figure.set_size_inches(16,9)
         ax1.set_title(f"Confusion matrix stats for {aug_name}, class = {class_names[i]}", fontsize=24)
         if np.isfinite(y_min) and np.isfinite(y_max) and y_min < y_max:
-            ax1.set_ylim(y_min - 5, y_max + 5)#ax.set_ylim([0,1])
+            ax1.set_ylim(y_min - 5, y_max + 5)
         ax_path1 = save_dir/ f"cm_figure_class_{class_names[i]}.png"
         ax1.tick_params(axis='x', labelsize=20, labelrotation=45); ax1.tick_params(axis='y', labelsize=20)
         plt.tight_layout()
         ax1.figure.savefig(ax_path1)
         plt.close(ax1.figure)
-        # print(i)
-        # print(sub_df)
-        # print()
 
         cols = ['preds_population', 'actual_population']
         ax2 = sub_df.plot(x='severity', y=cols)

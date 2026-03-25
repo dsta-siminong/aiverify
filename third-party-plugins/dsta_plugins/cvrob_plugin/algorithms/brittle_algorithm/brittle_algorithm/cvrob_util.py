@@ -411,3 +411,63 @@ def collect_probs(model, dataloader, device):
     )
 
     return torch.cat(probs), torch.cat(labels)
+
+def get_num_classes(model: nn.Module) -> int:
+    """
+    Try to infer the number of output classes from a PyTorch image classification model.
+    Works for most architectures by inspecting the last linear/conv layer.
+    """
+    # 1. Look for last Linear layer
+    last_linear = None
+    for module in model.modules():
+        if isinstance(module, nn.Linear):
+            last_linear = module
+    if last_linear is not None:
+        return last_linear.out_features
+
+    # 2. Fallback: look for last Conv layer (e.g., some classifiers end with conv)
+    last_conv = None
+    for module in model.modules():
+        if isinstance(module, nn.Conv2d):
+            last_conv = module
+    if last_conv is not None:
+        return last_conv.out_channels
+
+    # 3. Fallback: try classifier / fc attributes
+    for attr in ["fc", "classifier", "head", "heads"]:
+        if hasattr(model, attr):
+            module = getattr(model, attr)
+            if isinstance(module, nn.Linear):
+                return module.out_features
+            elif isinstance(module, nn.Sequential):
+                for layer in reversed(module):
+                    if isinstance(layer, nn.Linear):
+                        return layer.out_features
+
+    raise RuntimeError("Could not determine number of classes.")
+
+def handle_class_names_arg(class_names_arg, model):
+    if class_names_arg is None or str(class_names_arg).strip() == "":
+        
+        print("# fallback: infer from model")
+        num_classes = get_num_classes(model)
+        class_names = {str(i): f"class_{i}" for i in range(num_classes)}
+
+    else:
+        class_names_arr = [x.strip() for x in class_names_arg.split(",") if x.strip()]
+
+        # Case 1: user provided number of classes
+        if len(class_names_arr) == 1:
+            try:
+                num_classes = int(class_names_arr[0])
+                class_names = {str(i): f"class_{i}" for i in range(num_classes)}
+            except ValueError:
+                raise ValueError(
+                    "class_names must be comma-separated names or a single integer"
+                )
+
+        # Case 2: user provided names
+        else:
+            class_names = {str(i): name for i, name in enumerate(class_names_arr)}
+
+    return class_names

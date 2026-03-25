@@ -78,11 +78,11 @@ class ObjectTest:
         ground_truth = "label"
         model_type = ModelType.CLASSIFICATION
         input_args = {
-            "class_names": "13",
+            "class_names": None,
             "aug_library": "albumentations",
             "aug_methods": "GaussianBlur,GaussianNoise",
             "num_epochs": 2,
-            "custom_parameters": "GaussianBlur sigma_limit 1.6,2.6,3.6,4.6 GaussianNoise std_range (0.06,0.06),(0.12,0.12),(0.18,0.18),(0.24,0.24)"
+            "custom_parameters": None# "GaussianBlur sigma_limit 1.6,2.6,3.6,4.6 GaussianNoise std_range (0.06,0.06),(0.12,0.12),(0.18,0.18),(0.24,0.24)"
         }
         expected_exception = RuntimeError
         expected_exception_msg = "The algorithm has failed data validation"
