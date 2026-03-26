@@ -315,12 +315,12 @@ class Augmentation:
 
     def determine_severity(self, severity_idx):
         if type(severity_idx) == int:
-            print(f"Index is integer value {severity_idx}")
+            # print(f"Index is integer value {severity_idx}")
             all_severities = ["None"] + self.severities 
             severity = all_severities[severity_idx]
-            print(f"Which corresponds to value {severity}")
+            # print(f"Which corresponds to value {severity}")
         else:
-            print(f"Severity is directly referenced as {severity_idx}")
+            # print(f"Severity is directly referenced as {severity_idx}")
             severity = severity_idx
         return severity
 

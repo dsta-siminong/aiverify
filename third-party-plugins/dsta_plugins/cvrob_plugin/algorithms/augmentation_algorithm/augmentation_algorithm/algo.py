@@ -16,7 +16,6 @@ from aiverify_test_engine.plugins.metadata.plugin_metadata import PluginMetadata
 from aiverify_test_engine.utils.json_utils import load_schema_file, validate_json
 from aiverify_test_engine.utils.simple_progress import SimpleProgress
 
-# from . import augmentations
 import numpy as np
 from PIL import Image
 import inspect
@@ -384,7 +383,8 @@ class Plugin(IAlgorithm):
         image_paths: list[str] = self._data_instance.get_data()["image_directory"].tolist()
         ground_truths = self._ordered_ground_truth_df[self._ground_truth_label].tolist()
         test_dataset, test_loader = self._load_images(image_paths, ground_truths)
-        np.random.seed(42) #to be set manually next
+        #KIV: set a random seed here manually; if we want to manually set it then we'll need to change this
+        np.random.seed(42) 
         display_idx = np.random.choice(len(image_paths))
         output_results = dict()
 
@@ -397,7 +397,6 @@ class Plugin(IAlgorithm):
 
         combined_results = []; gradients = []; first_drops = []
 
-        # aug_methods = [x for x in aug_dict]
         aug_methods = self._input_arguments.get('aug_methods') or 'all'
         aug_methods = [x.strip() for x in aug_methods.split(",") if x.strip()]
         print("Augmentation methods:", aug_methods)
@@ -405,16 +404,8 @@ class Plugin(IAlgorithm):
         class_names_arg = self._input_arguments['class_names'] or None 
         class_names = handle_class_names_arg(class_names_arg, model)
         print("Class names:", class_names)
-        # if class_names_arg is None: 
-        #     num_classes = get_num_classes(model)
-        #     class_names = {str(i): f"class_{i}" for i in range(num_classes) }
-        # else:
-        #     class_names_arr = class_names_arg.split(',')
-        #     if len(class_names_arr) == 1:
-        #         num_classes = int(class_names_arr[0])
-        #         class_names = {str(i): f"class_{i}" for i in range(num_classes) }
-        #     else:
-        #         class_names = {str(i): x for i,x in enumerate(class_names_arr) }
+
+        #LEN = len(aug_dict) if aug_methods == ["all"] else len(aug_methods)
 
         for aug_name, aug_class in aug_dict.items():
             
@@ -461,7 +452,7 @@ class Plugin(IAlgorithm):
             combined_results.append(individual_results)
             gradients.append(gradient)
             first_drops.append(first_drop)
-            self._progress_inst.update(1)
+            # self._progress_inst.update(1/LEN)
             print()
 
         output_results.update({

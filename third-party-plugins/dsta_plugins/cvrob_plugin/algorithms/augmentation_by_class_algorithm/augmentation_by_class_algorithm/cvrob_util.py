@@ -8,6 +8,179 @@ import plotly.graph_objects as go
 from tqdm import tqdm
 import torch.nn as nn
 
+def evaluate(model, loader, device):
+    """
+    Evaluate model using data from loader
+
+    Args:
+        model (torch.nn.Module): torch model
+        loader (torch.Dataloader): data loader
+        device (torch.device): device model is on
+    Returns: 
+        tuple:
+            accuracy (float): percentage of correctly predicted labels
+            predicted_labels (np.array): predictions output by label
+            true_labels (np.array): ground truth labels
+    """
+    model.eval()
+    correct, total = 0, 0
+    predicted_labels, true_labels = [], []
+    with torch.no_grad():
+        for inputs, targets in loader:
+            inputs, targets = inputs.to(device), targets.to(device)
+            outputs = model(inputs)
+            _, predicted = torch.max(outputs, 1)
+            correct += (predicted == targets).sum().item()
+            total += targets.size(0)
+            predicted_labels.extend(predicted.cpu().numpy())
+            true_labels.extend(targets.cpu().numpy())
+    return 100 * correct / total, np.array(predicted_labels), np.array(true_labels)
+
+def triplets(s):
+    """
+    Split a whitespace-separated string provided by the custom parameters argument into groups of three items.
+    This is for the future customization of the augmentation dictionary
+
+    Args:
+        s (str): Input string containing whitespace-separated tokens. The number
+            of tokens must be a multiple of three.
+
+    Returns:
+        List[List[str]]: A list of sublists, each containing three consecutive
+        tokens from the input string.
+
+    Raises:
+        AssertionError: If the number of tokens in the input is not a multiple
+        of three.
+    """
+    items = s.split()
+    assert len(items) % 3 == 0, "Input length must be a multiple of 3"
+    return [items[i:i+3] for i in range(0, len(items), 3)]
+
+def average_all_reports(reports):
+    """
+    Compute the element-wise average of sklearn classification report dictionaries.
+
+    This function expects a list of report dictionaries with identical structure,
+    where each class contains metric values (e.g., precision, recall, f1-score),
+    and a top-level 'accuracy' key may also be present.
+
+    Args:
+        reports (List[Dict[str, Any]]): List of report dictionaries. Each report
+            should have the same keys and nested metric structure.
+
+    Returns:
+        Dict[str, Any]: A dictionary with the same structure as the input reports,
+        where each metric value is replaced by the average across all reports.
+    """
+    avg = {}
+    for c in reports[0].keys(): #c is a class
+        if c == 'accuracy':
+            avg[c] = float(np.mean([r[c] for r in reports]))
+            continue
+
+        avg[c] = {}
+        for metric in reports[0][c].keys():
+            values = [r[c][metric] for r in reports]
+            avg[c][metric] = float(np.mean(values))
+    return avg
+
+def get_num_classes(model: nn.Module) -> int:
+    """
+    Infer the number of output classes from a PyTorch classification model.
+
+    The function attempts to determine the number of classes by inspecting the
+    final Linear or Conv2d layer, or common classifier attributes such as
+    'fc', 'classifier', 'head', or 'heads'.
+
+    Args:
+        model (nn.Module): A PyTorch model assumed to be used for classification.
+
+    Returns:
+        int: The inferred number of output classes.
+
+    Raises:
+        RuntimeError: If the number of classes cannot be determined from the model.
+    """
+    # 1. Look for last Linear layer
+    last_linear = None
+    for module in model.modules():
+        if isinstance(module, nn.Linear):
+            last_linear = module
+    if last_linear is not None:
+        return last_linear.out_features
+
+    # 2. Fallback: look for last Conv layer (e.g., some classifiers end with conv)
+    last_conv = None
+    for module in model.modules():
+        if isinstance(module, nn.Conv2d):
+            last_conv = module
+    if last_conv is not None:
+        return last_conv.out_channels
+
+    # 3. Fallback: try classifier / fc attributes
+    for attr in ["fc", "classifier", "head", "heads"]:
+        if hasattr(model, attr):
+            module = getattr(model, attr)
+            if isinstance(module, nn.Linear):
+                return module.out_features
+            elif isinstance(module, nn.Sequential):
+                for layer in reversed(module):
+                    if isinstance(layer, nn.Linear):
+                        return layer.out_features
+
+    raise RuntimeError("Could not determine number of classes.")
+
+def handle_class_names_arg(class_names_arg, model):
+    """
+    Parse class names input and return a mapping from class index to name.
+
+    The function supports three input modes:
+    1. None or empty string: infer number of classes from the model, then does (2)
+    2. Single integer: generate default class names using that count.
+    3. Comma-separated names: use provided class names directly.
+
+    Args:
+        class_names_arg (Optional[str]): Class names specification. Can be:
+            - None or empty string to infer from model
+            - A single integer as string (e.g., "10")
+            - Comma-separated class names (e.g., "cat,dog,bird")
+        model (nn.Module): PyTorch model used when inferring class count.
+
+    Returns:
+        Dict[str, str]: Mapping from class index (as string) to class name.
+
+    Raises:
+        ValueError: If a single provided value is not a valid integer.
+    """
+    if class_names_arg is None or str(class_names_arg).strip() == "":
+        
+        print("# fallback: infer from model")
+        num_classes = get_num_classes(model)
+        class_names = {str(i): f"class_{i}" for i in range(num_classes)}
+
+    else:
+        class_names_arr = [x.strip() for x in class_names_arg.split(",") if x.strip()]
+
+        # Case 1: user provided number of classes
+        if len(class_names_arr) == 1:
+            try:
+                num_classes = int(class_names_arr[0])
+                class_names = {str(i): f"class_{i}" for i in range(num_classes)}
+            except ValueError:
+                raise ValueError(
+                    "class_names must be comma-separated names or a single integer"
+                )
+
+        # Case 2: user provided names
+        else:
+            class_names = {str(i): name for i, name in enumerate(class_names_arr)}
+
+    return class_names
+
+
+# ==== OTHER FUNCTIONS THAT ARE NOT USED FOR THIS WHOLE ALGO BUT I DON'T WANT TO DELETE THEM YET ====
+
 class SimpleCNN(nn.Module):
     def __init__(self):
         super(SimpleCNN, self).__init__()
@@ -54,34 +227,6 @@ def get_image_from_path(image_path):
     image = Image.open(image_path)
     image_np = np.array(image)
     return image_np
-
-def evaluate(model, loader, device):
-    """
-    Evaluate model using data from loader
-
-    Args:
-        model (torch.nn.Module): torch model
-        loader (torch.Dataloader): data loader
-        device (torch.device): device model is on
-    Returns: 
-        tuple:
-            accuracy (float): percentage of correctly predicted labels
-            predicted_labels (np.array): predictions output by label
-            true_labels (np.array): ground truth labels
-    """
-    model.eval()
-    correct, total = 0, 0
-    predicted_labels, true_labels = [], []
-    with torch.no_grad():
-        for inputs, targets in loader:
-            inputs, targets = inputs.to(device), targets.to(device)
-            outputs = model(inputs)
-            _, predicted = torch.max(outputs, 1)
-            correct += (predicted == targets).sum().item()
-            total += targets.size(0)
-            predicted_labels.extend(predicted.cpu().numpy())
-            true_labels.extend(targets.cpu().numpy())
-    return 100 * correct / total, np.array(predicted_labels), np.array(true_labels)
 
 def get_logits(model, dataloader, device):
     """
@@ -218,80 +363,25 @@ def best_fit_gradient(x_values, y_values):
     
     return numerator / denominator
 
-def triplets(s):
-    items = s.split()
-    assert len(items) % 3 == 0, "Input length must be a multiple of 3"
-    return [items[i:i+3] for i in range(0, len(items), 3)]
-
-def average_all_reports(reports):
-    avg = {}
-    for c in reports[0].keys(): #c is a class
-        if c == 'accuracy':
-            avg[c] = float(np.mean([r[c] for r in reports]))
-            continue
-
-        avg[c] = {}
-        for metric in reports[0][c].keys():
-            values = [r[c][metric] for r in reports]
-            avg[c][metric] = float(np.mean(values))
-    return avg
-
-def get_num_classes(model: nn.Module) -> int:
+def evaluate_1img(model, device, img_array):
     """
-    Try to infer the number of output classes from a PyTorch image classification model.
-    Works for most architectures by inspecting the last linear/conv layer.
+    Evaluate a single image using a PyTorch model and return predicted probabilities and label.
+
+    Args:
+        model (nn.Module): A PyTorch model for image classification.
+        device (torch.device): Device to run the model on (CPU or GPU).
+        img_array (numpy.ndarray or PIL.Image.Image): Input image as a NumPy array or PIL Image.
+
+    Returns:
+        Tuple[numpy.ndarray, int]:
+            - probs: Softmax probabilities for each class as a NumPy array.
+            - label: Predicted class index as an integer.
     """
-    # 1. Look for last Linear layer
-    last_linear = None
-    for module in model.modules():
-        if isinstance(module, nn.Linear):
-            last_linear = module
-    if last_linear is not None:
-        return last_linear.out_features
+    img_tensor = transforms.ToTensor()(img_array).unsqueeze(0)
+    model.eval()
+    with torch.no_grad():
+        output = model(img_tensor.to(device)).cpu()
+        probs = torch.softmax(output, 1).numpy()[0]
+        label = torch.max(output, 1)[1][0].item()
 
-    # 2. Fallback: look for last Conv layer (e.g., some classifiers end with conv)
-    last_conv = None
-    for module in model.modules():
-        if isinstance(module, nn.Conv2d):
-            last_conv = module
-    if last_conv is not None:
-        return last_conv.out_channels
-
-    # 3. Fallback: try classifier / fc attributes
-    for attr in ["fc", "classifier", "head", "heads"]:
-        if hasattr(model, attr):
-            module = getattr(model, attr)
-            if isinstance(module, nn.Linear):
-                return module.out_features
-            elif isinstance(module, nn.Sequential):
-                for layer in reversed(module):
-                    if isinstance(layer, nn.Linear):
-                        return layer.out_features
-
-    raise RuntimeError("Could not determine number of classes.")
-
-def handle_class_names_arg(class_names_arg, model):
-    if class_names_arg is None or str(class_names_arg).strip() == "":
-        
-        print("# fallback: infer from model")
-        num_classes = get_num_classes(model)
-        class_names = {str(i): f"class_{i}" for i in range(num_classes)}
-
-    else:
-        class_names_arr = [x.strip() for x in class_names_arg.split(",") if x.strip()]
-
-        # Case 1: user provided number of classes
-        if len(class_names_arr) == 1:
-            try:
-                num_classes = int(class_names_arr[0])
-                class_names = {str(i): f"class_{i}" for i in range(num_classes)}
-            except ValueError:
-                raise ValueError(
-                    "class_names must be comma-separated names or a single integer"
-                )
-
-        # Case 2: user provided names
-        else:
-            class_names = {str(i): name for i, name in enumerate(class_names_arr)}
-
-    return class_names
+    return probs, label

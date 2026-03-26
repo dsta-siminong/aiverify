@@ -52,7 +52,7 @@ def make_augmentation_dict_album():
     augmentations_album, aug_names_album = get_album_augmentations_list()
     augmentations_album2 = []
     for a in augmentations_album:
-        td = {}
+        td = {"None": "None"}
         aug_func = a[0]
         for severity in range(1,6):
             aug_params = {k: (v(severity) if callable(v) else v) for k, v in a[1].items()}
@@ -206,22 +206,6 @@ def get_augmentation_dict_album_header():
 
     return d
 
-def make_augmentation_dict_album2():
-    old_d = get_augmentation_dict_album_header()
-    d = {}
-    for k,v in old_d.items():
-        param_dict = {k1:v1[1] for k1,v1 in v.items()}
-        for k1,v1 in param_dict.items():
-            if k1 != "None":
-                print(k1, v1)
-                v1['random_seed'] = 42
-        aug_func = v[list(v.keys())[0]][0]
-        print(aug_func , "aug_func")
-        # print(aug_tuple[1], aug_tuple[0])
-        new_aug = Augmentation(k, param_dict, aug_func)
-        d[k] = new_aug 
-    return d 
-
 import ast
 
 def parse_parameters(s):
@@ -265,11 +249,29 @@ def custom_parameter_change(aug_dict, aug_name, param_name, parameters_in_string
     for key in aug_dict:
         if key == aug_name:
             aug_class = aug_dict[key]
-            aug_func = aug_class.aug_func 
+            aug_func = aug_class.aug_func ; rand_seed = aug_class.random_seed
             new_aug_class = Augmentation(aug_name, param_dict, aug_func)
+            if rand_seed is not None: 
+                aug_class.set_seed(rand_seed)
             aug_dict[key] = new_aug_class
 
     return aug_dict
+
+def make_augmentation_dict_album2():
+    old_d = get_augmentation_dict_album_header()
+    d = {}
+    for k,v in old_d.items():
+        param_dict = {k1:v1[1] for k1,v1 in v.items()}
+        for k1,v1 in param_dict.items():
+            if k1 != "None":
+                print(k1, v1)
+                v1['random_seed'] = 42
+        aug_func = v[list(v.keys())[0]][0]
+        print(aug_func , "aug_func")
+        # print(aug_tuple[1], aug_tuple[0])
+        new_aug = Augmentation(k, param_dict, aug_func)
+        d[k] = new_aug 
+    return d 
 
 def make_augmentation_dict_imagecorrupt():
     augmentations = [
@@ -306,11 +308,24 @@ class Augmentation:
 
         self.corrupt_func = check_module(aug_func)
         self.aug_func = aug_func
-
+        self.random_seed = None
 
     def set_seed(self, x):
-        for k,v in self.param_dict.items():
-            v['random_seed'] = 42
+        self.random_seed =  x
+        if self.name != "None":
+            for k,v in self.param_dict.items():
+                v['random_seed'] = x
+
+    def determine_severity(self, severity_idx):
+        if type(severity_idx) == int:
+            # print(f"Index is integer value {severity_idx}")
+            all_severities = ["None"] + self.severities 
+            severity = all_severities[severity_idx]
+            # print(f"Which corresponds to value {severity}")
+        else:
+            # print(f"Severity is directly referenced as {severity_idx}")
+            severity = severity_idx
+        return severity
 
     def corr_func_one_img(self, img, severity_idx):
         if type(severity_idx) == int:
@@ -326,7 +341,7 @@ class Augmentation:
 
     def corr_func_arr(self, arr, severity_idx):
         if type(severity_idx) == int:
-            print(self.severities, "SEV")
+            print(self.severities, "SEV", severity_idx)
             severity = self.severities[severity_idx]
         else:
             severity = severity_idx
@@ -336,28 +351,64 @@ class Augmentation:
             corrupted_images = arr
 
         return corrupted_images
-
+    
     def corr_func_dataloader(self, testloader, severity_idx):
-        if type(severity_idx) == int:
-            severity = self.severities[severity_idx]
-        else:
-            severity = severity_idx
-        if self.name in ["None", None]:
-            return testloader 
+        severity = self.determine_severity(severity_idx)
 
-        corrupted_images = []
-        corrupted_labels = []
-        
-        for images, labels in testloader:
-            images_np = (images * 255).byte().numpy().transpose(0, 2, 3, 1)  # Convert to HWC format and uint8
-            
-            # Apply corruption function with provided parameters
-            corrupted = self.corr_func_arr(images_np, severity_idx)
-            
-            corrupted = torch.tensor(corrupted.transpose(0, 3, 1, 2), dtype=torch.float32) / 255.0  # Convert back to CHW format and normalize
-            corrupted_images.append(corrupted)
-            corrupted_labels.append(labels)
-        
-        corrupted_dataset = torch.utils.data.TensorDataset(torch.cat(corrupted_images), torch.cat(corrupted_labels))
-        return torch.utils.data.DataLoader(corrupted_dataset, batch_size=128, shuffle=False)
+        if self.name in ["None", None] or severity == None:
+            return testloader
+
+        dataset = CorruptedDataset(
+            testloader.dataset,
+            self.corr_func_arr,
+            severity_idx,
+        )
+
+        pin_memory = torch.cuda.is_available()
+
+        return torch.utils.data.DataLoader(
+            dataset,
+            batch_size=testloader.batch_size,
+            shuffle=False,
+            num_workers=0,
+            pin_memory=False,
+        )
+
+class CorruptedDataset(torch.utils.data.Dataset):
+    def __init__(self, dataset, corr_func, severity_idx):
+        self.dataset = dataset
+        self.corr_func = corr_func
+        self.severity_idx = severity_idx
+
+    def __len__(self):
+        return len(self.dataset)
+
+    def __getitem__(self, idx):
+        image, label = self.dataset[idx]
+
+        image_np = (
+            image.mul(255)
+            .byte()
+            .cpu()
+            .numpy()
+            .transpose(1, 2, 0)
+        )
+
+        # Add batch dimension
+        image_np = image_np[None, ...]
+
+        corrupted = self.corr_func(image_np, self.severity_idx)
+
+        # Remove batch dimension
+        corrupted = corrupted[0]
+
+        # Handle (H, W, C, 1)
+        if corrupted.ndim == 4 and corrupted.shape[-1] == 1:
+            corrupted = corrupted[..., 0]
+
+        corrupted = torch.from_numpy(
+            corrupted.transpose(2, 0, 1)
+        ).float().div_(255.0)
+
+        return corrupted, label
 

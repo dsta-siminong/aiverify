@@ -320,12 +320,12 @@ class Augmentation:
 
     def determine_severity(self, severity_idx):
         if type(severity_idx) == int:
-            print(f"Index is integer value {severity_idx}")
+            # print(f"Index is integer value {severity_idx}")
             all_severities = ["None"] + self.severities 
             severity = all_severities[severity_idx]
-            print(f"Which corresponds to value {severity}")
+            # print(f"Which corresponds to value {severity}")
         else:
-            print(f"Severity is directly referenced as {severity_idx}")
+            # print(f"Severity is directly referenced as {severity_idx}")
             severity = severity_idx
         return severity
 
@@ -353,29 +353,6 @@ class Augmentation:
             corrupted_images = arr
 
         return corrupted_images
-
-    def corr_func_dataloader_000(self, testloader, severity_idx):
-        severity = self.determine_severity(severity_idx)
-
-        if self.name in ["None", None] or severity == "None":
-            return testloader 
-
-        corrupted_images = []
-        corrupted_labels = []
-        
-        for images, labels in testloader:
-            images_np = (images * 255).byte().numpy().transpose(0, 2, 3, 1)  # Convert to HWC format and uint8
-            
-            # Apply corruption function with provided parameters
-            corrupted = self.corr_func_arr(images_np, severity_idx)
-            
-            corrupted = torch.tensor(corrupted.transpose(0, 3, 1, 2), dtype=torch.float32) / 255.0  # Convert back to CHW format and normalize
-            corrupted_images.append(corrupted)
-            corrupted_labels.append(labels)
-        
-        corrupted_dataset = torch.utils.data.TensorDataset(torch.cat(corrupted_images), torch.cat(corrupted_labels))
-        return torch.utils.data.DataLoader(corrupted_dataset, batch_size=128, shuffle=False)
-        severity = self.determine_severity(severity_idx)
 
     def corr_func_dataloader(self, testloader, severity_idx):
         severity = self.determine_severity(severity_idx)

@@ -7,15 +7,15 @@ from aiverify_test_engine.plugins.enums.model_type import ModelType
 
 binary_classification_pipeline = {
     "data_path": str(
-        "/home/bjieyong/aiverify/cvrob/dataset_20200803/all_images_100"
+        "../../../../../../all_images_all_classes"
     ),
     "model_path": str(
-        "/home/bjieyong/aiverify/cvrob/ship_pipe/ship_model.pt"
+        "../../../../../../ship_pipe_sm/ship_pipe_sm"
     ),
     "ground_truth_path": str(
-        "/home/bjieyong/aiverify/cvrob/dataset_20200803/labels_100.csv"
+        "../../../../../../labels_all_classes.csv"
     ),
-    "run_pipeline": False,
+    "run_pipeline": True,
     "model_type": ModelType.CLASSIFICATION,
     "ground_truth": "label",
     "plugin_argument_values": {

@@ -387,7 +387,8 @@ class Plugin(IAlgorithm):
         image_paths : list[str] = self._data_instance.get_data()["image_directory"].tolist()
         ground_truths = self._ordered_ground_truth_df[self._ground_truth_label].tolist()
         test_dataset, test_loader = self._load_images(image_paths, ground_truths)
-        np.random.seed(42)
+        #KIV: set a random seed here manually; if we want to manually set it then we'll need to change this
+        np.random.seed(42) 
         display_idx = np.random.choice(len(image_paths))
         output_results = dict()
 
@@ -397,15 +398,6 @@ class Plugin(IAlgorithm):
             model = self._model_instance._pipeline
         else:
             raise ValueError("idk what the", type(self._model_instance),"model instance is supposed to be ", dir(self._model_instance))
-        # import json 
-        # current_file_dir = Path(__file__).parent
-
-        # class_names_arr = self._input_arguments['class_names'].split(',')
-        # if len(class_names_arr) == 1:
-        #     num_classes = int(class_names_arr[0])
-        #     class_names = {str(i): f"class_{i}" for i in range(num_classes) }
-        # else:
-        #     class_names = {str(i): x for i,x in enumerate(class_names_arr) }
 
         combined_results = []; combined_results2 = []
 
@@ -413,7 +405,7 @@ class Plugin(IAlgorithm):
         aug_methods = [x.strip() for x in aug_methods.split(",") if x.strip()]
         print("Augmentation methods:", aug_methods)
 
-        class_names_arg = self._input_arguments['class_names'] or None 
+        class_names_arg = self._input_arguments.get('class_names') or None 
         class_names = handle_class_names_arg(class_names_arg, model)
         print("Class names:", class_names)
 
@@ -510,7 +502,7 @@ class Plugin(IAlgorithm):
 
             combined_results.append(individual_results)
 
-            self._progress_inst.update(1)
+            #self._progress_inst.update(1)
 
             print()
 
@@ -519,8 +511,6 @@ class Plugin(IAlgorithm):
             "augmentation_names": [x["Augmentation"] for x in combined_results],
             "class_names": class_names
         })
-        # print("OUTPUT RESULTS")
-        # pprint.pprint(output_results)
 
         self._results = output_results
 
@@ -609,10 +599,10 @@ class Plugin(IAlgorithm):
         big_df = None; rows = []
 
         for severity, cr, cm in zip(severities, data, data2):
-            print("CR")
-            pprint(cr)
-            print("CM")
-            pprint(cm)
+            # print("CR")
+            # pprint(cr)
+            # print("CM")
+            # pprint(cm)
 
             df = pd.DataFrame.from_dict(cr).T
             df['severity'] = severity
@@ -669,7 +659,6 @@ class Plugin(IAlgorithm):
         plt.xticks(fontsize=18 , rotation=45); plt.yticks(fontsize=18)
         plt.legend(title='class', bbox_to_anchor=(1.02,1), loc='upper left', fontsize=18)
         plt.title(f'{aug_name}: Predictions and Label Proportions per class vs Augmentation Severity', fontsize=24, pad=30)
-        # plt.tight_layout()
         plt.subplots_adjust(left=0.15, right=0.8, top=0.88, bottom=0.3)
         plt_path = save_dir / "all_classes_proportions_barchart.png"
         plt.savefig(plt_path, bbox_inches="tight")

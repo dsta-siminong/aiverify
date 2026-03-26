@@ -7,6 +7,7 @@ import pytest
 from brittle_algorithm.algo import Plugin
 from aiverify_test_engine.interfaces.idata import IData
 from aiverify_test_engine.interfaces.imodel import IModel
+from aiverify_test_engine.interfaces.ipipeline import IPipeline
 from aiverify_test_engine.plugins.enums.model_type import ModelType
 from aiverify_test_engine.plugins.enums.plugin_type import PluginType
 from aiverify_test_engine.plugins.metadata.plugin_metadata import PluginMetadata
@@ -32,13 +33,13 @@ def test_discover_plugin():
 
 # Variables for testing
 valid_data_path = str(
-    "/home/bjieyong/aiverify/cvrob/dataset_20200803/all_images_100"
+    "../../../../../../all_images_all_classes"
 )
 valid_model_path = str(
-    "/home/bjieyong/aiverify/cvrob/ship_pipe/ship_model.pt"
+    "../../../../../../ship_pipe_sm/ship_pipe_sm"
 )
 valid_ground_truth_path = str(
-    "/home/bjieyong/aiverify/cvrob/dataset_20200803/labels_100.csv"
+    "../../../../../../labels_all_classes.csv"
 )
 
 test_string = "data_str"
@@ -64,17 +65,13 @@ class ObjectTest:
             model_instance,
             model_serializer_instance,
             model_error_message,
-        ) = PluginManager.get_instance(
-            PluginType.MODEL, **{"filename": valid_model_path}
-        )
+        ) = PluginManager.get_instance(PluginType.PIPELINE, **{"pipeline_path": valid_model_path})
 
         (
             ground_truth_instance,
             ground_truth_serializer_instance,
             data_error_message,
-        ) = PluginManager.get_instance(
-            PluginType.DATA, **{"filename": valid_ground_truth_path}
-        )
+        ) = PluginManager.get_instance(PluginType.DATA, **{"filename": valid_ground_truth_path})
 
         ground_truth = "label"
         model_type = ModelType.CLASSIFICATION
@@ -165,7 +162,7 @@ def get_model_instance_and_serializer(request):
         model_instance,
         model_serializer_instance,
         model_error_message,
-    ) = PluginManager.get_instance(PluginType.MODEL, **{"filename": request.param})
+    ) = PluginManager.get_instance(PluginType.PIPELINE, **{"pipeline_path": request.param})
     yield (model_instance, model_serializer_instance)
 
 
@@ -177,9 +174,8 @@ def get_invalid_model_instance(request):
             model_instance,
             model_serializer_instance,
             model_error_message,
-        ) = PluginManager.get_instance(PluginType.MODEL, **{"filename": request.param})
+        ) = PluginManager.get_instance(PluginType.PIPELINE, **{"pipeline_path": request.param})
     return excinfo
-
 
 @pytest.fixture
 def get_ground_truth_instance_and_serializer(request):
@@ -204,12 +200,11 @@ def test_create_plugin_instance_with_all_valid_input():
     )
 
     assert isinstance(test_plugin._data_instance, IData)
-    assert isinstance(test_plugin._model_instance, IModel)
+    assert isinstance(test_plugin._model_instance, IPipeline)
+    assert isinstance(test_plugin._ground_truth_instance, IData)
     assert isinstance(test_plugin._logger, logging.Logger)
     assert isinstance(test_plugin._progress_inst, SimpleProgress)
-    
-    assert isinstance(test_plugin._ground_truth_instance, IData)
-    
+
 
 @pytest.mark.parametrize(
     "invalid_data_instance_type",
@@ -338,14 +333,7 @@ def test_init_plugin_instance_with_missing_ground_truth(
     model_instance_and_serializer = get_model_instance_and_serializer
     ground_truth_instance_and_serializer = get_ground_truth_instance_and_serializer
     model_type = ModelType.CLASSIFICATION
-    input_args = {
-        "aug_library": "albumentations",
-        "aug_method": "GaussianBlur",
-        "severity_before": "",
-        "severity_after": "",
-        "severity_before_idx": 0,
-        "severity_after_idx": 1,
-    }
+    input_args = {}
     expected_exception = RuntimeError
     expected_exception_msg = "The algorithm has failed ground truth header validation."
     logger_instance = logging.getLogger("PluginTestLogger")

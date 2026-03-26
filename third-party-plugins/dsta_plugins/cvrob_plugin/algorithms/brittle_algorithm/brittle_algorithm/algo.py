@@ -392,7 +392,8 @@ class Plugin(IAlgorithm):
         image_paths : list[str] = self._data_instance.get_data()["image_directory"].tolist()
         ground_truths = self._ordered_ground_truth_df[self._ground_truth_label].tolist()
         test_dataset, test_loader = self._load_images(image_paths, ground_truths)
-        np.random.seed(42) #to be set manually next
+        #KIV: set a random seed here manually; if we want to manually set it then we'll need to change this
+        np.random.seed(42) 
 
         if "_model" in dir(self._model_instance):
             model = self._model_instance._model
@@ -400,18 +401,8 @@ class Plugin(IAlgorithm):
             model = self._model_instance._pipeline
         else:
             raise ValueError("idk what the", type(self._model_instance),"model instance is supposed to be ", dir(self._model_instance))
-        import json 
-        current_file_dir = Path(__file__).parent
 
-
-        # class_names_arr = self._input_arguments['class_names'].split(',')
-        # if len(class_names_arr) == 1:
-        #     num_classes = int(class_names_arr[0])
-        #     class_names = {str(i): f"class_{i}" for i in range(num_classes) }
-        # else:
-        #     class_names = {str(i): x for i,x in enumerate(class_names_arr) }
-
-        class_names_arg = self._input_arguments['class_names'] or None 
+        class_names_arg = self._input_arguments.get('class_names') or None 
         class_names = handle_class_names_arg(class_names_arg, model)
         print("Class names:", class_names)
 
@@ -423,15 +414,6 @@ class Plugin(IAlgorithm):
         aug_class = aug_dict[aug_name]
 
         print("brittle stage 2")
-        # severity0 = self._input_arguments['severity_before']
-        # severity1 = self._input_arguments['severity_after']
-        # if severity0 in ["", " ", "INTEGER", 'integer', 'int', "Integer"]:
-        #     assert severity1 in ["", " ", "INTEGER", 'integer', 'int', "Integer"]
-        #     severity0 = self._input_arguments['severity_before_idx']
-        #     severity1 = self._input_arguments['severity_after_idx']
-        #     all_severities = ["None"] + aug_class.severities
-        #     severity0 =  all_severities[severity0]
-        #     severity1 =  all_severities[severity1]
         severity_before = self._input_arguments.get("severity_before")
         severity_after = self._input_arguments.get("severity_after")
         severity_before_idx = self._input_arguments.get("severity_before_idx")
@@ -511,7 +493,7 @@ class Plugin(IAlgorithm):
             labels = labels
         )
 
-        #define the top_k value here; if want to make custom then we change this
+        #KIV: define the top_k value here; if want to make custom then we change this
         TOPK_SAFE = 15
         TOPK = 10
         

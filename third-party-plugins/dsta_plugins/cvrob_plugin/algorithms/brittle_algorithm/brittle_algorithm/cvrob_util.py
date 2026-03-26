@@ -12,6 +12,194 @@ import torchvision.transforms as transforms
 from sklearn.metrics import precision_score, recall_score  , f1_score  , roc_auc_score
 from sklearn.preprocessing import label_binarize
 
+def evaluate(model, loader, device):
+    """
+    Evaluate model using data from loader
+
+    Args:
+        model (torch.nn.Module): torch model
+        loader (torch.Dataloader): data loader
+        device (torch.device): device model is on
+    Returns: 
+        tuple:
+            accuracy (float): percentage of correctly predicted labels
+            predicted_labels (np.array): predictions output by label
+            true_labels (np.array): ground truth labels
+    """
+    model.eval()
+    correct, total = 0, 0
+    predicted_labels, true_labels = [], []
+    with torch.no_grad():
+        for inputs, targets in loader:
+            inputs, targets = inputs.to(device), targets.to(device)
+            outputs = model(inputs)
+            _, predicted = torch.max(outputs, 1)
+            correct += (predicted == targets).sum().item()
+            total += targets.size(0)
+            predicted_labels.extend(predicted.cpu().numpy())
+            true_labels.extend(targets.cpu().numpy())
+    return 100 * correct / total, np.array(predicted_labels), np.array(true_labels)
+
+def triplets(s):
+    """
+    Split a whitespace-separated string into groups of three items.
+
+    Args:
+        s (str): Input string containing whitespace-separated tokens. The number
+            of tokens must be a multiple of three.
+
+    Returns:
+        List[List[str]]: A list of sublists, each containing three consecutive
+        tokens from the input string.
+
+    Raises:
+        AssertionError: If the number of tokens in the input is not a multiple
+        of three.
+    """
+    items = s.split()
+    assert len(items) % 3 == 0, "Input length must be a multiple of 3"
+    return [items[i:i+3] for i in range(0, len(items), 3)]
+
+def collect_probs(model, dataloader, device):
+    """
+    Collect model predictions, labels, and input images from a DataLoader.
+
+    The function runs the model in evaluation mode over all batches in the dataloader,
+    computes softmax probabilities for each batch, and accumulates the input images,
+    predicted probabilities, and ground truth labels.
+
+    Args:
+        model (nn.Module): A PyTorch model for which predictions are collected.
+        dataloader (DataLoader): PyTorch DataLoader providing input batches (images and labels).
+        device (torch.device): Device to run the model on (e.g., CPU or GPU).
+
+    Returns:
+        Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+            - images: Tensor of all input images concatenated across batches.
+            - probs: Tensor of predicted probabilities for each input.
+            - labels: Tensor of ground truth labels for each input.
+    """
+    model.eval()
+
+    probs = []
+    labels = []
+    images = []
+
+    with torch.no_grad():
+        for x, y in dataloader:
+            x = x.to(device)
+            y = y.to(device)
+
+            logits = model(x)
+            p = torch.nn.functional.softmax(logits, dim=1)
+
+            probs.append(p.cpu())
+            labels.append(y.cpu())
+            images.append(x.cpu())
+
+    return (
+        torch.cat(images),
+        torch.cat(probs),
+        torch.cat(labels),
+    )
+
+    return torch.cat(probs), torch.cat(labels)
+
+def get_num_classes(model: nn.Module) -> int:   
+    """
+    Infer the number of output classes from a PyTorch classification model.
+
+    The function attempts to determine the number of classes by inspecting the
+    final Linear or Conv2d layer, or common classifier attributes such as
+    'fc', 'classifier', 'head', or 'heads'.
+
+    Args:
+        model (nn.Module): A PyTorch model assumed to be used for classification.
+
+    Returns:
+        int: The inferred number of output classes.
+
+    Raises:
+        RuntimeError: If the number of classes cannot be determined from the model.
+    """
+    # 1. Look for last Linear layer
+    last_linear = None
+    for module in model.modules():
+        if isinstance(module, nn.Linear):
+            last_linear = module
+    if last_linear is not None:
+        return last_linear.out_features
+
+    # 2. Fallback: look for last Conv layer (e.g., some classifiers end with conv)
+    last_conv = None
+    for module in model.modules():
+        if isinstance(module, nn.Conv2d):
+            last_conv = module
+    if last_conv is not None:
+        return last_conv.out_channels
+
+    # 3. Fallback: try classifier / fc attributes
+    for attr in ["fc", "classifier", "head", "heads"]:
+        if hasattr(model, attr):
+            module = getattr(model, attr)
+            if isinstance(module, nn.Linear):
+                return module.out_features
+            elif isinstance(module, nn.Sequential):
+                for layer in reversed(module):
+                    if isinstance(layer, nn.Linear):
+                        return layer.out_features
+
+    raise RuntimeError("Could not determine number of classes.")
+
+def handle_class_names_arg(class_names_arg, model):
+    """
+    Parse class names input and return a mapping from class index to name.
+
+    The function supports three input modes:
+    1. None or empty string: infer number of classes from the model.
+    2. Single integer: generate default class names using that count.
+    3. Comma-separated names: use provided class names.
+
+    Args:
+        class_names_arg (Optional[str]): Class names specification. Can be:
+            - None or empty string to infer from model
+            - A single integer as string (e.g., "10")
+            - Comma-separated class names (e.g., "cat,dog,bird")
+        model (nn.Module): PyTorch model used when inferring class count.
+
+    Returns:
+        Dict[str, str]: Mapping from class index (as string) to class name.
+
+    Raises:
+        ValueError: If a single provided value is not a valid integer.
+    """
+    if class_names_arg is None or str(class_names_arg).strip() == "":
+        
+        print("# fallback: infer from model")
+        num_classes = get_num_classes(model)
+        class_names = {str(i): f"class_{i}" for i in range(num_classes)}
+
+    else:
+        class_names_arr = [x.strip() for x in class_names_arg.split(",") if x.strip()]
+
+        # Case 1: user provided number of classes
+        if len(class_names_arr) == 1:
+            try:
+                num_classes = int(class_names_arr[0])
+                class_names = {str(i): f"class_{i}" for i in range(num_classes)}
+            except ValueError:
+                raise ValueError(
+                    "class_names must be comma-separated names or a single integer"
+                )
+
+        # Case 2: user provided names
+        else:
+            class_names = {str(i): name for i, name in enumerate(class_names_arr)}
+
+    return class_names
+
+# ==== OTHER FUNCTIONS THAT ARE NOT USED FOR THIS WHOLE ALGO BUT I DON'T WANT TO DELETE THEM YET ====
+
 class SimpleCNN(nn.Module):
     def __init__(self):
         super(SimpleCNN, self).__init__()
@@ -58,61 +246,6 @@ def get_image_from_path(image_path):
     image = Image.open(image_path)
     image_np = np.array(image)
     return image_np
-
-def evaluate(model, loader, device):
-    """
-    Evaluate model using data from loader
-
-    Args:
-        model (torch.nn.Module): torch model
-        loader (torch.Dataloader): data loader
-        device (torch.device): device model is on
-    Returns: 
-        tuple:
-            accuracy (float): percentage of correctly predicted labels
-            predicted_labels (np.array): predictions output by label
-            true_labels (np.array): ground truth labels
-    """
-    model.eval()
-    correct, total = 0, 0
-    predicted_labels, true_labels = [], []
-    with torch.no_grad():
-        for inputs, targets in loader:
-            inputs, targets = inputs.to(device), targets.to(device)
-            outputs = model(inputs)
-            _, predicted = torch.max(outputs, 1)
-            correct += (predicted == targets).sum().item()
-            total += targets.size(0)
-            predicted_labels.extend(predicted.cpu().numpy())
-            true_labels.extend(targets.cpu().numpy())
-    return 100 * correct / total, np.array(predicted_labels), np.array(true_labels)
-
-def collect_probs(model, dataloader, device):
-    model.eval()
-
-    probs = []
-    labels = []
-    images = []
-
-    with torch.no_grad():
-        for x, y in dataloader:
-            x = x.to(device)
-            y = y.to(device)
-
-            logits = model(x)
-            p = F.softmax(logits, dim=1)
-
-            probs.append(p.cpu())
-            labels.append(y.cpu())
-            images.append(x.cpu())
-
-    return (
-        torch.cat(images),
-        torch.cat(probs),
-        torch.cat(labels),
-    )
-
-    return torch.cat(probs), torch.cat(labels)
 
 def get_logits(model, dataloader, device):
     """
@@ -249,8 +382,20 @@ def best_fit_gradient(x_values, y_values):
     
     return numerator / denominator
 
-
 def evaluate_1img(model, device, img_array):
+    """
+    Evaluate a single image using a PyTorch model and return predicted probabilities and label.
+
+    Args:
+        model (nn.Module): A PyTorch model for image classification.
+        device (torch.device): Device to run the model on (CPU or GPU).
+        img_array (numpy.ndarray or PIL.Image.Image): Input image as a NumPy array or PIL Image.
+
+    Returns:
+        Tuple[numpy.ndarray, int]:
+            - probs: Softmax probabilities for each class as a NumPy array.
+            - label: Predicted class index as an integer.
+    """
     img_tensor = transforms.ToTensor()(img_array).unsqueeze(0)
     model.eval()
     with torch.no_grad():
@@ -259,73 +404,6 @@ def evaluate_1img(model, device, img_array):
         label = torch.max(output, 1)[1][0].item()
 
     return probs, label
-
-def triplets(s):
-    items = s.split()
-    assert len(items) % 3 == 0, "Input length must be a multiple of 3"
-    return [items[i:i+3] for i in range(0, len(items), 3)]
-
-# def get_corruption_helpers(library='albumentations'):
-#     """
-#     Returns the corruption parameters associated with a given library
-
-#     Two-length tuples: first being corruption function (pure from library), second being parameters to be passed in
-
-#     Args:
-#         library (str): corruption library name
-    
-#     Returns:
-#         Tuple:
-#             augmentation_list (list): list of two-length tuples 
-#             augmentation_str (list): list of names of the given libraries
-#             corrupt_func (function): custom corrupt function: takes in images np array, severity, and augmentation parameters and returns corrupted images np array
-#     """
-#     if library in ['albumentations', 'album']:
-#         a1, a2 = get_album_augmentations_list()
-#         return a1, a2, corrupt_func_album
-#     if library in ['nrtk']:
-#         n1, n2 = get_nrtk_augmentations_list()
-#         return n1, n2, corrupt_func_nrtk
-#     if library in ['imagecorruptions', 'imagecorr', 'imagecorrupt', 'ic', 'imcor']:
-#         i1, i2 = get_imagecorrupt_augmentations_list()
-#         return i1, i2, corrupt_func_imagecorrupt
-#     if library in ['augly']:
-#         u1, u2 = get_augly_augmentations_list()
-#         return u1, u2, corrupt_func_augly
-#     else:
-#         raise Exception('Invalid library called')
-
-# def get_corrupted_dataloader(testloader, corr_func, severity=1, corr_kwargs=None):
-#     """
-#     Make a dataloader with data that is of the augmented/corrupted version of the original dataloader
-
-#     Args:
-#         testloader (torch.Dataloader): original dataloader
-#         corr_func (function): corruption function  that takes in ([numpy array of images], severity, corr_kwargs)
-#         severity (int); extent of severity between 0-5.
-#         corr_kwargs (dict): dictionary of extra parameters to send into corr_func
-
-#     Returns:
-#         torch.utils.data.DataLoader: corrupted version of original dataloader
-#     """
-#     if corr_kwargs is None:
-#         corr_kwargs = {}  # Default to an empty dictionary
-    
-#     corrupted_images = []
-#     corrupted_labels = []
-    
-#     for images, labels in testloader:
-#         images_np = (images * 255).byte().numpy().transpose(0, 2, 3, 1)  # Convert to HWC format and uint8
-        
-#         # Apply corruption function with provided parameters
-#         corrupted = corr_func(images_np, severity, corr_kwargs)
-        
-#         corrupted = torch.tensor(corrupted.transpose(0, 3, 1, 2), dtype=torch.float32) / 255.0  # Convert back to CHW format and normalize
-#         corrupted_images.append(corrupted)
-#         corrupted_labels.append(labels)
-    
-#     corrupted_dataset = torch.utils.data.TensorDataset(torch.cat(corrupted_images), torch.cat(corrupted_labels))
-#     return torch.utils.data.DataLoader(corrupted_dataset, batch_size=128, shuffle=False)
 
 def get_metric_dict():
     d = {
@@ -340,7 +418,6 @@ def get_metric_dict():
     }
     return d
 
-
 def get_accuracy(base_acc, y_pred, y_true, features, labels, pred_probs):
     return base_acc/100
 
@@ -354,9 +431,6 @@ def get_f1(base_acc, y_pred, y_true, features, labels, pred_probs):
     return f1_score(y_true, y_pred, average='macro')
 
 def get_auc(base_acc, y_pred, y_true, features, labels, pred_probs):
-    # print(len(np.unique(y_true)))
-    # print(pred_probs.shape[1])
-
     y_true_bin = label_binarize(y_true, classes=np.unique(y_true))
     y_pred_proba_filtered = pred_probs[:, np.unique(y_true)]
     return roc_auc_score(y_true_bin, y_pred_proba_filtered, average='macro', multi_class='ovr')
@@ -385,89 +459,4 @@ def get_ece(base_acc, y_pred, y_true, features, labels, pred_probs, n_bins=20):
 
     return float(ece)
 
-def collect_probs(model, dataloader, device):
-    model.eval()
 
-    probs = []
-    labels = []
-    images = []
-
-    with torch.no_grad():
-        for x, y in dataloader:
-            x = x.to(device)
-            y = y.to(device)
-
-            logits = model(x)
-            p = torch.nn.functional.softmax(logits, dim=1)
-
-            probs.append(p.cpu())
-            labels.append(y.cpu())
-            images.append(x.cpu())
-
-    return (
-        torch.cat(images),
-        torch.cat(probs),
-        torch.cat(labels),
-    )
-
-    return torch.cat(probs), torch.cat(labels)
-
-def get_num_classes(model: nn.Module) -> int:
-    """
-    Try to infer the number of output classes from a PyTorch image classification model.
-    Works for most architectures by inspecting the last linear/conv layer.
-    """
-    # 1. Look for last Linear layer
-    last_linear = None
-    for module in model.modules():
-        if isinstance(module, nn.Linear):
-            last_linear = module
-    if last_linear is not None:
-        return last_linear.out_features
-
-    # 2. Fallback: look for last Conv layer (e.g., some classifiers end with conv)
-    last_conv = None
-    for module in model.modules():
-        if isinstance(module, nn.Conv2d):
-            last_conv = module
-    if last_conv is not None:
-        return last_conv.out_channels
-
-    # 3. Fallback: try classifier / fc attributes
-    for attr in ["fc", "classifier", "head", "heads"]:
-        if hasattr(model, attr):
-            module = getattr(model, attr)
-            if isinstance(module, nn.Linear):
-                return module.out_features
-            elif isinstance(module, nn.Sequential):
-                for layer in reversed(module):
-                    if isinstance(layer, nn.Linear):
-                        return layer.out_features
-
-    raise RuntimeError("Could not determine number of classes.")
-
-def handle_class_names_arg(class_names_arg, model):
-    if class_names_arg is None or str(class_names_arg).strip() == "":
-        
-        print("# fallback: infer from model")
-        num_classes = get_num_classes(model)
-        class_names = {str(i): f"class_{i}" for i in range(num_classes)}
-
-    else:
-        class_names_arr = [x.strip() for x in class_names_arg.split(",") if x.strip()]
-
-        # Case 1: user provided number of classes
-        if len(class_names_arr) == 1:
-            try:
-                num_classes = int(class_names_arr[0])
-                class_names = {str(i): f"class_{i}" for i in range(num_classes)}
-            except ValueError:
-                raise ValueError(
-                    "class_names must be comma-separated names or a single integer"
-                )
-
-        # Case 2: user provided names
-        else:
-            class_names = {str(i): name for i, name in enumerate(class_names_arr)}
-
-    return class_names

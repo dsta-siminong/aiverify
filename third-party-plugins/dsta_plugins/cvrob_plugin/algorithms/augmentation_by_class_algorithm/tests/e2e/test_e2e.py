@@ -7,23 +7,23 @@ from aiverify_test_engine.plugins.enums.model_type import ModelType
 
 binary_classification_pipeline = {
     "data_path": str(
-        "/home/bjieyong/aiverify/cvrob/dataset_20200803/all_images_100"
+        "../../../../../../all_images_all_classes"
     ),
     "model_path": str(
-        "/home/bjieyong/aiverify/cvrob/ship_pipe/ship_model.pt"
+        "../../../../../../ship_pipe_sm/ship_pipe_sm"
     ),
     "ground_truth_path": str(
-        "/home/bjieyong/aiverify/cvrob/dataset_20200803/labels_100.csv"
+        "../../../../../../labels_all_classes.csv"
     ),
-    "run_pipeline": False,
+    "run_pipeline": True,
     "model_type": ModelType.CLASSIFICATION,
     "ground_truth": "label",
     "plugin_argument_values": {
-        "class_names": "13",#Barge,CG-P,ContainerShip,Cruise,Dredger,Ferry,LNG-LPG,RORO,Sampan,Trawler-FishingVessel,Tugboat,Warship,Yacht",
+        "class_names": None,#"13",#Barge,CG-P,ContainerShip,Cruise,Dredger,Ferry,LNG-LPG,RORO,Sampan,Trawler-FishingVessel,Tugboat,Warship,Yacht",
         "aug_library": 'albumentations',
         "aug_methods": 'GaussianBlur,GaussianNoise',
         "num_epochs": 2,
-        "custom_parameters": "GaussianBlur sigma_limit 1.6,2.6,3.6,4.6 GaussianNoise std_range (0.06,0.06),(0.12,0.12),(0.18,0.18),(0.24,0.24)"
+        "custom_parameters": None#"GaussianBlur sigma_limit 1.6,2.6,3.6,4.6 GaussianNoise std_range (0.06,0.06),(0.12,0.12),(0.18,0.18),(0.24,0.24)"
     }
 }
 
