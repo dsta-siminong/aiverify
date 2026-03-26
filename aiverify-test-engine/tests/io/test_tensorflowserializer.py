@@ -39,7 +39,7 @@ class PluginTest:
 
         for method in test_methods:
             error_count, error_message = method()
-            assert error_count == 0, f"Errors found: {error_message}"
+            assert error_count == 0, f"Errors found in method {method.__name__}: {error_message}"
 
     def _validate_plugin_exists(self) -> Tuple[int, str]:
         """

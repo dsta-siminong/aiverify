@@ -46,6 +46,11 @@ aiverify-test-engine/
 python -m pytest tests
 ```
 
+If Tensorflow has trouble with GPU, use following environment variable to force Tensorflow to use CPU:
+```bash
+CUDA_VISIBLE_DEVICES="" TF_CPP_MIN_LOG_LEVEL=2 TF_NUM_INTEROP_THREADS=1 TF_NUM_INTRAOP_THREADS=1 XLA_FLAGS="--xla_gpu_unsafe_fallback_to_driver_on_ptxas_not_found" python -m pytest tests
+```
+
 ### Building the Package
 
 ```bash
