@@ -421,7 +421,10 @@ class Plugin(IAlgorithm):
             individual_results.update({"Augmentation": aug_name})
             severities = ["None"] + aug_class.severities
             for severity_idx, severity_name in enumerate(severities):
-                num_epochs = self._input_arguments['num_epochs'] if severity_name != "None" else 1 
+                num_epochs = self._input_arguments.get('num_epochs') or 1
+                num_epochs = num_epochs if severity_name != "None" else 1 
+                num_epochs = 1 if num_epochs is None else num_epochs
+                num_epochs = 1 if aug_class.deterministic else num_epochs
                 all_reports = []; all_cm = []
                 for i in range(num_epochs):
                     seed = 1000*severity_idx + i 
@@ -441,6 +444,10 @@ class Plugin(IAlgorithm):
                     )
 
                     cm = confusion_matrix(y_true, y_pred, labels=list(range(len(target_names))))
+                    # print("epoch", i)
+                    # print(report)
+                    # print(cm)
+                    # print()
                     all_reports.append(report); all_cm.append(cm)
 
                 avg_report = average_all_reports(all_reports)

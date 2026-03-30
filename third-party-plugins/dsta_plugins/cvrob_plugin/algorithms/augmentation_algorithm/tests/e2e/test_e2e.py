@@ -21,8 +21,9 @@ binary_classification_pipeline = {
     "plugin_argument_values": {
         "class_names": None, 
         "aug_library": 'albumentations',
-        'aug_methods': 'Erasing,Rain,ScaleDown',
-        'custom_parameters': None
+        'aug_methods': 'Erasing,BrightnessUp,BrightnessDown',
+        'custom_parameters': None,
+        "num_epochs": 5,
     }
 }
 

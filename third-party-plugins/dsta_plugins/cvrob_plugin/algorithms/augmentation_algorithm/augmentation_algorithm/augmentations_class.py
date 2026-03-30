@@ -25,15 +25,29 @@ def check_module(module):
     else:
         raise ValueError('not valid library name')
 
+# def corrupt_func_album_reduced_0(images_np, aug_func, aug_params):
+#     rseed = 42
+#     if 'random_seed' in aug_params:
+#         rseed = aug_params['random_seed']
+#         aug_params = {k:v for k,v in aug_params.items() if k != 'random_seed'}
+#     transform = A.Compose([aug_func(**aug_params), ToTensorV2()])
+#     transform.set_random_seed(rseed)
+#     corrupted_imgs = np.array([ transform(image=img)['image'].permute(1, 2, 0).numpy() for img in images_np ])
+#     return corrupted_imgs
+
 def corrupt_func_album_reduced(images_np, aug_func, aug_params):
-    rseed = 42
-    if 'random_seed' in aug_params:
-        rseed = aug_params['random_seed']
-        aug_params = {k:v for k,v in aug_params.items() if k != 'random_seed'}
-    transform = A.Compose([aug_func(**aug_params), ToTensorV2()])
-    transform.set_random_seed(rseed)
-    corrupted_imgs = np.array([ transform(image=img)['image'].permute(1, 2, 0).numpy() for img in images_np ])
-    return corrupted_imgs
+    rseed = aug_params.get("random_seed", 42)
+    aug_params = {k:v for k,v in aug_params.items() if k != "random_seed"}
+
+    corrupted = []
+    for i, img in enumerate(images_np):
+        transform = A.Compose([aug_func(**aug_params), ToTensorV2()])
+        transform.set_random_seed(rseed + i)   # advance seed per image
+        corrupted.append(
+            transform(image=img)['image'].permute(1,2,0).numpy()
+        )
+
+    return np.array(corrupted)
 
 def corrupt_func_augly_reduced(images_np, aug_func, aug_params): 
     corrupted_imgs = np.array([aug_np_wrapper(img, aug_func, **aug_params) for img in images_np])
@@ -159,15 +173,19 @@ def get_augmentation_dict_album_header():
         },
         "Rotate":
         {
-            f"rotate_{5*x}": (A.Rotate, {'limit': 10*x,'p':1}) for x in range(1,9+1)
+            f"rotate_{10*x}": (A.Rotate, {'limit': 10*x,'p':1}) for x in range(1,9+1)
         },
         "GaussianNoise":
         {
-            f"std_{0.1*x:.2f}": (A.GaussNoise, {'std_range':  (0.05*x, 0.05*x), 'p':1}) for x in range(1,8+1)
+            f"std_{0.05*x:.2f}": (A.GaussNoise, {'std_range':  (0.05*x, 0.05*x), 'p':1}) for x in range(1,8+1)
         },
-        "Brightness":
+        "BrightnessUp":
         {
             f"bright_{1+0.25*x:.2f}": (A.ColorJitter, {'brightness': (1+0.25*x, 1+0.25*x), 'p':1}) for x in range(1,8+1)
+        },
+        "BrightnessDown":
+        {
+            f"bright_{1-0.1*x:.2f}": (A.ColorJitter, {'brightness': (1-0.1*x, 1-0.1*x), 'p':1}) for x in range(1,8+1)
         },
         "GaussianBlur":
         {
@@ -183,15 +201,15 @@ def get_augmentation_dict_album_header():
         },
         "ScaleDown":
         {
-            f"scale_{1+0.5*x:.2f}": (A.Affine, {'scale': (1/(1+0.5*x) , 1/(1+0.5*x) ), 'p': 1.0}) for x in range(1,8+1)
+            f"scale_{1/(1+0.5*x):.2f}": (A.Affine, {'scale': (1/(1+0.5*x) , 1/(1+0.5*x) ), 'p': 1.0}) for x in range(1,8+1)
         },
         "Translate":
         {
-            f"translate%_{0.1*x:.2f}": (A.Affine, {'translate_percent': (-0.15*x, 0.15*x) , 'p': 1.0}) for x in range(1,6+1)
+            f"translate%_{0.15*x:.2f}": (A.Affine, {'translate_percent': (-0.15*x, 0.15*x) , 'p': 1.0}) for x in range(1,6+1)
         },
         "Shear":
         {
-            f"shear_{10*x:.2f}": (A.Affine, {'shear': (-8*x , 8*x) , 'p': 1.0}) for x in range(1,8+1)
+            f"shear_{8*x:.2f}": (A.Affine, {'shear': (-8*x , 8*x) , 'p': 1.0}) for x in range(1,8+1)
         },
         "Perspective":
         {
@@ -201,10 +219,11 @@ def get_augmentation_dict_album_header():
         {
             f"quality_range_{85-x*10:.2f}": (A.ImageCompression, {'quality_range': (85-x*10, 85-x*10),'p':1}) for x in range(1,8+1)
         },
-
     }
 
     return d
+
+DETERMINISTIC = {"None", "BrightnessUp", "BrightnessDown", "GaussianBlur", "ScaleUp", "ScaleDown", "Compression"}
 
 import ast
 
@@ -309,12 +328,22 @@ class Augmentation:
         self.corrupt_func = check_module(aug_func)
         self.aug_func = aug_func
         self.random_seed = None
+        self.deterministic = True if name in DETERMINISTIC else False 
+
+    # def set_seed_0(self, x):
+    #     self.random_seed =  x
+    #     if self.name != "None":
+    #         for k,v in self.param_dict.items():
+    #             v['random_seed'] = x
 
     def set_seed(self, x):
-        self.random_seed =  x
+        self.random_seed = x
         if self.name != "None":
-            for k,v in self.param_dict.items():
-                v['random_seed'] = x
+            for k in self.param_dict:
+                self.param_dict[k] = {
+                    **self.param_dict[k],
+                    "random_seed": x
+                }
 
     def determine_severity(self, severity_idx):
         if type(severity_idx) == int:

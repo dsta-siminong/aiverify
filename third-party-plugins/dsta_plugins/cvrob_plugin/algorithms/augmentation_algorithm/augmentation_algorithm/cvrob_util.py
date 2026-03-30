@@ -57,7 +57,7 @@ def triplets(s):
     assert len(items) % 3 == 0, "Input length must be a multiple of 3"
     return [items[i:i+3] for i in range(0, len(items), 3)]
 
-def augmentation_gradient(model, test_loader, device, aug_class, plot_graphs=False, directory=Path()):
+def augmentation_gradient(model, test_loader, device, aug_class, plot_graphs=False, directory=Path(), num_epochs=1):
     """
     Evaluates how the model performance varies against the given augmentation/corruption
 
@@ -77,6 +77,9 @@ def augmentation_gradient(model, test_loader, device, aug_class, plot_graphs=Fal
             accuracies (list): list of floats of performance metric 
             fig (figure): outputs figure of plot_graphs library if not plot_graphs not False, else None
     """
+    num_epochs = 1 if num_epochs is None else num_epochs
+    # num_epochs = num_epochs if severity_name != "None" else 1 
+    num_epochs = 1 if aug_class.deterministic else num_epochs
     print("===")
     print("Aug name", aug_class.name)
     print(f"Evaluating on severity 0/None...")
@@ -84,12 +87,19 @@ def augmentation_gradient(model, test_loader, device, aug_class, plot_graphs=Fal
     print(f"Accuracy at severity 0/None: {base_acc:.4f}")
     severities = aug_class.severities #[x for x in range(len(aug_class.severities))]
     accuracies = [base_acc]
-    for severity in severities:
+    for severity_idx, severity in enumerate(severities):
         print(f"Evaluating on severity {severity}...")
-        corrupted_loader = aug_class.corr_func_dataloader(test_loader, severity_idx=severity)
-        acc, _,_ = evaluate(model, corrupted_loader, device)
-        accuracies.append(acc)
-        print(f"Accuracy at severity {severity}: {acc:.4f}")
+        all_acc = []
+        for i in range(num_epochs):
+            seed = 1000*i + severity_idx 
+            aug_class.set_seed(seed)
+            corrupted_loader = aug_class.corr_func_dataloader(test_loader, severity_idx=severity)
+            acc, _,_ = evaluate(model, corrupted_loader, device)
+            all_acc.append(acc)
+            print(f"epoch {i+1}: {acc}")
+        final_acc = sum(all_acc)/len(all_acc)
+        accuracies.append(final_acc)
+        print(f"Accuracy at severity {severity}: {final_acc:.4f}")
 
     # Plot results
     fig = None

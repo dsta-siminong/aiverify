@@ -417,8 +417,9 @@ class Plugin(IAlgorithm):
             display_info = dict()
             aug_dir =  self._output_folder / aug_name
             os.makedirs(aug_dir, exist_ok=True)
-            
-            gradient, accuracies, fig_path = augmentation_gradient(model, test_loader, None, aug_class, 'matplotlib', aug_dir)
+
+            num_epochs = self._input_arguments.get('num_epochs') or 1
+            gradient, accuracies, fig_path = augmentation_gradient(model, test_loader, None, aug_class, 'matplotlib', aug_dir, num_epochs)
             first_drop = accuracies[1] - accuracies[0]
             severities = ["None"] + aug_class.severities
             for severity_idx, severity in enumerate(severities):

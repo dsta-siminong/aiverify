@@ -28,8 +28,9 @@
         },
         "num_epochs": {
             "title": "Number of epochs",
-            "description": "Indicate the number of epochs you're using (minimum 1. higher = more time but more accurate)",
-            "type": "integer"
+            "description": "Indicate the number of epochs you're using (minimum and default: 1. higher = more time but more accurate)",
+            "type": "integer",
+            "default": 1
         },
         "custom_parameters": {
             "title": "Custom Parameters",
