@@ -1,5 +1,6 @@
+aiverify-test-engine-worker @ file:///home/kayden/development/aivf/aivt/aiverify/aiverify-test-engine-worker
 annotated-types==0.7.0
-attrs==25.4.0
+attrs==26.1.0
 jsonschema==4.26.0
 jsonschema-specifications==2025.9.1
 libvalkey==4.0.1
