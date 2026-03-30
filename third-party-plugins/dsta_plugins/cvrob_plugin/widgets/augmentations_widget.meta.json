@@ -12,9 +12,6 @@
   "dependencies": [
     {
       "cid": "augmentation_algorithm"
-    },
-    {
-      "cid": "augmentations_inputblock"
     }
   ],
   "mockdata": [
@@ -22,11 +19,6 @@
       "type": "Algorithm",
       "cid": "augmentation_algorithm",
       "datapath": "augmentation_algorithm.sample.json"
-    },
-    {
-      "type": "InputBlock",
-      "cid": "augmentations_inputblock",
-      "datapath": "augmentations_inputblock.sample.json"
     }
   ],
   "properties": [

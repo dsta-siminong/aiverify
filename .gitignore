@@ -24,3 +24,7 @@ test-report.json
 
 # OS generated files
 .DS_Store
+
+#cvrob_plugin
+third-party-plugins/dsta_plugins/cvrob_plugin/widgets/holding_folder_for_testing
+third-party-plugins/dsta_plugins/cvrob_plugin/widgets/holding_folder_for_rejected_widgets

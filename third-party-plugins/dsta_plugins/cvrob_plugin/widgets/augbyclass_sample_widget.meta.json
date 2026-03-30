@@ -12,9 +12,6 @@
   "dependencies": [
     {
       "cid": "augmentation_by_class_algorithm"
-    },
-    {
-      "cid": "augbyclass_inputblock"
     }
   ],
   "mockdata": [
@@ -22,18 +19,13 @@
       "type": "Algorithm",
       "cid": "augmentation_by_class_algorithm",
       "datapath": "augmentation_by_class_algorithm.sample.json"
-    },
-    {
-      "type": "InputBlock",
-      "cid": "augbyclass_inputblock",
-      "datapath": "augbyclass_inputblock.sample.json"
     }
   ],
   "properties": [
     {
       "key": "title",
-      "helper": "Set the widget title (default \"AUGMENTATIONS BY CLASS\")",
-      "default": "AUGMENTATIONS BY CLASS"
+      "helper": "Set the widget title (default \"AUGMENTATIONS BY CLASS [SAMPLE]\")",
+      "default": "AUGMENTATIONS BY CLASS [SAMPLE]"
     }
   ]
 }

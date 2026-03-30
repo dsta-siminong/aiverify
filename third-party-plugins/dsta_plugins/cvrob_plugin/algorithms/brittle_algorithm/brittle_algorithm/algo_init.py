@@ -327,9 +327,11 @@ class AlgoInit:
             algorithmArgs={
                 "ground_truth_path": self._ground_truth_path,
             }
+
             for k in self._input_arguments:
                 if type(self._input_arguments[k]) in [str, float, int]:
                     algorithmArgs[k] = self._input_arguments[k]
+            results['ALGORITHM_ARGUMENTS'] = algorithmArgs
 
             # Prepare test arguments
             test_arguments = ITestArguments(

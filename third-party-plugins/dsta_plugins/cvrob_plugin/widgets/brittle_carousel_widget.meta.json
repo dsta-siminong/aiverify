@@ -12,9 +12,6 @@
   "dependencies": [
     {
       "cid": "brittle_algorithm"
-    },
-    {
-      "cid": "brittle_inputblock"
     }
   ],
   "mockdata": [
@@ -22,11 +19,13 @@
       "type": "Algorithm",
       "cid": "brittle_algorithm",
       "datapath": "brittle_algorithm.sample.json"
-    },
+    }
+  ],
+  "properties": [
     {
-      "type": "InputBlock",
-      "cid": "brittle_inputblock",
-      "datapath": "brittle_inputblock.sample.json"
+      "key": "title",
+      "helper": "Set the widget title (default \"Brittle Widget [Carousel]\")",
+      "default": "Brittle Widget [Carousel]"
     }
   ]
 }

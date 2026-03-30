@@ -1,18 +1,56 @@
-export const algo_cid = "augmentation_algorithm"
-export const ib_cid = "augmentations_inputblock"
 export const cid = "augmentation_algorithm"
+//export const ib_cid = "augmentations_inputblock"
 
 # {props.properties.title}
 
-{props.getIBData(ib_cid)?(
-  <>
-    <b>Input Block Data:</b>
-    <p>
-      <b>Augmentation Library:</b> {props.getIBData(ib_cid)["aug_library"]}
-    </p>
-  </>
+{props.getResults(cid)?(
+  (() => {
+    const args = props.getResults(cid).ALGORITHM_ARGUMENTS;
+
+    return (
+      <div style={{
+        border: "1px solid #e5e7eb",
+        borderRadius: "8px",
+        padding: "1rem",
+        background: "#fafafa",
+        margin: "1rem 0"
+      }}>
+        <div style={{
+          fontWeight: "bold",
+          marginBottom: "0.75rem",
+          fontSize: "1.05rem"
+        }}>
+          Algorithm Parameters
+        </div>
+
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <tbody>
+            {Object.entries(args).map(([key, value]) => (
+              <tr key={key}>
+                <td style={{
+                  fontWeight: "600",
+                  padding: "0.35rem 0.5rem",
+                  verticalAlign: "top",
+                  width: "35%"
+                }}>
+                  {key.replace(/_/g, " ")}
+                </td>
+                <td style={{
+                  padding: "0.35rem 0.5rem",
+                  color: "#374151",
+                  wordBreak: "break-all"
+                }}>
+                  {String(value)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  })()
 ):(
-  <div>No widget data</div>
+  <div>No algorithm data</div>
 )}
 
 import {
@@ -22,9 +60,6 @@ import {
   StackedBarChart,
   ClassMetricsTable
 } from './augbyclass-chart.jsx';
-
-
-
 
 export const AugmentationFigurePanel = ({ props }) => {
   const resultsData = props.getResults
@@ -43,7 +78,7 @@ export const AugmentationFigurePanel = ({ props }) => {
     let imageUrl = null;
 
     try {
-      imageUrl = props.getArtifactURL(algo_cid, fig_img);
+      imageUrl = props.getArtifactURL(cid, fig_img);
     } catch (error) {
       console.error(`Error loading ${fig_img}`, error);
     }
@@ -151,12 +186,12 @@ export const AugmentationFigurePanel = ({ props }) => {
 
 <AugmentationFigurePanel props={props} />
 
-{props.getResults(algo_cid) ? (
+{props.getResults(cid) ? (
   <>
     <b>Accuracy per augmentation severity</b>
 
-    {Array.isArray(props.getResults(algo_cid).results) ? (
-      props.getResults(algo_cid).results.map((aug, augIdx) => {
+    {Array.isArray(props.getResults(cid).results) ? (
+      props.getResults(cid).results.map((aug, augIdx) => {
 
         const acc = aug.accuracies || {};
 

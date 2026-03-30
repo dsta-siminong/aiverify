@@ -12,9 +12,6 @@
   "dependencies": [
     {
       "cid": "augmentation_algorithm"
-    },
-    {
-      "cid": "augmentations_inputblock"
     }
   ],
   "mockdata": [
@@ -22,18 +19,13 @@
       "type": "Algorithm",
       "cid": "augmentation_algorithm",
       "datapath": "augmentation_algorithm.sample.json"
-    },
-    {
-      "type": "InputBlock",
-      "cid": "augmentations_inputblock",
-      "datapath": "augmentations_inputblock.sample.json"
     }
   ],
   "properties": [
     {
       "key": "title",
-      "helper": "Set the widget title (default \"Augmentations Widget Title\")",
-      "default": "Augmentations Sample Widget Title"
+      "helper": "Set the widget title (default \"Augmentations Widget Title [Sample]\")",
+      "default": "Augmentations Widget Title [Sample]"
     }
   ]
 }
