@@ -21,7 +21,7 @@ RUN apt-get update && \
     pkg-config && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* && \
-    pip install -U pip && pip install -U setuptools>=78.1.1
+    pip install -U pip && pip install -U "setuptools>=78.1.1,<82.0"
 
 ENV PYTHONUNBUFFERED=1
 ENV PIP_NO_CACHE_DIR=1
@@ -59,7 +59,7 @@ RUN apt-get update && \
     apt-get upgrade -y && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* && \
-    pip install -U pip && pip install -U setuptools>=78.1.1
+    pip install -U pip && pip install -U "setuptools>=78.1.1,<82.0"
 
 # copy the aiverify-test-engine
 WORKDIR /app

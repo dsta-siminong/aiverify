@@ -27,6 +27,7 @@ RUN curl -fsSL https://deb.nodesource.com/setup_24.x -o nodesource_setup.sh && \
 WORKDIR /app
 COPY aiverify-apigw/ ./aiverify-apigw/
 COPY stock-plugins/ ./stock-plugins/
+COPY third-party-plugins/dsta_plugins/ ./stock-plugins/
 COPY aiverify-shared-library/ ./aiverify-shared-library/
 RUN mkdir /data
 

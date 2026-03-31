@@ -25,6 +25,7 @@ COPY aiverify-test-engine-worker ./aiverify-test-engine-worker
 RUN apt-get update && \
     apt-get upgrade -y && \
     apt-get install -y --no-install-recommends ${APT_WORKER_PACKAGES_TO_INSTALL} && \
+    apt-get install -y libgl1 libglib2.0-0 libmagic1 && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 

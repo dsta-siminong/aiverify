@@ -30,7 +30,7 @@ metadata:
   name: test-engine-worker
   namespace: aiverify
 spec:
-  replicas: 3
+  replicas: 1
   selector:
     matchLabels:
       app: test-engine-worker

@@ -41,7 +41,8 @@ spec:
     spec:
       containers:
         - name: apigw
-          image: ghcr.io/aiverify-foundation/aiverify-apigw
+          image: aiverify-apigw #ghcr.io/aiverify-foundation/aiverify-apigw
+          imagePullPolicy: Never
           ports:
             - containerPort: 4000
           # livenessProbe:
