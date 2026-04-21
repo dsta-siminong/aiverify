@@ -2,7 +2,21 @@ export const cid = "brittle_algorithm"
 //export const gid = "cvrob_plugin"
 //export const ib_cid = "brittle_inputblock"
 
-# {props.properties.title}
+<div style={{ marginBottom: "1rem" }}>
+  <div
+    style={{
+      textAlign: "center",
+      fontWeight: "bold",
+      fontSize: "2.2rem",
+      color: "#b91c1c",
+      textDecoration: "underline"
+    }}
+  >
+    {props.properties.title}
+  </div>
+</div>
+
+
 {props.getResults(cid)?(
   (() => {
     const args = props.getResults(cid).ALGORITHM_ARGUMENTS;
@@ -60,6 +74,14 @@ export const BrittleDisplay = ({ props }) => {
   const filteredArtifacts = artifactList.filter((url) =>
     url.includes("/matplotlib/") || url.includes("/plotly/")
   );
+
+  if (!filteredArtifacts.length) {
+    return (
+      <div style={{ color: "#777", textAlign: "center" }}>
+        No plot artifacts available
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "4rem" }}>

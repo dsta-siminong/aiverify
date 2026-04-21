@@ -24,7 +24,7 @@
   "properties": [
     {
       "key": "title",
-      "helper": "Set the widget title (default \"AUGMENTATIONS BY CLASS\")",
+      "helper": "Set the widget title (default \"AUGMENTATIONS BY CLASS - CONFUSION MATRIX\")",
       "default": "AUGMENTATIONS BY CLASS - CONFUSION MATRIX"
     }
   ]

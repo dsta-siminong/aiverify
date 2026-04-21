@@ -1,7 +1,21 @@
 export const cid = "augmentation_algorithm"
 //export const ib_cid = "augmentations_inputblock"
 
-# {props.properties.title}
+
+<div style={{ marginBottom: "1rem" }}>
+  <div
+    style={{
+      textAlign: "center",
+      fontWeight: "bold",
+      fontSize: "2.2rem",
+      color: "#b91c1c",
+      textDecoration: "underline"
+    }}
+  >
+    {props.properties.title}
+  </div>
+</div>
+
 
 {props.getResults(cid)?(
   (() => {

@@ -13,10 +13,18 @@
     "imgsB": [[[1.0]]],
     "probs_A": [[[1.0]]],
     "probs_B": [[[1.0]]],
-    "display_info": {
-        "severity": ["test", 1, 1]
+    "labels": [0],
+    "display_info": [{
+        "severity0": ["test", 1, 1]
     },
+    {
+        "severity1": ["test", 1, 2]
+    }
+    ],
     "matplotlib_image_path": "lol",
     "plotly_image_path": "lol",
-    "html_carousel_path": "lol"
+    "html_carousel_path": "lol",
+    "ALGORITHM_ARGUMENTS": {
+        "algo argument": 5
+    }
 }

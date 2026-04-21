@@ -1,17 +1,72 @@
 {
-    "combined_results": 
-    [{
-        "display_info": {
-            "severity": ["test", 1, 1]
+  "results": [
+    {
+      "Augmentation": "augmentation_name",
+
+      "display_info": {
+        "severity1": ["images/Random Rain/severity1/51.png", 7, 7],
+        "severity2": ["images/Random Rain/severity2/51.png", 7, 7],
+        "severity3": ["images/Random Rain/severity3/51.png", 0, 7],
+        "severity4": ["images/Random Rain/severity4/51.png", 0, 7],
+        "severity5": ["images/Random Rain/severity5/51.png", 0, 7]
+      },
+
+      "classification_report": [
+        {
+          "class0": { "precision": 0.8, "recall": 0.7, "f1-score": 0.75 },
+          "class1": { "precision": 0.6, "recall": 0.5, "f1-score": 0.55 }
         },
-        "Augmentation": "lol",
-        "classification_report": [{"Class": {"metric": 0.0}}],
-        "conf_matrix": [{"Class": {"metric": 0.0}}]
-    }],
+        {
+          "class0": { "precision": 0.75, "recall": 0.65, "f1-score": 0.70 },
+          "class1": { "precision": 0.58, "recall": 0.52, "f1-score": 0.55 }
+        },
+        {
+          "class0": { "precision": 0.7, "recall": 0.6, "f1-score": 0.65 },
+          "class1": { "precision": 0.55, "recall": 0.5, "f1-score": 0.52 }
+        },
+        {
+          "class0": { "precision": 0.65, "recall": 0.55, "f1-score": 0.60 },
+          "class1": { "precision": 0.5, "recall": 0.45, "f1-score": 0.47 }
+        },
+        {
+          "class0": { "precision": 0.6, "recall": 0.5, "f1-score": 0.55 },
+          "class1": { "precision": 0.45, "recall": 0.4, "f1-score": 0.42 }
+        }
+      ],
 
-    "augmentation_names": ["label_update"], 
-
-    "class_names": {
-        "0": "lol"
+      "conf_matrix": [
+        {
+          "class0": { "TP": 70, "FP": 10, "FN": 30, "TN": 90 },
+          "class1": { "TP": 50, "FP": 20, "FN": 50, "TN": 80 }
+        },
+        {
+          "class0": { "TP": 65, "FP": 12, "FN": 35, "TN": 88 },
+          "class1": { "TP": 52, "FP": 18, "FN": 48, "TN": 82 }
+        },
+        {
+          "class0": { "TP": 60, "FP": 15, "FN": 40, "TN": 85 },
+          "class1": { "TP": 50, "FP": 20, "FN": 50, "TN": 80 }
+        },
+        {
+          "class0": { "TP": 55, "FP": 18, "FN": 45, "TN": 82 },
+          "class1": { "TP": 45, "FP": 25, "FN": 55, "TN": 75 }
+        },
+        {
+          "class0": { "TP": 50, "FP": 20, "FN": 50, "TN": 80 },
+          "class1": { "TP": 40, "FP": 30, "FN": 60, "TN": 70 }
+        }
+      ]
     }
+  ],
+
+  "augmentation_names": ["augmentation_name"],
+
+  "class_names": {
+    "0": "class0",
+    "1": "class1"
+  },
+
+  "ALGORITHM_ARGUMENTS": {
+    "algo argument": 5
+  }
 }

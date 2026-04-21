@@ -1,7 +1,21 @@
 export const cid = "augmentation_by_class_algorithm"
 //export const ib_cid = "augbyclass_inputblock"
 
-# {props.properties.title}
+
+<div style={{ marginBottom: "1rem" }}>
+  <div
+    style={{
+      textAlign: "center",
+      fontWeight: "bold",
+      fontSize: "2.2rem",
+      color: "#b91c1c",
+      textDecoration: "underline"
+    }}
+  >
+    {props.properties.title}
+  </div>
+</div>
+
 
 import {
   transformData,
@@ -117,8 +131,23 @@ export const AugmentationClassPlots = ({ props }) => {
           class_names
         );
         
-        if (!plot_paths || !plot_paths.class_plot) return null;
-
+        if (!plot_paths || !plot_paths.class_plot) {
+          return (
+            <div
+              key={index}
+              style={{
+                padding: "1em",
+                border: "1px dashed #ccc",
+                borderRadius: "8px",
+                textAlign: "center",
+                color: "#777",
+              }}
+            >
+              <h3>{Augmentation}</h3>
+              <div>No image available in sample</div>
+            </div>
+          );
+        }
         const classPlot = plot_paths.class_plot;
         const matplotlibPath = plot_paths.matplotlib_image_path;
         const plotlyPath = plot_paths.plotly_image_path;
@@ -220,22 +249,29 @@ export const AugmentationClassPlots = ({ props }) => {
 
             {/* 🔹 Final Plotly Summary (HTML) */}
             {plotlyPath && (
-              <div style={{ textAlign: "center", marginTop: "2rem" , overflowX: "auto", width: "100%", overflow: "hidden"}}>
+              <div style={{ textAlign: "center", marginTop: "2rem" }}>
                 <h3 style={{ marginBottom: "1rem" }}>
                   Overall Plotly Summary for {Augmentation}
                 </h3>
 
-                <iframe
-                  src={props.getArtifactURL(cid, plotlyPath)}
-                  title={`plotly-summary-${Augmentation}`}
+                <div
                   style={{
                     width: "100%",
                     height: "700px",
-                    border: "none",
-                    display: "block",
-                    margin: "0 auto",
+                    overflow: "hidden",
                   }}
-                />
+                >
+                  <iframe
+                    src={props.getArtifactURL(cid, plotlyPath)}
+                    title={`plotly-summary-${Augmentation}`}
+                    style={{
+                      width: "100%",
+                      height: "100%",
+                      border: "none",
+                      display: "block",
+                    }}
+                  />
+                </div>
               </div>
             )}
           </div>
