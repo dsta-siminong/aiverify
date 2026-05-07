@@ -77,8 +77,8 @@ class ObjectTest:
         input_args = {
             "class_names": None,
             "aug_library": "albumentations",
-            "aug_methods": "GaussianBlur,GaussianNoise",
-            "num_epochs": 2,
+            "aug_methods": "all",
+            "num_epochs": 3,
             "custom_parameters": None# "GaussianBlur sigma_limit 1.6,2.6,3.6,4.6 GaussianNoise std_range (0.06,0.06),(0.12,0.12),(0.18,0.18),(0.24,0.24)"
         }
         expected_exception = RuntimeError

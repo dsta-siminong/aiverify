@@ -575,8 +575,7 @@ export function ClassMetricsTable({ combined, className , metrics }) {
                     let value = row?.[metric];
 
                     if (
-                      typeof value === "number" &&
-                      !["TP", "FP", "FN", "TN"].includes(metric)
+                      typeof value === "number"
                     ) {
                       value = value.toFixed(3);
                     }

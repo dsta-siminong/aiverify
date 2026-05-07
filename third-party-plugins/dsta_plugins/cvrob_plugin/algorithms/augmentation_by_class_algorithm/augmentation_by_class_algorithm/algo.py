@@ -420,13 +420,18 @@ class Plugin(IAlgorithm):
             crs = []; cms = []
             individual_results.update({"Augmentation": aug_name})
             severities = ["None"] + aug_class.severities
+            if aug_name == "None":
+                severities = ["None"]
             for severity_idx, severity_name in enumerate(severities):
+                print('severity idx', severity_idx, 'severity_name', severity_name)
                 num_epochs = self._input_arguments.get('num_epochs') or 1
                 num_epochs = num_epochs if severity_name != "None" else 1 
                 num_epochs = 1 if num_epochs is None else num_epochs
                 num_epochs = 1 if aug_class.deterministic else num_epochs
                 all_reports = []; all_cm = []
                 for i in range(num_epochs):
+
+                    print("NUMEPOCHS", num_epochs)
                     seed = 1000*severity_idx + i 
                     aug_class.set_seed(seed)
 
@@ -469,11 +474,19 @@ class Plugin(IAlgorithm):
                         } for i, label in enumerate(target_names)
                     }
 
-                corrupted_images = self._get_corrupted_images(test_loader, aug_class, severity_name)
+                # corrupted_images = self._get_corrupted_images(test_loader, aug_class, severity_name)
                 corrupted_dir = Path(aug_name) / f"severity_{severity_name}"
-                corrupted_image_paths = self._save_images(corrupted_images, str(corrupted_dir))
+                # corrupted_image_paths = self._save_images(corrupted_images, str(corrupted_dir))
 
-                image = torch.tensor(corrupted_images[display_idx]).unsqueeze(0)  # shape [1, C, H, W]
+                # image = torch.tensor(corrupted_images[display_idx]).unsqueeze(0)  # shape [1, C, H, W]
+
+                display_image = self._get_one_corrupted_image(
+                    test_loader, aug_class, severity_name, display_idx
+                )
+
+                image_path = self._save_one_image(display_image, str(corrupted_dir), display_idx)
+                image = torch.tensor(display_image).unsqueeze(0).float()
+                model = model.float()
 
                 model.eval()
                 with torch.no_grad():
@@ -483,7 +496,8 @@ class Plugin(IAlgorithm):
                 ground_truth = ground_truths[display_idx]
 
                 random_display = [
-                    str(Path(corrupted_image_paths[display_idx]).relative_to(self._output_folder)),
+                    str(Path(image_path).relative_to(self._output_folder)),
+                    # str(Path(corrupted_image_paths[display_idx]).relative_to(self._output_folder)),
                     class_names[str(ground_truth)],
                     class_names[str(prediction)],
                 ]
@@ -610,8 +624,11 @@ class Plugin(IAlgorithm):
             # pprint(cr)
             # print("CM")
             # pprint(cm)
+            print(f"Severity: {severity}")
+            print("CR keys:", list(cr.keys()))
 
             df = pd.DataFrame.from_dict(cr).T
+            print(df.index.value_counts())
             df['severity'] = severity
             df['class'] = df.index
 
@@ -885,3 +902,36 @@ class Plugin(IAlgorithm):
 
         print(f"Saved to {save_path1} [plotly]")
         return save_path , save_path1
+
+    def _save_one_image(self, image: np.ndarray, subfolder_name: str, idx: int) -> str:
+        save_dir = self._save_folder / subfolder_name
+        save_dir.mkdir(parents=True, exist_ok=True)
+
+        image_path = save_dir / f"{idx}.png"
+        image = np.transpose(image, (1, 2, 0))
+        Image.fromarray((image * 255.0).astype(np.uint8)).save(image_path)
+
+        return str(image_path)
+
+    def _get_one_corrupted_image(self, testloader, aug_class, severity, target_idx):
+        current_idx = 0
+
+        for images, labels in testloader:
+            batch_size = images.shape[0]
+
+            # Check if target is inside this batch
+            if current_idx + batch_size > target_idx:
+                local_idx = target_idx - current_idx
+
+                images_np = (images * 255).byte().numpy().transpose(0, 2, 3, 1)
+
+                if aug_class.name == "None" or severity == "None":
+                    corrupted = images_np
+                else:
+                    corrupted = aug_class.corr_func_arr(images_np, severity)
+
+                corrupted = corrupted.transpose(0, 3, 1, 2) / 255.0
+
+                return corrupted[local_idx]  # <-- only one image
+
+            current_idx += batch_size

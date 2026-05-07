@@ -205,7 +205,7 @@ def get_augmentation_dict_album_header():
         },
         "Translate":
         {
-            f"translate%_{0.15*x:.2f}": (A.Affine, {'translate_percent': (-0.15*x, 0.15*x) , 'p': 1.0}) for x in range(1,6+1)
+            f"translate_percent_{0.15*x:.2f}": (A.Affine, {'translate_percent': (-0.15*x, 0.15*x) , 'p': 1.0}) for x in range(1,6+1)
         },
         "Shear":
         {

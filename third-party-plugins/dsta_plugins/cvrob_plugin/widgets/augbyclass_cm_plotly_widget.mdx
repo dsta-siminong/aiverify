@@ -74,45 +74,6 @@ import {
   <div>No algorithm data</div>
 )}
 
-{props.getResults(cid) ? (
-  (() => {
-    const result = props.getResults(cid);
-    const class_names = result.class_names;
-    const results = result.results;
-
-    return (
-      <>
-        {results.map((aug, idx) => {
-          const combined = transformData(
-            aug.classification_report,
-            aug.conf_matrix,
-            Object.keys(aug.display_info),
-            class_names
-          );
-
-          return (
-            <div key={idx} style={{marginBottom: "3em",breakInside: "avoid",}}>
-              <h2 style={{textAlign: "center",fontWeight: "bold",textDecoration: "underline",color: "red",margin: "0.5em 0",}}>{aug.Augmentation}</h2>
-              {Object.values(class_names).map((className) => (
-                <div key={className}>
-                  <h3>Class {className}</h3>
-                  <ClassLineChart
-                    combined={combined}
-                    className={className}
-                    metrics={["TP", "FP", "FN", "TN"]}
-                  />
-                </div>
-              ))}
-            </div>
-          );
-        })}
-      </>
-    );
-  })()
-) : (
-  <div>No algorithm data</div>
-)}
-
 export const AugmentationClassPlots = ({ props }) => {
   const resultsData = props.getResults ? props.getResults(cid).results : null;
 
@@ -152,7 +113,6 @@ export const AugmentationClassPlots = ({ props }) => {
         }
         
         const classPlot = plot_paths.class_plot;
-        const matplotlibPath = plot_paths.matplotlib_image_path;
         const plotlyPath = plot_paths.plotly_image_path;
 
         return (
@@ -179,7 +139,7 @@ export const AugmentationClassPlots = ({ props }) => {
 
             {/* 🔹 Per Class Section */}
             {Object.entries(classPlot).map(([className, paths], i) => {
-              const [metricPath, confmPath, popPath] = paths;
+              const [filler1, filler2, filler3, metricPath, confmPath, popPath] = paths;
 
               let metricUrl = null;
               let confmUrl = null;
@@ -211,17 +171,28 @@ export const AugmentationClassPlots = ({ props }) => {
                   </div>
 
                   {confmUrl && (
-                    <img
-                      src={confmUrl}
-                      alt={`confm-${className}`}
+                    <div
                       style={{
-                        maxWidth: "600px",
                         width: "100%",
-                        height: "auto",
+                        height: "500px",        // visible box height
+                        overflow: "hidden",
+                        position: "relative",
+                        border: "1px solid #ccc",
                         margin: "0 auto 2rem auto",
-                        display: "block",
                       }}
-                    />
+                    >
+                      <iframe
+                        src={confmUrl}
+                        title={`confm-${className}`}
+                        style={{
+                          width: "1200px",        // original content width
+                          height: "1000px",       // original content height
+                          transform: "scale(0.5)", // shrink to fit
+                          transformOrigin: "top left",
+                          border: "none",
+                        }}
+                      />
+                    </div>
                   )}
 
                   <ClassMetricsTable combined={combined} className={className} metrics={["TP", "FP", "FN", "TN"]} />
@@ -236,6 +207,7 @@ export const AugmentationClassPlots = ({ props }) => {
     </div>
   );
 };
+
 
 <AugmentationClassPlots props={props} />
 
@@ -316,19 +288,21 @@ export const ConfusionMatricesSection = ({ props }) => {
                 <div key={i} style={{ marginBottom: "3rem" }}>
                   <h4 style={{ marginBottom: "1rem" }}>{severity}</h4>
 
-                  {pngUrl && (
-                    <img
-                      src={pngUrl}
-                      alt={`Confusion Matrix PNG - ${severity}`}
-                      style={{
-                        maxWidth: "600px",
-                        width: "100%",
-                        display: "block",
-                        marginBottom: "1rem",
-                      }}
-                    />
+                  {htmlUrl && (
+                    <div style={{ width: "100%", height: "500px", marginBottom: "1rem" }}>
+                      <iframe
+                        src={htmlUrl}
+                        title={`Confusion Matrix HTML - ${severity}`}
+                        style={{
+                          width: "100%",
+                          height: "100%",
+                          border: "1px solid #ccc",
+                          borderRadius: "6px",
+                          display: "block"
+                        }}
+                      />
+                    </div>
                   )}
-
                 </div>
               );
             })}
