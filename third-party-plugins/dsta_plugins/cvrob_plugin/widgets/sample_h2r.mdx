@@ -1,0 +1,40 @@
+<div style={{ width: "100%" }}>
+  <h3>Corruption Progression Visualization</h3>
+
+  <span>
+    This widget displays a sample image as it progresses through each specified
+    corruption algorithm and its full range of severity levels. It provides a
+    visual understanding of how different corruptions affect image data over time.
+  </span>
+
+  <span>
+    The predicted class of the image is also shown. A{" "}
+    <span style={{ color: "red", fontWeight: "bold" }}>red</span> border appears
+    when the model’s prediction is incorrect (i.e., does not match the ground truth label),
+    while a{" "}
+    <span style={{ color: "green", fontWeight: "bold" }}>green</span> border appears
+    when the prediction is correct.
+  </span>
+</div>
+
+<div style={{ width: "100%" }}>
+  <h4>
+    <b>How to read?</b>
+  </h4>
+
+  <p>
+    Each sequence of images corresponds to a specific corruption algorithm and is
+    grouped by image path.
+  </p>
+
+  <p>
+    Within each sequence, the image is shown across the full range of severity levels
+    for that corruption. Alongside each image, the following details are provided:
+  </p>
+
+  <ul>
+    <li>The severity level of the applied corruption</li>
+    <li>The model’s predicted class for the corrupted image</li>
+    <li>The ground truth class (actual label) of the image</li>
+  </ul>
+</div>

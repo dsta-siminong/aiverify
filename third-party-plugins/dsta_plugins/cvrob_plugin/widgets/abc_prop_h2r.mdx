@@ -1,0 +1,87 @@
+<div style={{ width: "100%" }}>
+  <h3>Class Proportion Statistics</h3>
+
+  <span>
+    This widget shows how class proportions change for each specified corruption
+    algorithm as corruption severity increases.
+  </span>
+
+  <span>
+    It represents how the model's class prediction distribution changes under
+    perturbation, highlighting which classes gradually become over-predicted or
+    under-predicted.
+  </span>
+</div>
+
+<div style={{ width: "100%" }}>
+  <h4>
+    <b>How to read?</b>
+  </h4>
+
+  <p>
+    Each line graph corresponds to a selected corruption algorithm and a class
+    in the dataset. It compares the number of predictions made by the model for
+    that class against the number of images whose true label belongs to that class.
+  </p>
+
+  <p>
+    In general, good model performance is indicated by the predicted class
+    proportions remaining similar to the true class proportions. However, as
+    corruption severity increases, some classes may become increasingly
+    over-predicted while others become increasingly under-predicted.
+  </p>
+
+  <p>
+    The widget also includes stacked class population charts for each corruption
+    algorithm, showing the progression across the full range of severities. These
+    charts provide an easy way to visualize and compare changes in class
+    distributions across all classes simultaneously.
+  </p>
+</div>
+
+<div>
+  <span>
+    <b>Interpretation</b>
+  </span>
+
+  <span>
+    While there is no single metric that directly measures robustness in this
+    widget, larger deviations between predicted and true class proportions
+    generally indicate reduced robustness. Such deviations suggest that the
+    model is becoming biased toward predicting certain classes while neglecting
+    others under perturbation.
+  </span>
+
+  <span>
+    There is no expectation that a class's prediction proportion should
+    consistently increase or decrease as corruption severity increases.
+    However, if a class shows a strong and sustained increase in prediction
+    proportion, consider the following actions:
+  </span>
+
+  <span>
+    <ul>
+      <li>Increasing the diversity of training samples for other classes</li>
+      <li>Adding augmentation examples that resemble the observed corruption</li>
+      <li>Reviewing whether the class is overrepresented in the training data</li>
+    </ul>
+  </span>
+
+  <span>
+    If a class shows a strong and sustained decrease in prediction proportion,
+    consider:
+  </span>
+
+  <span>
+    <ul>
+      <li>Adding more training examples for the affected class</li>
+      <li>Including augmented versions of that class during training</li>
+      <li>Reviewing whether the class is underrepresented or insufficiently diverse in the training dataset</li>
+    </ul>
+  </span>
+
+  <span>
+    If class proportions remain relatively stable across severity levels, the
+    model can be considered robust to the given corruption.
+  </span>
+</div>

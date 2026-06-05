@@ -1,0 +1,26 @@
+{
+  "cid": "brittle_algorithm",
+  "gid": "cvrob_plugin",
+  "name": "Brittleness Algorithm",
+  "modelType": [
+    "classification"
+  ],
+  "version": "0.1.0",
+  "author": "Example Author",
+  "description": "This algorithm assesses the individual brittlness per image.",
+  "tags": [
+    "Brittleness Algorithm",
+    "classification"
+  ],
+  "requireGroundTruth": true,
+  "requiredFiles": [
+    "AUTHORS.rst",
+    "CHANGELOG.md",
+    "pyproject.toml",
+    "LICENSE",
+    "brittle_algorithm",
+    "README.md",
+    "requirements.txt",
+    "syntax_checker.py"
+  ]
+}

@@ -1,0 +1,66 @@
+<div style={{ width: "100%" }}>
+  <h3>Brittle Misclassified Images</h3>
+
+  <span>
+    This widget shows images from your dataset where the model initially predicts
+    the correct label (matching the ground truth), but misclassifies the image after
+    a corruption is applied.
+  </span>
+
+  <span>
+    The images are sorted in descending order of brittleness. “Brittle” images are
+    those where the model's confidence drops the most under the specified corruption
+    algorithm and severity interval. An image’s brittleness is defined as the magnitude
+    of this confidence drop.
+  </span>
+
+  <span>
+    Compared to the static image display, this view is designed for closer inspection
+    of individual images, making it easier to examine how and why each sample fails
+    under perturbation.
+  </span>
+</div>
+
+<div style={{ width: "100%" }}>
+  <h4>
+    <b>How to read?</b>
+  </h4>
+
+  <p>
+    The widget compares each image before and after applying the chosen corruption severity.
+  </p>
+
+  <p>
+    The left column shows the original (or lower severity) version of each image.
+    The right column shows the same image after applying higher severity corruption.
+  </p>
+
+  <p><b>Legend:</b></p>
+
+  <ul>
+    <li>image idx: file path or identifier of the image</li>
+    <li>pred: predicted class label from the model</li>
+    <li>classA: predicted class for the original / lower-severity image</li>
+    <li>classB: predicted class for the corrupted / higher-severity image</li>
+    <li>pred_proba: model confidence (probability) for the predicted class</li>
+    <li>Δ: brittleness score, i.e. difference between before and after prediction probabilities for the originally predicted class</li>
+  </ul>
+</div>
+
+<div>
+  <span>
+    <b>Interpretation</b>
+  </span>
+
+  <span>
+    You can use the shown images to:
+  </span>
+
+  <span>
+    <ul>
+      <li>Identify patterns in unstable image types (e.g., lighting, texture, background clutter)</li>
+      <li>Decide whether the model requires additional training data covering these cases or retraining</li>
+      <li>Consider removing or relabeling problematic samples if they are noisy or inconsistent</li>
+    </ul>
+  </span>
+</div>

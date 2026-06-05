@@ -1,0 +1,11 @@
+[project]
+name = "odbri_algorithm"
+version = "0.1.0"
+description = "This algorithm shows the most brittle images within an object detection task."
+authors = [{ name = "Example Author" }]
+readme = "README.md"
+dependencies = ["aiverify-test-engine[all]"]
+requires-python = ">=3.10,<3.12"
+license = { file = "LICENSE" }
+[tool.setuptools.packages.find]
+include = ["odbri_algorithm"] 

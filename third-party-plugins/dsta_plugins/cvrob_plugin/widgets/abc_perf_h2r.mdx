@@ -1,0 +1,88 @@
+<div style={{ width: "100%" }}>
+  <h3>Class-wise Performance Metrics</h3>
+
+  <span>
+    This widget shows how the model's performance is affected for each specified
+    corruption algorithm and for each class as corruption severity increases.
+  </span>
+
+  <span>
+    It captures how the model's predictive capabilities for a given class change
+    under increasing levels of perturbation.
+  </span>
+</div>
+
+<div style={{ width: "100%" }}>
+  <h4>
+    <b>How to read?</b>
+  </h4>
+
+  <p>
+    Each line graph corresponds to a selected corruption algorithm and a class in
+    the dataset. It tracks the model's predictive performance for a given class
+    (e.g., class X) as corruption severity increases.
+  </p>
+
+  <p>
+    Each line in the graph represents one of the following metrics:
+  </p>
+
+  <ul>
+    <li>
+      <b>Precision</b> – Of all images predicted as class X, the proportion that
+      actually belong to class X
+    </li>
+    <li>
+      <b>Recall</b> – Of all images that belong to class X, the proportion that
+      were correctly predicted as class X
+    </li>
+    <li>
+      <b>F1-score</b> – A balanced measure that combines precision and recall
+    </li>
+  </ul>
+
+  <p>
+    In general, good model performance is indicated by high values for all three
+    metrics.
+  </p>
+
+  <p>
+    As severity increases, model performance is expected to degrade, causing
+    these metrics to decline.
+  </p>
+</div>
+
+<div>
+  <span>
+    <b>Interpretation</b>
+  </span>
+
+  <span>
+    A steeper decline in any of these metrics indicates reduced robustness under
+    the given corruption.
+  </span>
+
+  <span>
+    In such cases, the recommended actions are:
+  </span>
+
+  <span>
+    <ul>
+      <li>Retrain the model using additional samples augmented with this corruption type</li>
+      <li>Increase the diversity of training samples for the affected class</li>
+      <li>Review the model architecture if degradation is consistently severe</li>
+    </ul>
+  </span>
+
+  <span>
+    If the metrics remain stable across severity levels, the model can be
+    considered robust to this corruption, and no further action is required.
+  </span>
+
+  <span>
+    If the metrics improve as severity increases, this may indicate that the
+    model has overfitted to this specific corruption type during training.
+    In this case, retraining with fewer samples augmented using this corruption
+    is recommended.
+  </span>
+</div>

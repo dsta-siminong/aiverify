@@ -384,7 +384,7 @@ class Augmentation:
     def corr_func_dataloader(self, testloader, severity_idx):
         severity = self.determine_severity(severity_idx)
 
-        if self.name in ["None", None] or severity == None:
+        if self.name in ["None", None] or severity in ["None", None]:
             return testloader
 
         dataset = CorruptedDataset(

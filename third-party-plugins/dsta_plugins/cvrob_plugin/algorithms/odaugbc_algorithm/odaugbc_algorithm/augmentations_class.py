@@ -26,14 +26,18 @@ def check_module(module):
         raise ValueError('not valid library name')
 
 def corrupt_func_album_reduced(images_np, aug_func, aug_params):
-    rseed = 42
-    if 'random_seed' in aug_params:
-        rseed = aug_params['random_seed']
-        aug_params = {k:v for k,v in aug_params.items() if k != 'random_seed'}
-    transform = A.Compose([aug_func(**aug_params), ToTensorV2()])
-    transform.set_random_seed(rseed)
-    corrupted_imgs = np.array([ transform(image=img)['image'].permute(1, 2, 0).numpy() for img in images_np ])
-    return corrupted_imgs
+    rseed = aug_params.get("random_seed", 42)
+    aug_params = {k:v for k,v in aug_params.items() if k != "random_seed"}
+
+    corrupted = []
+    for i, img in enumerate(images_np):
+        transform = A.Compose([aug_func(**aug_params), ToTensorV2()])
+        transform.set_random_seed(rseed + i)   # advance seed per image
+        corrupted.append(
+            transform(image=img)['image'].permute(1,2,0).numpy()
+        )
+
+    return np.array(corrupted)
 
 def corrupt_func_augly_reduced(images_np, aug_func, aug_params): 
     corrupted_imgs = np.array([aug_np_wrapper(img, aug_func, **aug_params) for img in images_np])
@@ -52,9 +56,9 @@ def make_augmentation_dict_album():
     augmentations_album, aug_names_album = get_album_augmentations_list()
     augmentations_album2 = []
     for a in augmentations_album:
-        td = {}
+        td = {"None": "None"}
         aug_func = a[0]
-        for severity in range(6):
+        for severity in range(1,6):
             aug_params = {k: (v(severity) if callable(v) else v) for k, v in a[1].items()}
             td[f"severity_{severity}"] = aug_params
         augmentations_album2.append((aug_func, td))
@@ -106,7 +110,10 @@ def get_album_augmentations_list():
         (A.ColorJitter, {'contrast': lambda s:  (1+0.75*s,1+0.75*s),'p':1}),
         (A.GaussNoise, {'std_range':  lambda s: (0,0.05*s), 'mean_range': lambda s:  (0,0.05*s),'p':1}),
         (A.Perspective, {'scale':  lambda s: 0.3*s,'p':1}),
-        (A.Erasing, {'scale': lambda s: (0.10*s, 0.10*s), 'ratio': (0.5, 2),'p':1}),
+        # (A.Erasing, {'scale': lambda s: (0.10*s, 0.10*s), 'ratio': (0.5, 2),'p':1}),
+        (A.CoarseDropout, {'hole_height_range': lambda s: (0.1*s, 0.1*s),
+                           'hole_width_range': lambda s: (0.1*s, 0.1*s), 
+                           'p': 1.0}),
         (A.ImageCompression, {'quality_range': lambda s: (100-19*s, 100-19*s)}),
         (A.Rotate, {'limit': lambda s: 25*s,'p':1}),
     ]
@@ -156,15 +163,19 @@ def get_augmentation_dict_album_header():
         },
         "Rotate":
         {
-            f"rotate_{5*x}": (A.Rotate, {'limit': 10*x,'p':1}) for x in range(1,9+1)
+            f"rotate_{10*x}": (A.Rotate, {'limit': 10*x,'p':1}) for x in range(1,9+1)
         },
         "GaussianNoise":
         {
-            f"std_{0.1*x:.2f}": (A.GaussNoise, {'std_range':  (0.05*x, 0.05*x), 'p':1}) for x in range(1,8+1)
+            f"std_{0.05*x:.2f}": (A.GaussNoise, {'std_range':  (0.05*x, 0.05*x), 'p':1}) for x in range(1,8+1)
         },
-        "Brightness":
+        "BrightnessUp":
         {
             f"bright_{1+0.25*x:.2f}": (A.ColorJitter, {'brightness': (1+0.25*x, 1+0.25*x), 'p':1}) for x in range(1,8+1)
+        },
+        "BrightnessDown":
+        {
+            f"bright_{1-0.1*x:.2f}": (A.ColorJitter, {'brightness': (1-0.1*x, 1-0.1*x), 'p':1}) for x in range(1,8+1)
         },
         "GaussianBlur":
         {
@@ -180,15 +191,15 @@ def get_augmentation_dict_album_header():
         },
         "ScaleDown":
         {
-            f"scale_{1+0.5*x:.2f}": (A.Affine, {'scale': (1/(1+0.5*x) , 1/(1+0.5*x) ), 'p': 1.0}) for x in range(1,8+1)
+            f"scale_{1/(1+0.5*x):.2f}": (A.Affine, {'scale': (1/(1+0.5*x) , 1/(1+0.5*x) ), 'p': 1.0}) for x in range(1,8+1)
         },
         "Translate":
         {
-            f"translate%_{0.1*x:.2f}": (A.Affine, {'translate_percent': (-0.15*x, 0.15*x) , 'p': 1.0}) for x in range(1,6+1)
+            f"translate_percent_{0.15*x:.2f}": (A.Affine, {'translate_percent': (-0.15*x, 0.15*x) , 'p': 1.0}) for x in range(1,6+1)
         },
         "Shear":
         {
-            f"shear_{10*x:.2f}": (A.Affine, {'shear': (-8*x , 8*x) , 'p': 1.0}) for x in range(1,8+1)
+            f"shear_{8*x:.2f}": (A.Affine, {'shear': (-8*x , 8*x) , 'p': 1.0}) for x in range(1,8+1)
         },
         "Perspective":
         {
@@ -198,28 +209,12 @@ def get_augmentation_dict_album_header():
         {
             f"quality_range_{85-x*10:.2f}": (A.ImageCompression, {'quality_range': (85-x*10, 85-x*10),'p':1}) for x in range(1,8+1)
         },
-
     }
 
     return d
 
-def make_augmentation_dict_album2():
-    old_d = get_augmentation_dict_album_header()
-    d = {}
-    for k,v in old_d.items():
-        #k = aug_name; v = {param1_name: ..., param2_name: ...}
-        #below is just removing the aug_func because it's the same for all items
-        param_dict = {k1:v1[1] for k1,v1 in v.items()}
-        for k1,v1 in param_dict.items():
-            if k1 != "None":
-                print(k1, v1)
-                v1['random_seed'] = 42
-        aug_func = v[list(v.keys())[0]][0]
-        print(aug_func , "aug_func")
-        # print(aug_tuple[1], aug_tuple[0])
-        new_aug = Augmentation(k, param_dict, aug_func)
-        d[k] = new_aug 
-    return d 
+DETERMINISTIC = {"None", "BrightnessUp", "BrightnessDown", "GaussianBlur", "ScaleUp", "ScaleDown", "Compression"}
+GEOMETRIC = {"Rotate", "Shear", "Translate", "Perspective", "ScaleUp", "ScaleDown"}
 
 import ast
 
@@ -264,11 +259,28 @@ def custom_parameter_change(aug_dict, aug_name, param_name, parameters_in_string
     for key in aug_dict:
         if key == aug_name:
             aug_class = aug_dict[key]
-            aug_func = aug_class.aug_func 
+            aug_func = aug_class.aug_func ; rand_seed = aug_class.random_seed
             new_aug_class = Augmentation(aug_name, param_dict, aug_func)
+            if rand_seed is not None: 
+                aug_class.set_seed(rand_seed)
             aug_dict[key] = new_aug_class
 
     return aug_dict
+
+def make_augmentation_dict_album2():
+    old_d = get_augmentation_dict_album_header()
+    d = {}
+    for k,v in old_d.items():
+        param_dict = {k1:v1[1] for k1,v1 in v.items()}
+        for k1,v1 in param_dict.items():
+            if k1 != "None":
+                print(k1, v1)
+                v1['random_seed'] = 42
+        aug_func = v[list(v.keys())[0]][0]
+        print(aug_func , "aug_func")
+        new_aug = Augmentation(k, param_dict, aug_func)
+        d[k] = new_aug 
+    return d 
 
 def make_augmentation_dict_imagecorrupt():
     augmentations = [
@@ -288,7 +300,6 @@ def make_augmentation_dict_imagecorrupt():
         augmentations_album2.append((aug_func, td))
     d = {}
     for aug_tuple, aug_name in zip(augmentations_album2, aug_names_album):
-        # print(aug_tuple[1], aug_tuple[0])
         new_aug = Augmentation(aug_name, aug_tuple[1], aug_tuple[0])
         d[aug_name] = new_aug 
     return d
@@ -306,12 +317,17 @@ class Augmentation:
         self.corrupt_func = check_module(aug_func)
         self.aug_func = aug_func
         self.random_seed = None
+        self.deterministic = True if name in DETERMINISTIC else False 
+        self.requires_bbox_transform = True if name in GEOMETRIC else False 
 
     def set_seed(self, x):
-        self.random_seed =  x
+        self.random_seed = x
         if self.name != "None":
-            for k,v in self.param_dict.items():
-                v['random_seed'] = x
+            for k in self.param_dict:
+                self.param_dict[k] = {
+                    **self.param_dict[k],
+                    "random_seed": x
+                }
 
     def determine_severity(self, severity_idx):
         if type(severity_idx) == int:
@@ -323,46 +339,83 @@ class Augmentation:
             # print(f"Severity is directly referenced as {severity_idx}")
             severity = severity_idx
         return severity
-
-    def corr_func_one_img(self, img, severity_idx):
-        severity = self.determine_severity(severity_idx)
-        if self.name not in ["None", None] and severity != "None":
-            corrupted_image = self.corrupt_func([img], self.aug_func, self.param_dict[severity])
-        else:
-            corrupted_image = [img]
-
-        return corrupted_image[0]
-
-    def corr_func_arr(self, arr, severity_idx):
-        severity = self.determine_severity(severity_idx)
-        if self.name not in ["None", None] and severity != "None":
-            corrupted_images = self.corrupt_func(arr, self.aug_func, self.param_dict[severity])
-        else:
-            corrupted_images = arr
-
-        return corrupted_images
-
+    
     def corr_func_dataloader(self, testloader, severity_idx):
         severity = self.determine_severity(severity_idx)
 
-        if self.name in ["None", None] or severity in ["None", None]:
+        if self.name in ["None", None] or severity == None:
             return testloader
 
         dataset = CorruptedDataset(
             testloader.dataset,
-            self.corr_func_arr,
+            self.corr_func_sample,
             severity_idx,
         )
-
+        
         return torch.utils.data.DataLoader(
             dataset,
             batch_size=testloader.batch_size,
             shuffle=False,
-            num_workers=0,   # IMPORTANT
-            pin_memory=True,
+            num_workers=0,
+            pin_memory=False,
+            collate_fn=testloader.collate_fn,
         )
 
+    def corr_func_sample(self, image, target, severity_idx):
+
+        severity = self.determine_severity(severity_idx)
+
+        # no augmentation
+        if self.name in ["None", None]:
+            return image, target
+
+        # PHOTOMETRIC AUGMENTATIONS
+        if not self.requires_bbox_transform:
+            corrupted = self.corrupt_func(
+                np.array([image], dtype=np.uint8),
+                self.aug_func,
+                self.param_dict[severity]
+            )[0]
+
+            return corrupted, target
+
+        # GEOMETRIC AUGMENTATIONS
+        else:
+
+            bboxes = target["boxes"].numpy().tolist()
+            labels = target["labels"].numpy().tolist()
+
+            transform = A.Compose(
+                [self.aug_func(**self.param_dict[severity])],
+                bbox_params=A.BboxParams(
+                    format="pascal_voc",
+                    label_fields=["class_labels"]
+                )
+            )
+
+            transformed = transform(
+                image=image,
+                bboxes=bboxes,
+                class_labels=labels
+            )
+
+            image_out = transformed["image"]
+
+            target_out = {
+                "boxes": torch.tensor(
+                    transformed["bboxes"],
+                    dtype=torch.float32
+                ),
+                "labels": torch.tensor(
+                    transformed["class_labels"],
+                    dtype=torch.long
+                )
+            }
+
+            return image_out, target_out
+
 class CorruptedDataset(torch.utils.data.Dataset):
+
     def __init__(self, dataset, corr_func, severity_idx):
         self.dataset = dataset
         self.corr_func = corr_func
@@ -372,7 +425,8 @@ class CorruptedDataset(torch.utils.data.Dataset):
         return len(self.dataset)
 
     def __getitem__(self, idx):
-        image, label = self.dataset[idx]
+
+        image, target = self.dataset[idx]
 
         image_np = (
             image.mul(255)
@@ -382,20 +436,14 @@ class CorruptedDataset(torch.utils.data.Dataset):
             .transpose(1, 2, 0)
         )
 
-        # Add batch dimension
-        image_np = image_np[None, ...]
+        corrupted_image, corrupted_target = self.corr_func(
+            image_np,
+            target,
+            self.severity_idx
+        )
 
-        corrupted = self.corr_func(image_np, self.severity_idx)
-
-        # Remove batch dimension
-        corrupted = corrupted[0]
-
-        # Handle (H, W, C, 1)
-        if corrupted.ndim == 4 and corrupted.shape[-1] == 1:
-            corrupted = corrupted[..., 0]
-
-        corrupted = torch.from_numpy(
-            corrupted.transpose(2, 0, 1)
+        corrupted_image = torch.from_numpy(
+            corrupted_image.transpose(2, 0, 1)
         ).float().div_(255.0)
 
-        return corrupted, label
+        return corrupted_image, corrupted_target

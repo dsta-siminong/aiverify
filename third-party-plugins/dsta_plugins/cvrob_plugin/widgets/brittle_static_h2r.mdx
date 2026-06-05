@@ -1,0 +1,58 @@
+<div style={{ width: "100%" }}>
+  <h3>Top 10 Most Brittle Images</h3>
+
+  <span>
+    This widget shows the ten images within your dataset that are the most brittle.
+    “Brittle” images are those where the model's confidence drops the most under a
+    specified corruption algorithm and severity interval.
+  </span>
+
+  <span>
+    It helps you identify which inputs are least stable under perturbation and most
+    likely to cause inconsistent model predictions.
+  </span>
+</div>
+
+<div style={{ width: "100%" }}>
+  <h4>
+    <b>How to read?</b>
+  </h4>
+
+  <p>
+    The widget compares each image before and after applying the chosen corruption severity.
+  </p>
+
+  <p>
+    The left column shows the original (or lower severity) version of each image.
+    The right column shows the same image after applying higher severity corruption.
+  </p>
+
+  <p><b>Legend:</b></p>
+
+  <ul>
+    <li>image idx: image file path or identifier</li>
+    <li>pred: predicted class label from the model</li>
+    <li>classA: predicted class for the original / lower-severity image</li>
+    <li>classB: predicted class for the corrupted / higher-severity image</li>
+    <li>pred_proba: model confidence (probability) for the predicted class</li>
+    <li>Δ: brittleness score, i.e. difference between before and after prediction probabilities for the originally predicted class</li>
+  </ul>
+</div>
+
+<div>
+  <span>
+    <b>Interpretation</b>
+  </span>
+
+  <span>
+    You can use the shown images to:
+  </span>
+
+  <span>
+    <ul>
+      <li>Identify patterns in unstable image types (e.g., lighting, texture, background clutter)</li>
+      <li>Decide whether the model requires additional training data covering these cases or retraining</li>
+      <li>Consider removing or relabeling problematic samples if they are noisy or inconsistent</li>
+    </ul>
+  </span>
+</div>

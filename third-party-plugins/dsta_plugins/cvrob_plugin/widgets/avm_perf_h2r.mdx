@@ -1,0 +1,51 @@
+<div style={{ width: "100%" }}>
+  <h3>Accuracy Under Corruption</h3>
+
+  <span>
+    This widget shows how the model's accuracy, representing its predictive performance,
+    is affected for each specified corruption algorithm as the severity of the corruption
+    increases.
+  </span>
+</div>
+
+<div style={{ width: "100%" }}>
+  <h4>
+    <b>How to read?</b>
+  </h4>
+
+  <p>
+    Each line graph corresponds to a selected corruption algorithm. It tracks the model's
+    accuracy as the severity of the corruption increases. In this context, accuracy is
+    defined as the proportion of images where the model’s predicted class matches the
+    ground truth label.
+  </p>
+
+  <p>
+    In general, good model performance is indicated by high accuracy. However, as severity
+    increases, the model’s predictive performance — and therefore its accuracy — is expected
+    to decline.
+  </p>
+</div>
+
+<div>
+  <span>
+    <b>Interpretation</b>
+  </span>
+
+  <span>
+    A steeper decline in accuracy indicates a less robust model. In such cases, the
+    recommended action is to retrain the model and include more training samples augmented
+    with this corruption type.
+  </span>
+
+  <span>
+    If accuracy remains stable, the model can be considered robust to this corruption,
+    and no further action is required.
+  </span>
+
+  <span>
+    If accuracy improves as severity increases, this may indicate that the model has
+    overfitted to this corruption type during training. In this case, retraining with
+    fewer augmented samples of this corruption type is recommended.
+  </span>
+</div>

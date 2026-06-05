@@ -1,0 +1,42 @@
+{
+    "title": "Algorithm Plugin Input Arguments",
+    "description": "A schema for algorithm plugin input arguments",
+    "type": "object",
+    "required": [
+        "aug_library",
+        "aug_methods",
+        "num_epochs"
+    ],
+    "properties": {
+        "class_names": {
+            "title": "Class Names",
+            "description": "Comma-separated class names, a single number for class count, or leave blank to infer from the model.",
+            "type": ["string", "null"],
+            "default": null
+        },
+        "aug_library": {
+            "title": "Augmentation Library Name",
+            "description": "Indicate the augmentation library to extract from (default and only available library: albumentations)",
+            "type": "string",
+            "default": "albumentations"
+        },
+        "aug_methods": {
+            "title": "Augmentation Method(s) Name",
+            "description": "Indicate the augmentation functions separated by commas (default: all)",
+            "type": "string",
+            "default": "all"
+        },
+        "num_epochs": {
+            "title": "Number of epochs",
+            "description": "Indicate the number of epochs you're using (minimum and default: 1. higher = more time but more accurate)",
+            "type": "integer",
+            "default": 1
+        },
+        "custom_parameters": {
+            "title": "Custom Parameters",
+            "description": "Custom parameters for the augmentation_method(s) (default for no custom params: None)",
+            "type": ["string", "null"],
+            "default": null
+        }
+    }
+}

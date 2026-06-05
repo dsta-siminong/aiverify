@@ -1,0 +1,26 @@
+{
+  "cid": "odaugvm_algorithm",
+  "gid": "cvrob_plugin",
+  "name": "Object Detection Algorithm v Metric Algorithm--description",
+  "modelType": [
+    "classification"
+  ],
+  "version": "0.1.0",
+  "author": "Example Author",
+  "description": "Object Detection Algorithm v Metric Algorithm--description",
+  "tags": [
+    "Object Detection Algorithm v Metric Algorithm--description",
+    "classification"
+  ],
+  "requireGroundTruth": true,
+  "requiredFiles": [
+    "AUTHORS.rst",
+    "CHANGELOG.md",
+    "pyproject.toml",
+    "LICENSE",
+    "odaugvm_algorithm",
+    "README.md",
+    "requirements.txt",
+    "syntax_checker.py"
+  ]
+}

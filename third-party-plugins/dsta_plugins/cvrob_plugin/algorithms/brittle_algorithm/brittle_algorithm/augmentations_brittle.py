@@ -340,11 +340,11 @@ def visualize_in_html(
             f'<b>Ground Truth class:</b> {gt}<br><br>'
             f'<b>Predictions:</b><br>'
             f'<b>A:</b> ŷ={predA_cls} | <b>B:</b> ŷ={predB_cls}<br><br>'
-            f'<b>Class A predict_proba:</b><br>'
-            f'<b>A:</b> {predA_p:.3f} | <b>B:</b> {(predA_p - res.brittleness):.3f}<br>'
+            f'<b>Before Image predict_proba:</b><br>'
+            f'<b>Class {predA_cls}:</b> {predA_p:.3f} <br><br>'
             f'<b>Brittleness Δ:</b> {res.brittleness:.3f}<br><br>'
-            f'<b>Class B predict_proba:</b><br>'
-            f'<b>B:</b> {predB_p:.3f}'
+            f'<b>After Image predict_proba:</b><br>'
+            f'<b><b>Class {predA_cls}:</b> {(predA_p - res.brittleness):.3f} | Class {predB_cls}:</b> {predB_p:.3f}'
             f'"'
         )
 
@@ -372,11 +372,11 @@ def visualize_in_html(
 
     <div class="images">
     <div>
-        <h3>A (Before)</h3>
+        <h3>Before Corruption</h3>
         <img id="imgA">
     </div>
     <div>
-        <h3>B (After)</h3>
+        <h3>After Corruption</h3>
         <img id="imgB">
     </div>
     </div>
