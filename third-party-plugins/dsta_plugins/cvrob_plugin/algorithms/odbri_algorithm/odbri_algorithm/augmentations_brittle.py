@@ -62,19 +62,19 @@ class BrittlenessResult:
 def brittle_res_indiv_to_dict(bri):
     """
     Convert a single BrittlenessResultIndiv object to a dictionary.
-
-    Args:
-        bri (BrittlenessResultIndiv): The brittleness result to convert.
-
-    Returns:
-        dict: Dictionary containing keys 'index', 'label', 'predA', 'predB',
-                'pA', 'pB', and 'brittleness' with corresponding values.
     """
-    d ={
+    def serialize_detection_indiv(pred):
+        return {
+            "boxes": pred["boxes"].tolist(),
+            "labels": pred["labels"].tolist(),
+            "scores": pred["scores"].tolist(),
+        }
+
+    d = {
         "index": bri.index,
         "label": bri.label,
-        "predA": bri.predA,
-        "predB": bri.predB,
+        "predA": serialize_detection_indiv(bri.predA),
+        "predB": serialize_detection_indiv(bri.predB),
         "pA": bri.pA,
         "pB": bri.pB,
         "brittleness": bri.brittleness
@@ -88,24 +88,90 @@ def brittle_res_to_dict(br):
         elif isinstance(val, np.ndarray):
             return val.tolist()
         else:
-            return val  # already a list/dict, pass through as-is
+            return val
+
+    def serialize_detection(preds):
+        out = []
+        for pred in preds:
+            out.append({
+                "boxes": pred["boxes"].tolist(),
+                "labels": pred["labels"].tolist(),
+                "scores": pred["scores"].tolist(),
+            })
+        return out
 
     d = {
         "results": [brittle_res_indiv_to_dict(r) for r in br.results],
-        "imgsA": None,#safe_convert(br.imgsA),
-        "imgsB": None,#safe_convert(br.imgsB),
-        "probs_A": safe_convert(br.probs_A),
-        "probs_B": safe_convert(br.probs_B),
+        "imgsA": None,
+        "imgsB": None,
+        "probs_A": serialize_detection(br.probs_A),
+        "probs_B": serialize_detection(br.probs_B),
         "labels": safe_convert(br.labels),
     }
     return d
+
+
+# ==== BRITTLENESS HELPERS ====
+
+def normalise_brittleness(raw: float, scoreA: float) -> float:
+    """
+    Normalise a raw image_brittleness value to [0, 1].
+
+    image_brittleness returns an unbounded penalty for the worst-degraded detection:
+      - No match found:   drop = scoreA                          → max = scoreA
+      - Match found:      drop = max(0, scoreA-scoreB) + scoreA*(1-IoU)
+                                                                  → max = 2*scoreA
+
+    Dividing by 2*scoreA maps the range to [0, 1], where:
+      0   = no degradation at all (scoreA==scoreB and IoU==1)
+      0.5 = either full confidence drop with perfect localisation,
+            or perfect confidence with zero overlap
+      1.0 = full confidence drop AND zero overlap (worst possible)
+
+    Args:
+        raw (float): Output of image_brittleness().
+        scoreA (float): Top detection confidence score before corruption (scoreA of the
+                        worst-affected detection). Use scores_A[i]["scores"].max().
+
+    Returns:
+        float: Normalised brittleness in [0, 1]. Returns 0.0 if scoreA == 0.
+    """
+    if scoreA <= 0.0:
+        return 0.0
+    return min(raw / (2.0 * scoreA), 1.0)
+
+
+def brittleness_label(norm: float) -> str:
+    """Return a short plain-English severity label for a normalised brittleness value."""
+    if norm < 0.25:
+        return "Stable"
+    elif norm < 0.5:
+        return "Mildly brittle"
+    elif norm < 0.75:
+        return "Moderately brittle"
+    else:
+        return "Highly brittle"
+
+
+def _detection_summary(scores_dict) -> tuple:
+    """
+    Return (n_detections, top_confidence) from a detection output dict.
+    scores_dict is {"boxes":..., "labels":..., "scores": Tensor}.
+    """
+    s = scores_dict["scores"]
+    n = len(s)
+    top = float(s.max().item()) if n > 0 else 0.0
+    return n, top
+
+
+# ==== VISUALISATION FUNCTIONS ====
 
 def visualize_topk_matplotlib(
     results_sorted,
     imgs_A, imgs_B,
     scores_A, scores_B,
     K=10,
-    class_names=None,   # optional only for GT boxes
+    class_names=None,
     transform=None,
     directory=Path(),
     image_paths=None
@@ -119,24 +185,36 @@ def visualize_topk_matplotlib(
 
     for row, res in enumerate(topk):
         i = res.index
-
         idx = Path(str(image_paths[i])).name if image_paths else i
 
         imgA = unnormalize(imgs_A[i], transform)
         imgB = unnormalize(imgs_B[i], transform)
 
-        scoreA = scores_A[i]
-        scoreB = scores_B[i]
+        n_A, top_A = _detection_summary(scores_A[i])
+        n_B, top_B = _detection_summary(scores_B[i])
+
+        raw_brit = res.brittleness
+        norm_brit = normalise_brittleness(raw_brit, top_A)
+        label = brittleness_label(norm_brit)
+
+        det_delta = n_B - n_A
+        det_delta_str = (
+            f"+{det_delta}" if det_delta > 0
+            else str(det_delta) if det_delta < 0
+            else "±0"
+        )
 
         axes[row, 0].imshow(imgA)
         axes[row, 0].axis("off")
         axes[row, 0].text(
             0.02, 0.98,
-            f"idx: {idx}\nA score={scoreA:.3f}",
+            (
+                f"image: {idx}\n"
+                f"BEFORE corruption\n"
+                f"Detections: {n_A}  |  Top conf: {top_A:.2f}"
+            ),
             transform=axes[row, 0].transAxes,
-            va="top",
-            ha="left",
-            fontsize=9,
+            va="top", ha="left", fontsize=9,
             bbox=dict(boxstyle="round", facecolor="white", alpha=0.8)
         )
 
@@ -144,11 +222,15 @@ def visualize_topk_matplotlib(
         axes[row, 1].axis("off")
         axes[row, 1].text(
             0.02, 0.98,
-            f"idx: {idx}\nB score={scoreB:.3f}\nΔ={res.brittleness:.3f}",
+            (
+                f"image: {idx}\n"
+                f"AFTER corruption\n"
+                f"Detections: {n_B} ({det_delta_str})  |  Top conf: {top_B:.2f}\n"
+                f"Brittleness: {norm_brit:.2f} / 1.00  →  {label}\n"
+                f"(raw penalty: {raw_brit:.3f})"
+            ),
             transform=axes[row, 1].transAxes,
-            va="top",
-            ha="left",
-            fontsize=9,
+            va="top", ha="left", fontsize=9,
             bbox=dict(boxstyle="round", facecolor="white", alpha=0.8)
         )
 
@@ -184,23 +266,43 @@ def visualize_topk_plotly(
         i = res.index
         idx = Path(str(image_paths[i])).name if image_paths else i
 
-        imgA = unnormalize(imgs_A[i], transform)
-        imgB = unnormalize(imgs_B[i], transform)
+        # Encode as JPEG (10-30x smaller than raw z= array)
+        imgA_b64 = "data:image/jpeg;base64," + tensor_to_base64(imgs_A[i], transform, jpeg_quality=85)
+        imgB_b64 = "data:image/jpeg;base64," + tensor_to_base64(imgs_B[i], transform, jpeg_quality=85)
 
-        scoreA = scores_A[i]
-        scoreB = scores_B[i]
+        n_A, top_A = _detection_summary(scores_A[i])
+        n_B, top_B = _detection_summary(scores_B[i])
 
-        fig.add_trace(go.Image(z=imgA), row=r, col=1)
+        raw_brit = res.brittleness
+        norm_brit = normalise_brittleness(raw_brit, top_A)
+        label = brittleness_label(norm_brit)
+
+        det_delta = n_B - n_A
+        det_delta_str = (
+            f"+{det_delta} more" if det_delta > 0
+            else f"{abs(det_delta)} fewer" if det_delta < 0
+            else "no change"
+        )
+
+        fig.add_trace(go.Image(source=imgA_b64), row=r, col=1)
 
         fig.add_trace(
             go.Scatter(
                 x=[0.5], y=[0.5],
                 mode="text",
                 text=[(
-                    f"<b>idx:</b> {idx}<br><br>"
-                    f"<b>A score:</b> {scoreA:.3f}<br>"
-                    f"<b>B score:</b> {scoreB:.3f}<br>"
-                    f"<b>Δ brittleness:</b> {res.brittleness:.3f}"
+                    f"<b>{idx}</b><br><br>"
+                    f"<b>Before</b><br>"
+                    f"Detections: {n_A}<br>"
+                    f"Top conf: {top_A:.2f}<br><br>"
+                    f"<b>After</b><br>"
+                    f"Detections: {n_B} ({det_delta_str})<br>"
+                    f"Top conf: {top_B:.2f}<br><br>"
+                    f"<b>Brittleness</b><br>"
+                    f"{norm_brit:.2f} / 1.00<br>"
+                    f"<i>{label}</i><br>"
+                    f"<span style='color:grey;font-size:0.85em'>"
+                    f"raw: {raw_brit:.3f}</span>"
                 )],
                 showlegend=False
             ),
@@ -210,7 +312,7 @@ def visualize_topk_plotly(
         fig.update_xaxes(visible=False, row=r, col=2)
         fig.update_yaxes(visible=False, row=r, col=2)
 
-        fig.add_trace(go.Image(z=imgB), row=r, col=3)
+        fig.add_trace(go.Image(source=imgB_b64), row=r, col=3)
 
     fig.update_layout(
         height=360 * K,
@@ -220,9 +322,10 @@ def visualize_topk_plotly(
     )
 
     save_path = directory / "brittleness_topk.html"
-    fig.write_html(save_path, include_plotlyjs="cdn")
+    fig.write_html(save_path, include_plotlyjs="inline")
 
     return save_path
+
 
 def visualize_in_html(
     results_sorted,
@@ -232,112 +335,144 @@ def visualize_in_html(
     class_names=None,
     transform=None,
     directory=Path(),
-    image_paths=None
+    image_paths=None,
+    max_size: int = 320,
+    jpeg_quality: int = 85,
 ):
+    """
+    Build a side-by-side carousel HTML of the most brittle images.
+
+    max_size: longest edge in pixels each image is resized to before encoding.
+    jpeg_quality: JPEG quality 1-95. Lower = smaller file.
+                  220 images at 320px / q=85 ≈ 3-7 MB total.
+    """
     imageA_list = []
     imageB_list = []
     info_list = []
+
+    fmt = "jpeg" if jpeg_quality is not None else "png"
+    mime = f"data:image/{fmt};base64,"
 
     for res in results_sorted:
         i = res.index
         idx = Path(str(image_paths[i])).name if image_paths else i
 
-        imgA_b64 = "data:image/png;base64," + tensor_to_base64(imgsA[i], transform)
-        imgB_b64 = "data:image/png;base64," + tensor_to_base64(imgsB[i], transform)
+        imgA_b64 = mime + tensor_to_base64(imgsA[i], transform, max_size=max_size, jpeg_quality=jpeg_quality)
+        imgB_b64 = mime + tensor_to_base64(imgsB[i], transform, max_size=max_size, jpeg_quality=jpeg_quality)
 
-        scoreA = scoresA[i].item() if hasattr(scoresA[i], "item") else float(scoresA[i])
-        scoreB = scoresB[i].item() if hasattr(scoresB[i], "item") else float(scoresB[i])
+        n_A, top_A = _detection_summary(scoresA[i])
+        n_B, top_B = _detection_summary(scoresB[i])
 
-        gt = labels[i]  # KEEP AS DETECTION STRUCTURE
+        gt = labels[i]
+        n_gt = len(gt)
 
-        imageA_list.append(f'"{imgA_b64}"')
-        imageB_list.append(f'"{imgB_b64}"')
+        raw_brit = res.brittleness
+        norm_brit = normalise_brittleness(raw_brit, top_A)
+        label = brittleness_label(norm_brit)
 
-        info_list.append(
-            f'"'
-            f'<b>Index:</b> {idx}<br>'
-            f'<b>Brittleness Δ:</b> {res.brittleness:.3f}<br><br>'
-            f'<b>Score A:</b> {scoreA:.3f}<br>'
-            f'<b>Score B:</b> {scoreB:.3f}<br><br>'
-            f'<b>GT objects:</b> {len(gt)}'
-            f'"'
+        det_delta = n_B - n_A
+        det_delta_str = (
+            f"+{det_delta} more" if det_delta > 0
+            else f"{abs(det_delta)} fewer" if det_delta < 0
+            else "same number"
         )
 
-    html = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-    <meta charset="utf-8">
-    <title>Brittleness Carousel</title>
+        # Normalised brittleness bar: filled portion as a percentage
+        bar_pct = int(norm_brit * 100)
+        bar_color = (
+            "#2ecc71" if norm_brit < 0.25 else
+            "#f1c40f" if norm_brit < 0.5  else
+            "#e67e22" if norm_brit < 0.75 else
+            "#e74c3c"
+        )
 
-    <style>
-    body {{ font-family: Arial, sans-serif; }}
-    #container {{ text-align: center; margin-top: 30px; }}
-    .images {{ display: flex; justify-content: center; gap: 40px; }}
-    img {{ max-width: 320px; max-height: 320px; border: 1px solid #ccc; }}
-    button {{ padding: 10px 20px; font-size: 16px; margin: 10px; }}
-    #info {{ margin-top: 15px; font-size: 16px; }}
-    </style>
-    </head>
+        imageA_list.append(imgA_b64)
+        imageB_list.append(imgB_b64)
 
-    <body>
-    <div id="container">
+        info_list.append(
+            # Ground truth
+            f'<b>Image:</b> {idx} &nbsp;|&nbsp; <b>Ground truth objects:</b> {n_gt}<br><br>'
+            # Before
+            f'<span style="color:#1a6fbb"><b>▶ Before corruption</b></span><br>'
+            f'&nbsp;&nbsp;Detections: <b>{n_A}</b> &nbsp;|&nbsp; Top confidence: <b>{top_A:.2f}</b><br><br>'
+            # After
+            f'<span style="color:#c0392b"><b>▶ After corruption</b></span><br>'
+            f'&nbsp;&nbsp;Detections: <b>{n_B}</b> ({det_delta_str}) &nbsp;|&nbsp; Top confidence: <b>{top_B:.2f}</b><br><br>'
+            # Brittleness score + bar
+            f'<b>Brittleness: {norm_brit:.2f} / 1.00 — {label}</b><br>'
+            f'<div style="background:#ddd;border-radius:4px;height:10px;width:300px;display:inline-block;margin:4px 0">'
+            f'<div style="background:{bar_color};width:{bar_pct}%;height:10px;border-radius:4px"></div></div><br>'
+            f'<small style="color:#888">'
+            f'Measures how much the model\'s best detection degraded after corruption.<br>'
+            f'0 = no change &nbsp;·&nbsp; 1 = detection fully lost or mislocalised<br>'
+            f'(raw penalty: {raw_brit:.3f})'
+            f'</small>'
+        )
 
-    <h2>Most Brittle Images (A → B)</h2>
-
-    <div class="images">
-    <div>
-        <h3>Before Corruption</h3>
-        <img id="imgA">
+    html = f"""<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Brittleness Carousel</title>
+<style>
+  body {{ font-family: Arial, sans-serif; background: #f9f9f9; }}
+  #container {{ text-align: center; margin-top: 30px; }}
+  .images {{ display: flex; justify-content: center; gap: 40px; flex-wrap: wrap; }}
+  .img-panel {{ display: flex; flex-direction: column; align-items: center; }}
+  .img-panel h3 {{ margin-bottom: 6px; }}
+  img {{ max-width: 320px; max-height: 320px; border: 2px solid #ccc; border-radius: 4px; }}
+  button {{ padding: 10px 24px; font-size: 16px; margin: 10px; border-radius: 4px;
+            border: none; background: #333; color: #fff; cursor: pointer; }}
+  button:hover {{ background: #555; }}
+  #info {{ margin: 16px auto; max-width: 620px; text-align: left;
+           background: #fff; border: 1px solid #ddd; border-radius: 6px;
+           padding: 16px 20px; font-size: 14px; line-height: 1.7; }}
+  #counter {{ font-size: 13px; color: #888; margin-top: 6px; }}
+</style>
+</head>
+<body>
+<div id="container">
+  <h2>Most Brittle Images (Before → After Corruption)</h2>
+  <div class="images">
+    <div class="img-panel">
+      <h3 style="color:#1a6fbb">Before Corruption</h3>
+      <img id="imgA">
     </div>
-    <div>
-        <h3>After Corruption</h3>
-        <img id="imgB">
+    <div class="img-panel">
+      <h3 style="color:#c0392b">After Corruption</h3>
+      <img id="imgB">
     </div>
-    </div>
+  </div>
+  <div id="info"></div>
+  <div id="counter"></div>
+  <br>
+  <button onclick="prev()">⬅ Prev</button>
+  <button onclick="next()">Next ➡</button>
+</div>
 
-    <div id="info"></div>
+<script>
+let imagesA = {json.dumps(imageA_list)};
+let imagesB = {json.dumps(imageB_list)};
+let infos   = {json.dumps(info_list)};
+let idx = 0;
 
-    <button onclick="prev()">⬅ Prev</button>
-    <button onclick="next()">Next ➡</button>
+function show() {{
+    document.getElementById("imgA").src = imagesA[idx];
+    document.getElementById("imgB").src = imagesB[idx];
+    document.getElementById("info").innerHTML = infos[idx];
+    document.getElementById("counter").textContent = (idx+1) + " / " + imagesA.length;
+}}
+function next() {{ idx = (idx + 1) % imagesA.length; show(); }}
+function prev() {{ idx = (idx - 1 + imagesA.length) % imagesA.length; show(); }}
+document.addEventListener("keydown", function(e) {{
+    if (e.key === "ArrowRight") next();
+    if (e.key === "ArrowLeft")  prev();
+}});
+show();
+</script>
+</body>
+</html>"""
 
-    </div>
-
-    <script>
-    let imagesA = {json.dumps(imageA_list)};
-    let imagesB = {json.dumps(imageB_list)};
-    let infos   = {json.dumps(info_list)};
-
-    let idx = 0;
-
-    function show() {{
-        document.getElementById("imgA").src = imagesA[idx];
-        document.getElementById("imgB").src = imagesB[idx];
-        document.getElementById("info").innerHTML =
-            infos[idx] + "<br><br>" + (idx+1) + " / " + imagesA.length;
-    }}
-
-    function next() {{
-        idx = (idx + 1) % imagesA.length;
-        show();
-    }}
-
-    function prev() {{
-        idx = (idx - 1 + imagesA.length) % imagesA.length;
-        show();
-    }}
-
-    document.addEventListener("keydown", function(e) {{
-        if (e.key === "ArrowRight") next();
-        if (e.key === "ArrowLeft") prev();
-    }});
-
-    show();
-    </script>
-
-    </body>
-    </html>
-    """
     save_path = directory / "brittleness_carousel.html"
     with open(save_path, "w") as f:
         f.write(html)
@@ -345,107 +480,84 @@ def visualize_in_html(
     print("Saved brittleness_carousel.html")
     return save_path
 
+
 # ==== HELPER FUNCTIONS ====
 
 def unnormalize(img_tensor, transform=None):
     """
     Convert a possibly normalized image tensor to a displayable HWC NumPy array.
-
-    Args:
-        img_tensor (torch.Tensor): Image tensor of shape (C, H, W), possibly normalized.
-        transform (torchvision.transforms, optional): The transform used during dataset
-            preprocessing to extract mean and std for unnormalization.
-
-    Returns:
-        numpy.ndarray: Image array of shape (H, W, C) with values scaled to [0, 1]
-        suitable for visualization.
     """
     stats = extract_normalize(transform)
-
     img = img_tensor.clone()
 
     if stats is not None:
         mean, std = stats
-        mean = torch.tensor(mean).view(-1,1,1)
-        std  = torch.tensor(std).view(-1,1,1)
-        img = img * std + mean
+        mean = torch.tensor(mean).view(-1, 1, 1)
+        std  = torch.tensor(std).view(-1, 1, 1)
+        img  = img * std + mean
 
-    # Always make display-safe
     img = img - img.min()
     img = img / (img.max() + 1e-8)
+    return img.permute(1, 2, 0).numpy()
 
-    return img.permute(1,2,0).numpy()
 
 def get_topk_predictions(probs, k=3):
-    """
-    Get the top-k predicted class indices and their probabilities.
-
-    Args:
-        probs (torch.Tensor): Tensor of predicted probabilities (1D or batch 2D).
-        k (int, optional): Number of top predictions to return. Defaults to 3.
-
-    Returns:
-        List[Tuple[int, float]]: List of tuples containing (class_index, probability)
-        for the top-k predictions.
-    """
+    """Get the top-k predicted class indices and their probabilities."""
     vals, inds = probs.topk(k)
     return list(zip(inds.tolist(), vals.tolist()))
 
+
 def get_between_columns_x(fig):
-    """
-    Compute the midpoint x-coordinate between the first two x-axes of a Plotly figure.
-
-    Args:
-        fig (plotly.graph_objs.Figure): Plotly figure object with at least two x-axes.
-
-    Returns:
-        float: Midpoint between the end of the first x-axis and the start of the second.
-    """    
+    """Compute the midpoint x-coordinate between the first two x-axes of a Plotly figure."""
     x1 = fig.layout.xaxis.domain
     x2 = fig.layout.xaxis2.domain
     return 0.5 * (x1[1] + x2[0])
 
-def tensor_to_base64(img_tensor, transform=None):
+
+def tensor_to_base64(img_tensor, transform=None, max_size: int = None, jpeg_quality: int = None):
     """
-    Convert a C,H,W image tensor to a base64-encoded PNG string.
+    Convert a C,H,W image tensor to a base64-encoded image string.
 
     Args:
         img_tensor (torch.Tensor): Image tensor with shape (C, H, W), values in [0,1].
-        transform (torchvision.transforms, optional): Transform used during preprocessing,
-            used to unnormalize the tensor if needed.
+        transform: Optional preprocessing transform, used to unnormalize if needed.
+        max_size (int, optional): Downscale so the longest edge is at most this many pixels.
+        jpeg_quality (int, optional): If set (1-95), encode as JPEG. Otherwise PNG.
 
     Returns:
-        str: Base64-encoded PNG image suitable for embedding in HTML or JSON.
+        str: Base64-encoded image. Caller prepends the data URI prefix.
     """
-    img = unnormalize(img_tensor, transform)#img_tensor.permute(1,2,0).numpy()
+    img = unnormalize(img_tensor, transform)
     img = (img * 255).astype(np.uint8)
     pil_img = Image.fromarray(img)
+
+    if max_size is not None:
+        w, h = pil_img.size
+        scale = max_size / max(w, h)
+        if scale < 1.0:
+            pil_img = pil_img.resize(
+                (int(w * scale), int(h * scale)),
+                Image.LANCZOS
+            )
+
     buffer = io.BytesIO()
-    pil_img.save(buffer, format="PNG")
+    if jpeg_quality is not None:
+        pil_img.save(buffer, format="JPEG", quality=jpeg_quality, optimize=True)
+    else:
+        pil_img.save(buffer, format="PNG")
     return base64.b64encode(buffer.getvalue()).decode()
 
+
 def extract_normalize(transform):
-    """
-    Extract the mean and standard deviation from a torchvision Normalize transform.
-
-    Args:
-        transform (torchvision.transforms or None): Transform object to inspect.
-
-    Returns:
-        Tuple[List[float], List[float]] or None: Returns (mean, std) if a Normalize
-        transform is present, else None.
-    """
+    """Extract mean and std from a torchvision Normalize transform, if present."""
     if transform is None:
         return None
-
     if isinstance(transform, transforms.Normalize):
         return transform.mean, transform.std
-
     if isinstance(transform, transforms.Compose):
         for t in transform.transforms:
             if isinstance(t, transforms.Normalize):
                 return t.mean, t.std
-
     return None
 
 # ==== OTHER FUNCTIONS THAT ARE NOT USED FOR THIS WHOLE ALGO BUT I DON'T WANT TO DELETE THEM YET ====

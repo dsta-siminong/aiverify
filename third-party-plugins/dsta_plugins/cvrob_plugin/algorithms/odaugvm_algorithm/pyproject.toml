@@ -1,7 +1,7 @@
 [project]
 name = "odaugvm_algorithm"
 version = "0.1.0"
-description = "Object Detection Algorithm v Metric Algorithm--description"
+description = "Object Detection Algorithm v Metric Algorithm"
 authors = [{ name = "Example Author" }]
 readme = "README.md"
 dependencies = ["aiverify-test-engine[all]"]

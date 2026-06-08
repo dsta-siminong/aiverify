@@ -500,8 +500,7 @@ def get_ece(base_acc, y_pred, y_true, features, labels, pred_probs, n_bins=20):
 
     return float(ece)
 
-
-def collect_detection_scores(model, loader, device, score_mode="sum"):
+def collect_detection_scores(model, loader, device, score_mode="max"):
     model.eval()
 
     all_scores = []
@@ -512,12 +511,8 @@ def collect_detection_scores(model, loader, device, score_mode="sum"):
             images = [img.to(device) for img in images]
             outputs = model(images)
 
-            outputs = [
-                {k: v.cpu() for k, v in o.items()}
-                for o in outputs
-            ]
-
             for img, out in zip(images, outputs):
+
                 scores = out["scores"]
 
                 if len(scores) == 0:
@@ -529,8 +524,6 @@ def collect_detection_scores(model, loader, device, score_mode="sum"):
                         image_score = scores.mean().item()
                     elif score_mode == "sum":
                         image_score = scores.sum().item()
-                    else:
-                        raise ValueError("Unknown score_mode")
 
                 all_scores.append(image_score)
                 all_imgs.append(img.cpu())
@@ -597,6 +590,10 @@ def image_brittleness(predA, predB, iou_thresh=0.5):
 
     return max(drops) if drops else 0.0
 
+def serialize_detection(pred):
+    return {
+        k: v.cpu().tolist() for k,v in pred.items()
+    }
 
 class DetectionDataset(torch.utils.data.Dataset):
     def __init__(self, image_paths, targets, transform=None):

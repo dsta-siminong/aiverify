@@ -66,6 +66,8 @@ export const cid = "brittle_algorithm"
 ):(
   <div>No algorithm data</div>
 )}
+
+
 export const BrittleDisplay = ({ props }) => {
   const key = Object.keys(props.artifacts || {})[0];
   const artifactList = key ? props.artifacts[key] : [];
@@ -88,11 +90,14 @@ export const BrittleDisplay = ({ props }) => {
       {filteredArtifacts.map((url, i) => {
         const filename = url.split("/").pop();
 
-        const title = filename
-          ?.replace(".png", "")
-          ?.replace(".html", "")
-          ?.replace(/_/g, " ");
+        const isPng = url.endsWith(".png");
+        const isHtml = url.endsWith(".html");
 
+        const title = isPng
+          ? "Matplotlib PNG image"
+          : isHtml
+          ? "Plotly interactive HTML"
+          : "Unknown artifact";
         if (url.endsWith("carousel.html")) return null;
 
         return (
@@ -105,8 +110,16 @@ export const BrittleDisplay = ({ props }) => {
               boxShadow: "0 2px 8px rgba(0,0,0,0.06)"
             }}
           >
-            <h3 style={{ marginBottom: "1rem" }}>{title}</h3>
-
+            <h3
+              style={{
+                marginBottom: "1rem",
+                textAlign: "center",
+                textDecoration: "underline",
+                color: isPng ? "blue" : isHtml ? "purple" : "#000",
+              }}
+            >
+              {title}
+            </h3>
             {url.endsWith(".png") && (
               <img
                 src={url}

@@ -24,13 +24,13 @@
             "description": "predict_probabilities before",
             "type": "array",
             "minItems": 1,
-            "items": {"type": "number"}
+            "items": {"type": "object"}
         },
         "probs_B": {
             "description": "predict_probabilities after",
             "type": "array",
             "minItems": 1,
-            "items": {"type": "number"}
+            "items": {"type": "object"}
         },
         "labels": {
             "description": "labels",

@@ -9,7 +9,7 @@ from .cvrob_util import evaluate, collect_probs
 from plotly.subplots import make_subplots
 # from imagecorruptions import corrupt
 import matplotlib.pyplot as plt
-
+import json
 import base64
 from PIL import Image
 import io
@@ -286,12 +286,171 @@ def visualize_topk_plotly(
     fig.write_html(
         save_path,
         full_html=True,
-        include_plotlyjs="cdn",
+        include_plotlyjs="inline",
         config={"responsive": True}
     )
     return save_path
 
 def visualize_in_html(
+    results_sorted, 
+    imgsA, imgsB, 
+    probsA, probsB, 
+    labels, 
+    class_names=None, 
+    transform=None,
+    directory=Path(),
+    image_paths=None
+):
+    # Prepare image & info lists
+    img_base64_list = []
+    imageA_list = []
+    imageB_list = []
+    info_list = []
+
+    for res in results_sorted:
+        i = res.index
+        if image_paths is not None:
+            idx = Path(str(image_paths[i])).name
+        else:
+            idx = i
+        # images
+        imgA_b64 = "data:image/png;base64," + tensor_to_base64(imgsA[i], transform)
+        imgB_b64 = "data:image/png;base64," + tensor_to_base64(imgsB[i], transform)
+
+        # predictions
+        predA_cls = probsA[i].argmax().item()
+        predB_cls = probsB[i].argmax().item()
+
+        predA_p = probsA[i, predA_cls].item()
+        predB_p = probsB[i, predB_cls].item()
+
+        gt = labels[i].item()
+
+        imageA_list.append(imgA_b64)
+        imageB_list.append(imgB_b64)
+
+        if class_names is not None:
+            predA_cls = class_names[predA_cls]
+            predB_cls = class_names[predB_cls]
+            gt = class_names[gt]
+
+        bar_pct = int(res.brittleness * 100)
+        bar_color = (
+            "#2ecc71" if res.brittleness < 0.25 else
+            "#f1c40f" if res.brittleness < 0.5  else
+            "#e67e22" if res.brittleness < 0.75 else
+            "#e74c3c"
+        )
+
+        info_list.append(
+            # Ground truth
+            f'<b>Image:</b> {idx} <br>'
+            f'<b>Ground Truth class:</b> {gt}<br><br>'
+            # Before
+            f'<span style="color:#1a6fbb"><b>▶ Before corruption</b></span><br>'
+            f'&nbsp;&nbsp;Prediction: <b>{predA_cls}</b> &nbsp;|&nbsp; Confidence of {predA_cls} <b>{predA_p:.3f}</b><br><br>'
+            # After
+            f'<span style="color:#c0392b"><b>▶ After corruption</b></span><br>'
+            f'&nbsp;&nbsp;Prediction: <b>{predB_cls}</b> &nbsp;|&nbsp; Confidence of {predB_cls}: <b>{predB_p:.3f}</b><br>'
+            f'&nbsp;&nbsp;Confidence of {predA_cls} <b>{(predA_p - res.brittleness):.3f}</b><br><br>'
+            # Brittleness score + bar
+            f'<b>Brittleness Δ: {res.brittleness:.2f} / 1.00</b><br>'
+            f'<div style="background:#ddd;border-radius:4px;height:10px;width:300px;display:inline-block;margin:4px 0">'
+            f'<div style="background:{bar_color};width:{bar_pct}%;height:10px;border-radius:4px"></div></div><br>'
+            f'<small style="color:#888">'
+            f'Measures how much the model\'s best detection degraded after corruption.<br>'
+            f'0 = no change &nbsp;·&nbsp; 1 = detection confidently mispredicted'
+            f'</small>'
+        )
+
+
+
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+    <meta charset="utf-8">
+    <title>Brittleness Carousel</title>
+    <style>
+    body {{ font-family: Arial, sans-serif; background: #f9f9f9; }}
+    #container {{ text-align: center; margin-top: 30px; }}
+    .images {{ display: flex; justify-content: center; gap: 40px; flex-wrap: wrap; }}
+    .img-panel {{ display: flex; flex-direction: column; align-items: center; }}
+    .img-panel h3 {{ margin-bottom: 6px; }}
+    img {{ max-width: 320px; max-height: 320px; border: 2px solid #ccc; border-radius: 4px; }}
+    button {{ padding: 10px 24px; font-size: 16px; margin: 10px; border-radius: 4px;
+                border: none; background: #333; color: #fff; cursor: pointer; }}
+    button:hover {{ background: #555; }}
+    #info {{ margin: 16px auto; max-width: 620px; text-align: left;
+            background: #fff; border: 1px solid #ddd; border-radius: 6px;
+            padding: 16px 20px; font-size: 14px; line-height: 1.7; }}
+    #counter {{ font-size: 13px; color: #888; margin-top: 6px; }}
+    </style>
+    </head>
+    <body>
+    <div id="container">
+    <h2>Most Brittle Images (Before → After Corruption)</h2>
+    <div class="images">
+        <div class="img-panel">
+        <h3 style="color:#1a6fbb">Before Corruption</h3>
+        <img id="imgA">
+        </div>
+        <div class="img-panel">
+        <h3 style="color:#c0392b">After Corruption</h3>
+        <img id="imgB">
+        </div>
+    </div>
+    <div id="info"></div>
+    <div id="counter"></div>
+    <br>
+    <button onclick="prev()">⬅ Prev</button>
+    <button onclick="next()">Next ➡</button>
+    </div>
+
+    <script>
+    let imagesA = {json.dumps(imageA_list)};
+    let imagesB = {json.dumps(imageB_list)};
+    let infos = {json.dumps(info_list)};
+
+    let idx = 0;
+
+    function show() {{
+    document.getElementById("imgA").src = imagesA[idx];
+    document.getElementById("imgB").src = imagesB[idx];
+    document.getElementById("info").innerHTML =
+        infos[idx] + "<br><br>" + (idx+1) + " / " + imagesA.length;
+    }}
+
+    function next() {{
+    idx = (idx + 1) % imagesA.length;
+    show();
+    }}
+
+    function prev() {{
+    idx = (idx - 1 + imagesA.length) % imagesA.length;
+    show();
+    }}
+
+    document.addEventListener("keydown", function(e) {{
+    if (e.key === "ArrowRight") next();
+    if (e.key === "ArrowLeft") prev();
+    }});
+
+    show();
+    </script>
+
+    </body>
+    </html>
+    """
+    save_path = directory / "brittleness_carousel.html"
+    with open(save_path, "w") as f:
+        f.write(html)
+
+    print("Saved brittleness_carousel.html")
+    return save_path
+
+
+def visualize_in_html2(
     results_sorted, 
     imgsA, imgsB, 
     probsA, probsB, 

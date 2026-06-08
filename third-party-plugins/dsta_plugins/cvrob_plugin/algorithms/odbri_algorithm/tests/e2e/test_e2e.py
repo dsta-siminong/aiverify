@@ -24,7 +24,7 @@ binary_classification_pipeline = {
         "severity_before": None,
         "severity_after": None,
         "severity_before_idx": 0,
-        "severity_after_idx": 1,
+        "severity_after_idx": 5,
     }
 }
 
