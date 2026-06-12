@@ -423,11 +423,7 @@ class Plugin(IAlgorithm):
             first_drop = accuracies[1] - accuracies[0]
             severities = ["None"] + aug_class.severities
             for severity_idx, severity in enumerate(severities):
-                # corrupted_images = self._get_corrupted_images(test_loader, aug_class, severity)
                 corrupted_dir = Path(aug_name) / f"severity{severity}"
-                # corrupted_image_paths = self._save_images(corrupted_images, str(corrupted_dir))
-                # image = torch.tensor(corrupted_images[display_idx]).unsqueeze(0)  # shape [1, C, H, W]
-                # display_image = corrupted_images[display_idx]
                 display_image = self._get_one_corrupted_image(
                     test_loader, aug_class, severity, display_idx
                 )
@@ -473,20 +469,20 @@ class Plugin(IAlgorithm):
 
         self._results = output_results
 
-    def _get_corrupted_images(self, testloader, aug_class, _severity):
-        corrupted_images = []
-        for images, labels in testloader:   
-            images_np = (images * 255).byte().numpy().transpose(0, 2, 3, 1)  # Convert to HWC format and uint8
+    # def _get_corrupted_images(self, testloader, aug_class, _severity):
+    #     corrupted_images = []
+    #     for images, labels in testloader:   
+    #         images_np = (images * 255).byte().numpy().transpose(0, 2, 3, 1)  # Convert to HWC format and uint8
             
-            # Apply corruption function with provided parameters
-            if aug_class.name == "None" or _severity == "None":
-                corrupted = images_np
-            else:
-                corrupted = aug_class.corr_func_arr(images_np, _severity)
+    #         # Apply corruption function with provided parameters
+    #         if aug_class.name == "None" or _severity == "None":
+    #             corrupted = images_np
+    #         else:
+    #             corrupted = aug_class.corr_func_arr(images_np, _severity)
             
-            corrupted = (torch.tensor(corrupted.transpose(0, 3, 1, 2), dtype=torch.float32) / 255.0).numpy()  #as opposed to torch.tensor
-            corrupted_images.append(corrupted)
-        return np.concatenate(corrupted_images, axis=0)
+    #         corrupted = (torch.tensor(corrupted.transpose(0, 3, 1, 2), dtype=torch.float32) / 255.0).numpy()  #as opposed to torch.tensor
+    #         corrupted_images.append(corrupted)
+    #     return np.concatenate(corrupted_images, axis=0)
 
     def _load_images(self, image_paths: list[str], labels) -> list[np.ndarray]:
         """
@@ -517,43 +513,57 @@ class Plugin(IAlgorithm):
 
         return dataset, loader
 
-    def _save_images(self, images: list[np.ndarray], subfolder_name: str) -> list[str]:
-        """
-        Save a list of numpy arrays as images in a subfolder.
+    # def _save_images(self, images: list[np.ndarray], subfolder_name: str) -> list[str]:
+    #     """
+    #     Save a list of numpy arrays as images in a subfolder.
 
-        Args:
-            images (list[np.ndarray]): A list of numpy images
-            subfolder_name (str): The name of the subfolder to save images
+    #     Args:
+    #         images (list[np.ndarray]): A list of numpy images
+    #         subfolder_name (str): The name of the subfolder to save images
 
-        Returns:
-            list[str]: A list of saved image paths
-        """
-        image_paths = []
-        save_dir = self._save_folder / subfolder_name
-        save_dir.mkdir(parents=True, exist_ok=True)
+    #     Returns:
+    #         list[str]: A list of saved image paths
+    #     """
+    #     image_paths = []
+    #     save_dir = self._save_folder / subfolder_name
+    #     save_dir.mkdir(parents=True, exist_ok=True)
 
-        for idx, image in enumerate(images):
-            image_path = save_dir / f"{idx}.png"
-            # print("image shape", image.shape)
-            image = np.transpose(image, (1, 2, 0))
-            Image.fromarray((image * 255.0).astype(np.uint8)).save(image_path)
-            image_paths.append(str(image_path))
-        return image_paths
+    #     for idx, image in enumerate(images):
+    #         image_path = save_dir / f"{idx}.png"
+    #         # print("image shape", image.shape)
+    #         image = np.transpose(image, (1, 2, 0))
+    #         Image.fromarray((image * 255.0).astype(np.uint8)).save(image_path)
+    #         image_paths.append(str(image_path))
+    #     return image_paths
 
     def _save_one_image(self, image: np.ndarray, subfolder_name: str, idx: int) -> str:
+
         save_dir = self._save_folder / subfolder_name
         save_dir.mkdir(parents=True, exist_ok=True)
 
         image_path = save_dir / f"{idx}.png"
-        image = np.transpose(image, (1, 2, 0))
-        Image.fromarray((image * 255.0).astype(np.uint8)).save(image_path)
+
+        # CHW -> HWC
+        image = image.transpose(1, 2, 0)
+
+        image = image.astype(np.float32)
+
+        # normalize safely
+        if image.max() <= 1.5:
+            image *= 255.0
+
+        image = np.clip(image, 0, 255).astype(np.uint8)
+
+        Image.fromarray(image).save(image_path)
 
         return str(image_path)
 
     def _get_one_corrupted_image(self, testloader, aug_class, severity, target_idx):
+
         current_idx = 0
 
         for images, labels in testloader:
+
             batch_size = images.shape[0]
 
             # Check if target is inside this batch

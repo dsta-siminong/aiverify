@@ -1,0 +1,92 @@
+the computation of results (results for those that had correct predictions at first but then after perturbation the prediction is wrong) in matplotlib is below
+
+can you look for what to replace and what to replace with?
+
+```
+        results = [
+            r for r in b_result.results
+            if r.predA == r.label and r.predB != r.label
+        ]
+        mpl_path = visualize_topk_matplotlib(
+            results, 
+            b_result.imgsA, 
+            b_result.imgsB, 
+            b_result.probs_A, 
+            b_result.probs_B,  
+            K=min(TOPK, len(results)),
+            class_names=class_names_int, 
+            transform=None,
+            directory=mpl_dir,
+            image_paths=image_paths
+        )
+
+def visualize_topk_matplotlib(
+    results_sorted, 
+    imgs_A, imgs_B, 
+    probs_A, probs_B, 
+    K=10,
+    class_names=None, 
+    transform=None,
+    directory=Path(),
+    image_paths=None
+):
+    topk = results_sorted[:K]
+    fig, axes = plt.subplots(
+        K, 2,
+        figsize=(12, 3 * K),
+        constrained_layout=True
+    )
+    for ax in axes.flat:
+        for spine in ax.spines.values():
+            spine.set_visible(True)
+
+    print(f"TRANSFORM: {transform}")
+    for row, res in enumerate(topk):
+        i = res.index
+        if image_paths is not None:
+            idx = Path(str(image_paths[i])).name
+        else:
+            idx = i
+
+        imgA = unnormalize(imgs_A[i], transform)
+        imgB = unnormalize(imgs_B[i], transform)
+
+        predA = get_topk_predictions(probs_A[i], k=1)[0]
+        predB = get_topk_predictions(probs_B[i], k=1)[0]
+
+        classA = predA[0]
+        classB = predB[0]
+        if class_names is not None:
+            classA = class_names[predA[0]]
+            classB = class_names[predB[0]]
+
+        axes[row, 0].imshow(imgA)
+        axes[row, 0].axis("off")
+        axes[row, 0].text(
+            0.02, 0.98,
+            f"image idx: {idx}\nA (before) | pred={classA}\n\npred_proba of classA={predA[1]:.3f}",
+            transform=axes[row, 0].transAxes,
+            va="top",
+            ha="left",
+            fontsize=9,
+            bbox=dict(boxstyle="round", facecolor="white", alpha=0.8)
+        )
+        
+        # plt.tight_layout()
+
+        axes[row, 1].imshow(imgB)
+        axes[row, 1].axis("off")
+        axes[row, 1].text(
+            0.02, 0.98,
+            f"image idx: {idx}\nB (after) | pred={classB}\npred_proba of classB={predB[1]:.3f}\npred_proba of classA={(predA[1]-res.brittleness):.3f} | Δ={res.brittleness:.3f}",
+            transform=axes[row, 1].transAxes,
+            va="top",
+            ha="left",
+            fontsize=9,
+            bbox=dict(boxstyle="round", facecolor="white", alpha=0.8)
+        )
+    save_path = directory / "brittleness_top_k_gaussianblur.png"
+    plt.savefig(save_path)
+    print("SAVING FIGURE")
+    return save_path
+```

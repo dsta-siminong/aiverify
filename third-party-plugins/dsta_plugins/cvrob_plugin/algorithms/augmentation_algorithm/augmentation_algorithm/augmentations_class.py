@@ -25,16 +25,6 @@ def check_module(module):
     else:
         raise ValueError('not valid library name')
 
-# def corrupt_func_album_reduced_0(images_np, aug_func, aug_params):
-#     rseed = 42
-#     if 'random_seed' in aug_params:
-#         rseed = aug_params['random_seed']
-#         aug_params = {k:v for k,v in aug_params.items() if k != 'random_seed'}
-#     transform = A.Compose([aug_func(**aug_params), ToTensorV2()])
-#     transform.set_random_seed(rseed)
-#     corrupted_imgs = np.array([ transform(image=img)['image'].permute(1, 2, 0).numpy() for img in images_np ])
-#     return corrupted_imgs
-
 def corrupt_func_album_reduced(images_np, aug_func, aug_params):
     rseed = aug_params.get("random_seed", 42)
     aug_params = {k:v for k,v in aug_params.items() if k != "random_seed"}
@@ -287,7 +277,6 @@ def make_augmentation_dict_album2():
                 v1['random_seed'] = 42
         aug_func = v[list(v.keys())[0]][0]
         print(aug_func , "aug_func")
-        # print(aug_tuple[1], aug_tuple[0])
         new_aug = Augmentation(k, param_dict, aug_func)
         d[k] = new_aug 
     return d 
@@ -310,7 +299,6 @@ def make_augmentation_dict_imagecorrupt():
         augmentations_album2.append((aug_func, td))
     d = {}
     for aug_tuple, aug_name in zip(augmentations_album2, aug_names_album):
-        # print(aug_tuple[1], aug_tuple[0])
         new_aug = Augmentation(aug_name, aug_tuple[1], aug_tuple[0])
         d[aug_name] = new_aug 
     return d
@@ -330,11 +318,6 @@ class Augmentation:
         self.random_seed = None
         self.deterministic = True if name in DETERMINISTIC else False 
 
-    # def set_seed_0(self, x):
-    #     self.random_seed =  x
-    #     if self.name != "None":
-    #         for k,v in self.param_dict.items():
-    #             v['random_seed'] = x
 
     def set_seed(self, x):
         self.random_seed = x
@@ -404,6 +387,7 @@ class Augmentation:
         )
 
 class CorruptedDataset(torch.utils.data.Dataset):
+
     def __init__(self, dataset, corr_func, severity_idx):
         self.dataset = dataset
         self.corr_func = corr_func
@@ -413,6 +397,7 @@ class CorruptedDataset(torch.utils.data.Dataset):
         return len(self.dataset)
 
     def __getitem__(self, idx):
+
         image, label = self.dataset[idx]
 
         image_np = (
@@ -440,4 +425,3 @@ class CorruptedDataset(torch.utils.data.Dataset):
         ).float().div_(255.0)
 
         return corrupted, label
-

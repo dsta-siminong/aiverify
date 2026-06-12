@@ -21,8 +21,8 @@ binary_classification_pipeline = {
     "plugin_argument_values": {
         "class_names": None,#"13",#Barge,CG-P,ContainerShip,Cruise,Dredger,Ferry,LNG-LPG,RORO,Sampan,Trawler-FishingVessel,Tugboat,Warship,Yacht",
         "aug_library": 'albumentations',
-        "aug_methods": 'all',
-        "num_epochs": 3,
+        "aug_methods": 'GaussianBlur',
+        "num_epochs": 1,
         "custom_parameters": None#"GaussianBlur sigma_limit 1.6,2.6,3.6,4.6 GaussianNoise std_range (0.06,0.06),(0.12,0.12),(0.18,0.18),(0.24,0.24)"
     }
 }

@@ -9,13 +9,12 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 # from imagecorruptions import corrupt
 import matplotlib.pyplot as plt
-
+import json
 import base64
 from PIL import Image
 import io
 from pathlib import Path
 from dataclasses import dataclass
-import json 
 
 @dataclass
 class BrittlenessResultIndiv:
@@ -164,6 +163,98 @@ def _detection_summary(scores_dict) -> tuple:
     return n, top
 
 
+
+def _draw_detections_on_image(
+    pil_img,
+    pred: dict,
+    gt_objects: list,
+    class_names: dict,
+    score_threshold: float = 0.5,
+):
+    """
+    Draw ground-truth boxes (green) and predicted boxes (red) onto *pil_img* in-place.
+
+    Args:
+        pil_img (PIL.Image.Image): RGB image to draw on.
+        pred (dict): Detection output dict with keys "boxes", "labels", "scores".
+        gt_objects (list): Ground-truth for this image — a list of dicts each with
+                           ``{"bbox": [x1,y1,x2,y2], "label": int}``.
+        class_names (dict): Mapping str(label_id) -> class name.
+        score_threshold (float): Predictions below this confidence are skipped.
+    """
+    from PIL import ImageDraw, ImageFont
+    import numpy as np
+
+    draw = ImageDraw.Draw(pil_img)
+
+    try:
+        font = ImageFont.truetype(
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 12
+        )
+    except Exception:
+        font = ImageFont.load_default()
+
+    # Ground-truth boxes — green
+    for obj in (gt_objects or []):
+        bbox  = obj.get("bbox", []) if isinstance(obj, dict) else obj
+        label = obj.get("label") if isinstance(obj, dict) else None
+        if len(bbox) == 4:
+            x1, y1, x2, y2 = [float(v) for v in bbox]
+            draw.rectangle([x1, y1, x2, y2], outline=(0, 200, 0), width=2)
+            if label is not None:
+                name = class_names.get(str(label), str(label)) if class_names else str(label)
+                draw.text((x1, max(0, y1 - 13)), f"GT:{name}", fill=(0, 200, 0), font=font)
+
+    # Predicted boxes — red
+    boxes  = pred.get("boxes")
+    labels = pred.get("labels")
+    scores = pred.get("scores")
+
+    if boxes is not None and len(boxes) > 0:
+        boxes_np  = boxes.cpu().numpy()  if hasattr(boxes,  "cpu") else np.asarray(boxes)
+        labels_np = labels.cpu().numpy() if hasattr(labels, "cpu") else np.asarray(labels)
+        scores_np = scores.cpu().numpy() if hasattr(scores, "cpu") else np.asarray(scores)
+
+        for box, lbl, score in zip(boxes_np, labels_np, scores_np):
+            if float(score) < score_threshold:
+                continue
+            x1, y1, x2, y2 = [float(v) for v in box]
+            draw.rectangle([x1, y1, x2, y2], outline=(220, 30, 30), width=2)
+            name = class_names.get(str(lbl), str(lbl)) if class_names else str(lbl)
+            draw.text((x1, max(0, y1 - 13)), f"{name} {score:.2f}", fill=(220, 30, 30), font=font)
+
+
+def _tensor_to_pil_with_detections(
+    img_tensor,
+    pred: dict,
+    gt_objects: list,
+    class_names: dict,
+    transform=None,
+    score_threshold: float = 0.5,
+) -> "PIL.Image.Image":
+    """
+    Unnormalise *img_tensor* to a PIL RGB image and optionally overlay detections.
+
+    When both *pred* and *gt_objects* are ``None`` the image is returned as-is
+    (no drawing step), making this a drop-in replacement for the raw-image path.
+    """
+    import numpy as np
+    img_np = unnormalize(img_tensor, transform)
+    img_np = (img_np * 255).astype(np.uint8)
+    pil_img = Image.fromarray(img_np).convert("RGB")
+
+    if pred is not None or gt_objects is not None:
+        _draw_detections_on_image(
+            pil_img,
+            pred       or {"boxes": [], "labels": [], "scores": []},
+            gt_objects or [],
+            class_names or {},
+            score_threshold=score_threshold,
+        )
+
+    return pil_img
+
+
 # ==== VISUALISATION FUNCTIONS ====
 
 def visualize_topk_matplotlib(
@@ -174,7 +265,12 @@ def visualize_topk_matplotlib(
     class_names=None,
     transform=None,
     directory=Path(),
-    image_paths=None
+    image_paths=None,
+    # ── detection-overlay params (all optional) ──────────────────────────
+    # Pass these to draw predicted + ground-truth boxes on each image.
+    # When omitted, the plain augmented images are shown (original behaviour).
+    gt_labels=None,        # list[list[dict]]: ground-truth per image, each dict {"bbox":…,"label":…}
+    score_threshold=0.5,   # predictions below this confidence are skipped
 ):
     topk = results_sorted[:K]
 
@@ -187,8 +283,17 @@ def visualize_topk_matplotlib(
         i = res.index
         idx = Path(str(image_paths[i])).name if image_paths else i
 
-        imgA = unnormalize(imgs_A[i], transform)
-        imgB = unnormalize(imgs_B[i], transform)
+        _with_det = gt_labels is not None
+        imgA = _tensor_to_pil_with_detections(
+            imgs_A[i], scores_A[i] if _with_det else None,
+            gt_labels[i] if _with_det else None,
+            class_names, transform, score_threshold,
+        )
+        imgB = _tensor_to_pil_with_detections(
+            imgs_B[i], scores_B[i] if _with_det else None,
+            gt_labels[i] if _with_det else None,
+            class_names, transform, score_threshold,
+        )
 
         n_A, top_A = _detection_summary(scores_A[i])
         n_B, top_B = _detection_summary(scores_B[i])
@@ -234,7 +339,8 @@ def visualize_topk_matplotlib(
             bbox=dict(boxstyle="round", facecolor="white", alpha=0.8)
         )
 
-    save_path = directory / "brittleness_topk.png"
+    _suffix = "_with_predictions" if gt_labels is not None else ""
+    save_path = directory / f"brittleness_topk{_suffix}.png"
     plt.savefig(save_path)
     plt.close(fig)
 
@@ -249,7 +355,10 @@ def visualize_topk_plotly(
     class_names=None,
     transform=None,
     directory=Path(),
-    image_paths=None
+    image_paths=None,
+    # ── detection-overlay params (all optional) ──────────────────────────
+    gt_labels=None,        # list[list[dict]]: ground-truth per image
+    score_threshold=0.5,
 ):
     topk = results_sorted[:K]
 
@@ -266,9 +375,24 @@ def visualize_topk_plotly(
         i = res.index
         idx = Path(str(image_paths[i])).name if image_paths else i
 
-        # Encode as JPEG (10-30x smaller than raw z= array)
-        imgA_b64 = "data:image/jpeg;base64," + tensor_to_base64(imgs_A[i], transform, jpeg_quality=85)
-        imgB_b64 = "data:image/jpeg;base64," + tensor_to_base64(imgs_B[i], transform, jpeg_quality=85)
+        # Encode as JPEG (10-30x smaller than raw z= array).
+        # When gt_labels is supplied, render detections onto the PIL image first,
+        # then base64-encode that instead of the raw tensor.
+        _with_det = gt_labels is not None
+        if _with_det:
+            imgA_b64 = "data:image/jpeg;base64," + _pil_to_base64(
+                _tensor_to_pil_with_detections(
+                    imgs_A[i], scores_A[i], gt_labels[i], class_names, transform, score_threshold
+                ), jpeg_quality=85
+            )
+            imgB_b64 = "data:image/jpeg;base64," + _pil_to_base64(
+                _tensor_to_pil_with_detections(
+                    imgs_B[i], scores_B[i], gt_labels[i], class_names, transform, score_threshold
+                ), jpeg_quality=85
+            )
+        else:
+            imgA_b64 = "data:image/jpeg;base64," + tensor_to_base64(imgs_A[i], transform, jpeg_quality=85)
+            imgB_b64 = "data:image/jpeg;base64," + tensor_to_base64(imgs_B[i], transform, jpeg_quality=85)
 
         n_A, top_A = _detection_summary(scores_A[i])
         n_B, top_B = _detection_summary(scores_B[i])
@@ -321,7 +445,8 @@ def visualize_topk_plotly(
         template="plotly_white"
     )
 
-    save_path = directory / "brittleness_topk.html"
+    _suffix = "_with_predictions" if gt_labels is not None else ""
+    save_path = directory / f"brittleness_topk{_suffix}.html"
     fig.write_html(save_path, include_plotlyjs="inline")
 
     return save_path
@@ -338,6 +463,11 @@ def visualize_in_html(
     image_paths=None,
     max_size: int = 320,
     jpeg_quality: int = 85,
+    # ── detection-overlay params (all optional) ──────────────────────────
+    # gt_labels is already available as `labels` in this function.
+    # Pass draw_detections=True to enable the overlay (uses labels + scoresA/B).
+    draw_detections: bool = False,
+    score_threshold: float = 0.5,
 ):
     """
     Build a side-by-side carousel HTML of the most brittle images.
@@ -357,8 +487,20 @@ def visualize_in_html(
         i = res.index
         idx = Path(str(image_paths[i])).name if image_paths else i
 
-        imgA_b64 = mime + tensor_to_base64(imgsA[i], transform, max_size=max_size, jpeg_quality=jpeg_quality)
-        imgB_b64 = mime + tensor_to_base64(imgsB[i], transform, max_size=max_size, jpeg_quality=jpeg_quality)
+        if draw_detections:
+            imgA_b64 = mime + _pil_to_base64(
+                _tensor_to_pil_with_detections(
+                    imgsA[i], scoresA[i], labels[i], class_names, transform, score_threshold
+                ), max_size=max_size, jpeg_quality=jpeg_quality
+            )
+            imgB_b64 = mime + _pil_to_base64(
+                _tensor_to_pil_with_detections(
+                    imgsB[i], scoresB[i], labels[i], class_names, transform, score_threshold
+                ), max_size=max_size, jpeg_quality=jpeg_quality
+            )
+        else:
+            imgA_b64 = mime + tensor_to_base64(imgsA[i], transform, max_size=max_size, jpeg_quality=jpeg_quality)
+            imgB_b64 = mime + tensor_to_base64(imgsB[i], transform, max_size=max_size, jpeg_quality=jpeg_quality)
 
         n_A, top_A = _detection_summary(scoresA[i])
         n_B, top_B = _detection_summary(scoresB[i])
@@ -473,7 +615,8 @@ show();
 </body>
 </html>"""
 
-    save_path = directory / "brittleness_carousel.html"
+    _suffix = "_with_predictions" if draw_detections else ""
+    save_path = directory / f"brittleness_carousel{_suffix}.html"
     with open(save_path, "w") as f:
         f.write(html)
 
@@ -488,31 +631,35 @@ def unnormalize(img_tensor, transform=None):
     Convert a possibly normalized image tensor to a displayable HWC NumPy array.
     """
     stats = extract_normalize(transform)
+
     img = img_tensor.clone()
 
     if stats is not None:
         mean, std = stats
-        mean = torch.tensor(mean).view(-1, 1, 1)
-        std  = torch.tensor(std).view(-1, 1, 1)
-        img  = img * std + mean
+        mean = torch.tensor(mean).view(-1,1,1)
+        std  = torch.tensor(std).view(-1,1,1)
+        img = img * std + mean
 
+    # Always make display-safe
     img = img - img.min()
     img = img / (img.max() + 1e-8)
-    return img.permute(1, 2, 0).numpy()
 
+    return img.permute(1,2,0).numpy()
 
 def get_topk_predictions(probs, k=3):
-    """Get the top-k predicted class indices and their probabilities."""
+    """
+    Get the top-k predicted class indices and their probabilities.
+
+    Args:
+        probs (torch.Tensor): Tensor of predicted probabilities (1D or batch 2D).
+        k (int, optional): Number of top predictions to return. Defaults to 3.
+
+    Returns:
+        List[Tuple[int, float]]: List of tuples containing (class_index, probability)
+        for the top-k predictions.
+    """
     vals, inds = probs.topk(k)
     return list(zip(inds.tolist(), vals.tolist()))
-
-
-def get_between_columns_x(fig):
-    """Compute the midpoint x-coordinate between the first two x-axes of a Plotly figure."""
-    x1 = fig.layout.xaxis.domain
-    x2 = fig.layout.xaxis2.domain
-    return 0.5 * (x1[1] + x2[0])
-
 
 def tensor_to_base64(img_tensor, transform=None, max_size: int = None, jpeg_quality: int = None):
     """
@@ -547,17 +694,62 @@ def tensor_to_base64(img_tensor, transform=None, max_size: int = None, jpeg_qual
         pil_img.save(buffer, format="PNG")
     return base64.b64encode(buffer.getvalue()).decode()
 
+def _pil_to_base64(
+    pil_img,
+    max_size: int = None,
+    jpeg_quality: int = None,
+) -> str:
+    """
+    Encode an already-rendered PIL image to base64.
+
+    This is the PIL counterpart of tensor_to_base64: it accepts an image that
+    has already been drawn on (e.g. with detection overlays) and encodes it
+    without re-running unnormalize().
+
+    Args:
+        pil_img (PIL.Image.Image): RGB image to encode.
+        max_size (int, optional): Downscale longest edge to at most this many pixels.
+        jpeg_quality (int, optional): JPEG quality 1-95; PNG if None.
+
+    Returns:
+        str: Base64-encoded image string (no data-URI prefix).
+    """
+    if max_size is not None:
+        w, h = pil_img.size
+        scale = max_size / max(w, h)
+        if scale < 1.0:
+            pil_img = pil_img.resize(
+                (int(w * scale), int(h * scale)),
+                Image.LANCZOS
+            )
+    buffer = io.BytesIO()
+    if jpeg_quality is not None:
+        pil_img.save(buffer, format="JPEG", quality=jpeg_quality, optimize=True)
+    else:
+        pil_img.save(buffer, format="PNG")
+    return base64.b64encode(buffer.getvalue()).decode()
 
 def extract_normalize(transform):
-    """Extract mean and std from a torchvision Normalize transform, if present."""
+    """
+    Extract the mean and standard deviation from a torchvision Normalize transform.
+
+    Args:
+        transform (torchvision.transforms or None): Transform object to inspect.
+
+    Returns:
+        Tuple[List[float], List[float]] or None: Returns (mean, std) if a Normalize
+        transform is present, else None.
+    """
+
     if transform is None:
         return None
+
     if isinstance(transform, transforms.Normalize):
         return transform.mean, transform.std
+
     if isinstance(transform, transforms.Compose):
         for t in transform.transforms:
             if isinstance(t, transforms.Normalize):
                 return t.mean, t.std
-    return None
 
-# ==== OTHER FUNCTIONS THAT ARE NOT USED FOR THIS WHOLE ALGO BUT I DON'T WANT TO DELETE THEM YET ====
+    return None

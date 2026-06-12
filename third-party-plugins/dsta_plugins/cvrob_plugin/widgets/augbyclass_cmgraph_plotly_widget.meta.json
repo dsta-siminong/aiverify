@@ -1,13 +1,13 @@
 {
-  "cid": "augbyclass_cm_widget",
+  "cid": "augbyclass_cmgraph_plotly_widget",
   "widgetSize": {
     "minW": 12,
     "minH": 1,
     "maxW": 12,
     "maxH": 36
   },
-  "name": "Augmentations By Class Widget for Confusion Matrix Plots",
-  "description": "Augmentations By Class Widget for Confusion Matrix Plots",
+  "name": "Augmentations By Class Widget for Confusion Matrix Line Graphs (FOR PLOTLY)",
+  "description": "Augmentations By Class Widget for Confusion Matrix Line Graphs (plotly)",
   "dynamicHeight": true,
   "dependencies": [
     {
@@ -24,8 +24,8 @@
   "properties": [
     {
       "key": "title",
-      "helper": "Set the widget title (default \"AUGMENTATIONS BY CLASS - CONFUSION MATRIX\")",
-      "default": "AUGMENTATIONS BY CLASS - CONFUSION MATRIX"
+      "helper": "Set the widget title (default \"AUGMENTATIONS BY CLASS - CONFUSION MATRIX - PLOTLY\")",
+      "default": "AUGMENTATIONS BY CLASS - CONFUSION MATRIX - PLOTLY"
     }
   ]
 }

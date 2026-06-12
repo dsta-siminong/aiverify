@@ -13,28 +13,28 @@ from torchmetrics.detection.mean_ap import MeanAveragePrecision
 from collections import defaultdict
 from torchvision.ops import box_iou
 
-def average_detection_stats(all_stats):
+# def average_detection_stats(all_stats):
 
-    avg_stats = {}
+#     avg_stats = {}
 
-    class_keys = all_stats[0].keys()
+#     class_keys = all_stats[0].keys()
 
-    for cls_name in class_keys:
+#     for cls_name in class_keys:
 
-        avg_stats[cls_name] = {}
+#         avg_stats[cls_name] = {}
 
-        metric_keys = all_stats[0][cls_name].keys()
+#         metric_keys = all_stats[0][cls_name].keys()
 
-        for metric in metric_keys:
+#         for metric in metric_keys:
 
-            values = [
-                stats[cls_name][metric]
-                for stats in all_stats
-            ]
+#             values = [
+#                 stats[cls_name][metric]
+#                 for stats in all_stats
+#             ]
 
-            avg_stats[cls_name][metric] = float(np.mean(values))
+#             avg_stats[cls_name][metric] = float(np.mean(values))
 
-    return avg_stats
+#     return avg_stats
 
 def evaluate_detection_detailed(
     model,
@@ -76,10 +76,10 @@ def evaluate_detection_detailed(
                 for t in targets
             ]
             outputs = model(images)
-            print("\n=== LABEL SANITY CHECK ===")
-            print("GT labels (batch):", [torch.unique(t["labels"]).tolist() for t in targets])
-            print("Pred labels (batch):", [torch.unique(o["labels"]).tolist() for o in outputs])
-            print("Class mapping keys:", list(class_names.keys()))
+            # print("\n=== LABEL SANITY CHECK ===")
+            # print("GT labels (batch):", [torch.unique(t["labels"]).tolist() for t in targets])
+            # print("Pred labels (batch):", [torch.unique(o["labels"]).tolist() for o in outputs])
+            # print("Class mapping keys:", list(class_names.keys()))
             preds = [
                 {
                     k: v.cpu()
@@ -95,9 +95,9 @@ def evaluate_detection_detailed(
                 for t in targets
             ]
             metric.update(preds, gts)
-            print("\n=== IMAGE SUMMARY ===")
-            print("num preds:", sum(len(o["boxes"]) for o in preds))
-            print("num gts:", sum(len(t["boxes"]) for t in gts))
+            # print("\n=== IMAGE SUMMARY ===")
+            # print("num preds:", sum(len(o["boxes"]) for o in preds))
+            # print("num gts:", sum(len(t["boxes"]) for t in gts))
 
             # =================================================
             # PER-IMAGE MATCHING
@@ -109,14 +109,14 @@ def evaluate_detection_detailed(
                 pred_labels = pred["labels"]
                 pred_scores = pred["scores"]
 
-                print("\n=== SCORE DISTRIBUTION ===")
-                if len(pred_scores) > 0:
-                    print("Raw scores min/max:",
-                        pred_scores.min().item(),
-                        pred_scores.max().item())
-                else:
-                    print("No predictions")
-                print("Num predictions:", len(pred_scores))
+                # print("\n=== SCORE DISTRIBUTION ===")
+                # if len(pred_scores) > 0:
+                #     print("Raw scores min/max:",
+                #         pred_scores.min().item(),
+                #         pred_scores.max().item())
+                # else:
+                #     print("No predictions")
+                # print("Num predictions:", len(pred_scores))
 
                 gt_boxes = gt["boxes"]
                 gt_labels = gt["labels"]
@@ -124,7 +124,7 @@ def evaluate_detection_detailed(
                 # score filtering
                 keep = pred_scores >= score_thresh
 
-                print("Kept after threshold:", keep.sum().item(), "/", len(keep))
+                # print("Kept after threshold:", keep.sum().item(), "/", len(keep))
 
                 pred_boxes = pred_boxes[keep]
                 pred_labels = pred_labels[keep]
@@ -186,15 +186,13 @@ def evaluate_detection_detailed(
                         matrix[int(glabel), 0] += 1             # GT=class x, PRED=background
                         stats[class_name]["FN"] += 1
 
-
-                print("\n=== FINAL MATCH SUMMARY ===")
-                print("Matched GTs:", len(matched_gt))
-                print("Total GTs:", len(gt_boxes))
-                print("Matched indices:", matched_gt)
+                # print("\n=== FINAL MATCH SUMMARY ===")
+                # print("Matched GTs:", len(matched_gt))
+                # print("Total GTs:", len(gt_boxes))
+                # print("Matched indices:", matched_gt)
     # =====================================================
     # FINAL METRICS
     # =====================================================
-
 
     # print("UNIQUE GT CLASSES IN MATRIX:", np.unique(np.where(matrix > 0)[0]))
     # print("UNIQUE PRED CLASSES IN MATRIX:", np.unique(np.where(matrix > 0)[1]))
@@ -233,12 +231,11 @@ def evaluate_detection_detailed(
 
     map_result = metric.compute()
 
-
-    print("\n=== FINAL MATRIX CHECK ===")
-    print("Matrix sum:", np.diag(matrix).sum(), matrix.sum())
-    print("Diagonal sum:", np.trace(matrix))
-    print("Off-diagonal sum:", matrix.sum() - np.trace(matrix))
-    print(set(pred_labels.tolist()), set(gt_labels.tolist()))
+    # print("\n=== FINAL MATRIX CHECK ===")
+    # print("Matrix sum:", np.diag(matrix).sum(), matrix.sum())
+    # print("Diagonal sum:", np.trace(matrix))
+    # print("Off-diagonal sum:", matrix.sum() - np.trace(matrix))
+    # print(set(pred_labels.tolist()), set(gt_labels.tolist()))
     # print(1/0)
     return {
         "map_50": map_result["map_50"].item(),
@@ -311,6 +308,7 @@ def augmentation_gradient_det(model, test_loader, device, aug_class, plot_graphs
     fig.savefig(fig_path)
     plt.close()
     return best_fit_gradient(list(range(len(severities)+1)), maps), maps, fig_path
+    
 def get_num_classes(model: nn.Module) -> int:
     """
     Infer number of classes from classification OR detection models.
@@ -521,58 +519,52 @@ def best_fit_gradient(x_values, y_values):
     
     return numerator / denominator
 
-class DetectionDataset(torch.utils.data.Dataset):
-    def __init__(self, image_paths, targets, transform=None):
-        self.image_paths = image_paths
-        self.targets = targets
-        self.transform = transform
+# class DetectionDataset(torch.utils.data.Dataset):
+#     def __init__(self, image_paths, targets, transform=None):
+#         self.image_paths = image_paths
+#         self.targets = targets
+#         self.transform = transform
 
-    def __len__(self):
-        return len(self.image_paths)
+#     def __len__(self):
+#         return len(self.image_paths)
 
-    def __getitem__(self, idx):
-        image = Image.open(self.image_paths[idx]).convert("RGB")
-        target = self.targets[idx]
+#     def __getitem__(self, idx):
+#         image = Image.open(self.image_paths[idx]).convert("RGB")
+#         target = self.targets[idx]
 
-        boxes = []
-        labels = []
+#         boxes = []
+#         labels = []
 
-        for obj in target:
-            boxes.append(obj["bbox"])
-            labels.append(obj["label"])
+#         for obj in target:
+#             boxes.append(obj["bbox"])
+#             labels.append(obj["label"])
 
-        boxes = torch.tensor(boxes, dtype=torch.float32) if boxes else torch.zeros((0, 4))
-        labels = torch.tensor(labels, dtype=torch.long) if labels else torch.zeros((0,), dtype=torch.long)
+#         boxes = torch.tensor(boxes, dtype=torch.float32) if boxes else torch.zeros((0, 4))
+#         labels = torch.tensor(labels, dtype=torch.long) if labels else torch.zeros((0,), dtype=torch.long)
 
-        target_dict = {
-            "boxes": boxes,
-            "labels": labels
-        }
+#         target_dict = {
+#             "boxes": boxes,
+#             "labels": labels
+#         }
 
-        if self.transform:
-            image = self.transform(image)
+#         if self.transform:
+#             image = self.transform(image)
 
-        return image, target_dict
+#         return image, target_dict
 
 def average_detection_stats(all_stats):
-
     avg_stats = {}
-
     class_keys = all_stats[0].keys()
 
     for cls_name in class_keys:
-
         avg_stats[cls_name] = {}
-
         metric_keys = all_stats[0][cls_name].keys()
 
         for metric in metric_keys:
-
             values = [
                 stats[cls_name][metric]
                 for stats in all_stats
             ]
-
             avg_stats[cls_name][metric] = float(np.mean(values))
 
     return avg_stats

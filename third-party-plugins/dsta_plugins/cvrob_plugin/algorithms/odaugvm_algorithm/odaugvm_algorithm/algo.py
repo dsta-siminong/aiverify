@@ -404,8 +404,6 @@ class Plugin(IAlgorithm):
         class_names = handle_class_names_arg(class_names_arg, model)
         print("Class names:", class_names)
 
-        #LEN = len(aug_dict) if aug_methods == ["all"] else len(aug_methods)
-
         for aug_name, aug_class in aug_dict.items():
             
             if aug_name not in aug_methods and aug_methods != ["all"]:
@@ -432,25 +430,44 @@ class Plugin(IAlgorithm):
 
                 image_path = self._save_one_image(display_image, str(corrupted_dir), display_idx)
                 image = torch.tensor(display_image).unsqueeze(0).float()
-                model = model.float()
 
                 model.eval()
                 with torch.no_grad():
-                    outputs = model([image.squeeze(0)])  # list input
-
+                    outputs = model(image)
                 pred = outputs[0]
 
-                pred_labels = pred["labels"].cpu().numpy()
-                pred_scores = pred["scores"].cpu().numpy()
+                prediction = {
+                    "boxes": pred["boxes"].cpu().numpy().tolist(),
+                    "labels": pred["labels"].cpu().numpy().tolist(),
+                    "scores": pred["scores"].cpu().numpy().tolist(),
+                }
 
-                pred_classes = [class_names[str(c)] for c in pred_labels]
+                # pred_labels = pred["labels"].cpu().numpy()
+                # pred_scores = pred["scores"].cpu().numpy()
+
+                # pred_classes = [class_names[str(c)] for c in pred_labels]
                 ground_truth = ground_truths[display_idx]
-                gt_classes = [class_names[str(obj["label"])] for obj in ground_truth]
+                # gt_classes = [class_names[str(obj["label"])] for obj in ground_truth]
+
+                # Build the overlay image: predicted boxes (red) + GT boxes (green)
+                # pred_boxes = pred["boxes"].cpu()
+                image_path2 = self._save_image_with_predictions(
+                    image=display_image,
+                    pred_boxes=prediction['boxes'],#pred_boxes,
+                    pred_labels=prediction['labels'],#pred_labels,
+                    pred_scores=prediction['scores'],#pred_scores,
+                    gt_boxes=ground_truth,        # list of {"bbox": [...], "label": ...}
+                    gt_labels=[obj["label"] for obj in ground_truth],
+                    class_names=class_names,
+                    subfolder_name=str(corrupted_dir),
+                    idx=display_idx,
+                )
 
                 random_display = [
                     str(Path(image_path).relative_to(self._output_folder)),
-                    gt_classes,
-                    pred_classes,
+                    ground_truth,#gt_classes,
+                    prediction,#pred_classes,
+                    str(Path(image_path2).relative_to(self._output_folder)),
                 ]
                 display_info.update({str(severity): random_display})
             print(maps, first_drop)
@@ -464,7 +481,7 @@ class Plugin(IAlgorithm):
             combined_results.append(individual_results)
             gradients.append(gradient)
             first_drops.append(first_drop)
-            # self._progress_inst.update(1/LEN)
+
             print()
 
         output_results.update({
@@ -494,6 +511,44 @@ class Plugin(IAlgorithm):
 
         return gt_dict
 
+    # def _get_corrupted_images(self, testloader, aug_class, _severity):
+    #     corrupted_images = []
+    #     for images, targets in testloader:
+    #         for image, target in zip(images, targets):
+
+    #             image_np = (
+    #                 image.mul(255)
+    #                 .byte()
+    #                 .cpu()
+    #                 .numpy()
+    #                 .transpose(1, 2, 0)
+    #             )
+
+    #             corrupted_image, _ = aug_class.corr_func_sample(
+    #                 image_np,
+    #                 target,
+    #                 _severity
+    #             )
+    #             print(
+    #                 "CORRUPTED_IMAGE(s)",
+    #                 corrupted_image.min(),
+    #                 corrupted_image.max(),
+    #                 corrupted_image.dtype
+    #             )
+
+    #             corrupted_image = (
+    #                 torch.from_numpy(
+    #                     corrupted_image.transpose(2, 0, 1)
+    #                 ).float().div_(255.0)
+    #             ).numpy()
+
+    #             if corrupted_image.max() > 1.0:
+    #                 corrupted_image = corrupted_image / 255.0
+    #             corrupted_images.append(corrupted_image)
+
+    #     return np.stack(corrupted_images)
+
+
     def _load_images_objdet(self, image_paths, targets):
         transform = transforms.Compose([
             transforms.ToTensor()
@@ -513,35 +568,114 @@ class Plugin(IAlgorithm):
     def _collate_fn(self, batch):
         return tuple(zip(*batch))
 
-    def _save_images(self, images: list[np.ndarray], subfolder_name: str) -> list[str]:
+    def _save_image_with_predictions(
+        self,
+        image: np.ndarray,
+        pred_boxes,
+        pred_labels,
+        pred_scores,
+        gt_boxes,
+        gt_labels,
+        class_names: dict,
+        subfolder_name: str,
+        idx: int,
+        score_threshold: float = 0.5,
+    ) -> str:
         """
-        Save a list of numpy arrays as images in a subfolder.
+        Overlay ground-truth boxes (green) and predicted boxes (red) on the image,
+        then save it as ``{idx}_with_prediction.png`` in the same subfolder structure
+        used by _save_one_image.
 
         Args:
-            images (list[np.ndarray]): A list of numpy images
-            subfolder_name (str): The name of the subfolder to save images
+            image (np.ndarray): CHW float image (values in [0, 1] or [0, 255]).
+            pred_boxes: Tensor or array of shape (N, 4) with [x1, y1, x2, y2] predictions.
+            pred_labels: Array of predicted label ids (length N).
+            pred_scores: Array of prediction confidence scores (length N).
+            gt_boxes: List of [x_min, y_min, x_max, y_max] from ground-truth objects.
+            gt_labels: List of ground-truth label ids.
+            class_names (dict): Mapping from str(label_id) -> class name string.
+            subfolder_name (str): Sub-folder name (mirrors the one used by _save_one_image).
+            idx (int): Image index, used in the filename.
+            score_threshold (float): Predictions below this confidence are skipped.
 
         Returns:
-            list[str]: A list of saved image paths
+            str: Absolute path to the saved overlay image.
         """
-        image_paths = []
+        from PIL import ImageDraw, ImageFont
+
         save_dir = self._save_folder / subfolder_name
         save_dir.mkdir(parents=True, exist_ok=True)
+        image_path = save_dir / f"{idx}_with_prediction.png"
 
-        for idx, image in enumerate(images):
-            image_path = save_dir / f"{idx}.png"
-            # print("image shape", image.shape)
-            image = np.transpose(image, (1, 2, 0))
-            Image.fromarray((image * 255.0).astype(np.uint8)).save(image_path)
-            image_paths.append(str(image_path))
-        return image_paths
+        # --- Normalise to HWC uint8 ---
+        img_hwc = image.transpose(1, 2, 0).astype(np.float32)
+        if img_hwc.max() <= 1.5:
+            img_hwc = img_hwc * 255.0
+        img_hwc = np.clip(img_hwc, 0, 255).astype(np.uint8)
+        pil_img = Image.fromarray(img_hwc).convert("RGB")
+        draw = ImageDraw.Draw(pil_img)
+
+        # Try to load a small font; fall back to the default if unavailable.
+        try:
+            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 12)
+        except Exception:
+            font = ImageFont.load_default()
+
+        # --- Ground-truth boxes (green) ---
+        for obj in (gt_boxes or []):
+            bbox = obj if isinstance(obj, (list, tuple)) else obj.get("bbox", [])
+            label = obj.get("label") if isinstance(obj, dict) else None
+            if len(bbox) == 4:
+                x1, y1, x2, y2 = [float(v) for v in bbox]
+                draw.rectangle([x1, y1, x2, y2], outline=(0, 200, 0), width=2)
+                if label is not None:
+                    name = class_names.get(str(label), str(label))
+                    draw.text((x1, max(0, y1 - 13)), f"GT:{name}", fill=(0, 200, 0), font=font)
+
+        # --- Predicted boxes (red) ---
+        if pred_boxes is not None and len(pred_boxes) > 0:
+            # Convert tensors to numpy if needed
+            boxes_np = pred_boxes.cpu().numpy() if hasattr(pred_boxes, "cpu") else np.asarray(pred_boxes)
+            for i, (box, label, score) in enumerate(zip(boxes_np, pred_labels, pred_scores)):
+                if float(score) < score_threshold:
+                    continue
+                x1, y1, x2, y2 = [float(v) for v in box]
+                draw.rectangle([x1, y1, x2, y2], outline=(220, 30, 30), width=2)
+                name = class_names.get(str(label), str(label))
+                draw.text((x1, max(0, y1 - 13)), f"{name} {score:.2f}", fill=(220, 30, 30), font=font)
+
+        pil_img.save(image_path)
+        return str(image_path)
+
+    # def _save_images(self, images: list[np.ndarray], subfolder_name: str) -> list[str]:
+    #     """
+    #     Save a list of numpy arrays as images in a subfolder.
+
+    #     Args:
+    #         images (list[np.ndarray]): A list of numpy images
+    #         subfolder_name (str): The name of the subfolder to save images
+
+    #     Returns:
+    #         list[str]: A list of saved image paths
+    #     """
+    #     image_paths = []
+    #     save_dir = self._save_folder / subfolder_name
+    #     save_dir.mkdir(parents=True, exist_ok=True)
+
+    #     for idx, image in enumerate(images):
+    #         image_path = save_dir / f"{idx}.png"
+    #         # print("image shape", image.shape)
+    #         image = np.transpose(image, (1, 2, 0))
+    #         Image.fromarray((image * 255.0).astype(np.uint8)).save(image_path)
+    #         image_paths.append(str(image_path))
+    #     return image_paths
 
     def _save_one_image(self, image: np.ndarray, subfolder_name: str, idx: int) -> str:
 
         save_dir = self._save_folder / subfolder_name
         save_dir.mkdir(parents=True, exist_ok=True)
 
-        image_path = save_dir / f"{idx}.png"
+        image_path = save_dir / f"{idx}_without_prediction.png"
 
         # CHW -> HWC
         image = image.transpose(1, 2, 0)
@@ -557,46 +691,6 @@ class Plugin(IAlgorithm):
         Image.fromarray(image).save(image_path)
 
         return str(image_path)
-
-    def _get_corrupted_images(self, testloader, aug_class, severity):
-
-        corrupted_images = []
-
-        for images, targets in testloader:
-
-            for image, target in zip(images, targets):
-
-                image_np = (
-                    image.mul(255)
-                    .byte()
-                    .cpu()
-                    .numpy()
-                    .transpose(1, 2, 0)
-                )
-
-                corrupted_image, _ = aug_class.corr_func_sample(
-                    image_np,
-                    target,
-                    severity
-                )
-                print(
-                    "CORRUPTED_IMAGE(s)",
-                    corrupted_image.min(),
-                    corrupted_image.max(),
-                    corrupted_image.dtype
-                )
-
-                corrupted_image = (
-                    torch.from_numpy(
-                        corrupted_image.transpose(2, 0, 1)
-                    ).float().div_(255.0)
-                ).numpy()
-
-                if corrupted_image.max() > 1.0:
-                    corrupted_image = corrupted_image / 255.0
-                corrupted_images.append(corrupted_image)
-
-        return np.stack(corrupted_images)
 
     def _get_one_corrupted_image(self, testloader, aug_class, severity, target_idx):
 

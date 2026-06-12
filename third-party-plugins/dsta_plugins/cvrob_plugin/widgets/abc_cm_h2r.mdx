@@ -10,23 +10,15 @@
   <h3>Confusion Matrix Statistics</h3>
 
   <span>
-    This widget shows how a model’s class-specific prediction behaviour changes as the
-    severity of image perturbations increases.
+    This widget shows how a model's predictions across all classes change 
+    as image perturbations increase.
   </span>
 
   <span>
-    For each specified corruption algorithm and each class in the dataset, it tracks
-    how the following metrics vary across severity levels:
+    For each specified corruption algorithm and severity level, a confusion 
+    matrix is displayed, summarizing the model's predictions for every class.
   </span>
 
-  <span>
-    <ul>
-      <li>True Positives (TP)</li>
-      <li>True Negatives (TN)</li>
-      <li>False Positives (FP)</li>
-      <li>False Negatives (FN)</li>
-    </ul>
-  </span>
 </div>
 
 <div style={{
@@ -43,48 +35,26 @@
   </h4>
 
   <p>
-    This widget consists of two visual tools: line graphs and confusion matrix plots.
+    For each corruption algorithm and severity level, a full N × N confusion
+    matrix is shown (where N is the number of classes).
   </p>
 
-  <p><b>i. Line Graphs</b></p>
-
   <p>
-    Each line graph corresponds to a selected corruption algorithm and a class in the dataset
-    (e.g., class X). Each graph contains four lines representing:
+    In the matrix:
   </p>
 
   <ul>
-    <li>TP: number of samples where true label = class X and prediction = class X</li>
-    <li>TN: number of samples where true label ≠ class X and prediction ≠ class X</li>
-    <li>FP: number of samples where true label ≠ class X but prediction = class X</li>
-    <li>FN: number of samples where true label = class X but prediction ≠ class X</li>
+    <li>Each row represents the true class of the image</li>
+    <li>Each column represents the class predicted by the model</li>
+    <li>Values along the main diagonal correspond to correct predictions</li>
+    <li>Values outside the diagonal correspond to misclassifications</li>
   </ul>
 
   <p>
-    The y-axis represents the count of each metric for a given class, and the x-axis
-    represents corruption severity.
-  </p>
-
-  <p>
-    In general, good model performance is indicated by high TP and TN values, and low FP and FN values.
-  </p>
-
-  <p>
-    As severity increases, model performance is expected to degrade, meaning TP and TN decrease
-    while FP and FN increase.
-  </p>
-
-  <p><b>ii. Confusion Matrix Plots</b></p>
-
-  <p>
-    For each severity level and corruption algorithm, a full N × N confusion matrix is shown
-    (where N = number of classes).
-  </p>
-
-  <p>
-    These matrices help identify which classes are being confused with each other, and whether
-    corruption introduces systematic misclassification patterns (e.g., Class X increasingly being
-    predicted as Class Y as severity increases).
+    These matrices help identify which classes are being confused with one
+    another and whether corruption introduces systematic misclassification
+    patterns (for example, Class X increasingly being predicted as Class Y as
+    corruption severity increases).
   </p>
 </div>
 
@@ -102,55 +72,45 @@
   </span>
 
   <span>
-    This section focuses primarily on the line graphs.
+    The confusion matrix helps identify which classes the model tends to confuse
+    with one another under a given corruption and severity level.
   </span>
 
   <span>
-    A steeper decline in TP or increase in FN indicates reduced robustness under the given corruption.
-    In such cases, retraining the model is recommended, along with:
+    Ideally, most predictions should lie along the main diagonal of the matrix,
+    indicating that the predicted class matches the true class. As corruption
+    severity increases, it is expected that some predictions move away from the
+    diagonal, resulting in more misclassifications.
   </span>
 
   <span>
-    <ul>
-      <li>Adding targeted augmentations of this corruption type during training</li>
-      <li>Increasing diversity of training samples for affected classes</li>
-      <li>Improving model architecture or regularization if degradation is widespread</li>
-    </ul>
-  </span>
-
-  <span>
-    A sharp increase in FP suggests the model is over-predicting a particular class under corruption.
-    This may indicate:
+    If the same off-diagonal patterns repeatedly appear (for example, Class X is
+    frequently predicted as Class Y), this may indicate:
   </span>
 
   <span>
     <ul>
-      <li>Feature collapse (reliance on fragile or non-robust features)</li>
-      <li>Visual similarity between corrupted class representations</li>
-      <li>Class imbalance sensitivity</li>
+      <li>Visual similarity between the affected classes</li>
+      <li>Insufficient or unrepresentative training samples</li>
+      <li>Model reliance on features that are sensitive to the applied corruption</li>
     </ul>
   </span>
 
   <span>
-    Recommended actions include:
+    In such cases, consider:
   </span>
 
   <span>
     <ul>
-      <li>Using contrastive learning to improve class separation</li>
-      <li>Adding corrupted examples from other classes or reducing overrepresented corrupted samples</li>
-      <li>Rebalancing class distribution in the dataset</li>
+      <li>Adding more diverse training samples for the affected classes</li>
+      <li>Including augmented examples that resemble the observed corruption</li>
+      <li>Improving class separation through feature engineering or model architecture changes</li>
+      <li>Reviewing class balance within the dataset</li>
     </ul>
   </span>
 
   <span>
-    If these metrics remain stable, the model can be considered robust to this corruption,
-    and no further action is required.
-  </span>
-
-  <span>
-    If trends move in the opposite direction (TP and TN increase while FP and FN decrease),
-    this may indicate the model has overfitted to this specific corruption type during training.
-    In this case, retraining with fewer augmentation samples of this corruption type is recommended.
+    If the confusion matrix remains largely unchanged across corruption severities,
+    the model can be considered robust to the given perturbation.
   </span>
 </div>

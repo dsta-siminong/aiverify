@@ -69,13 +69,13 @@ export function ClassLineChart({ combined, className, metrics }) {
   // Colors per metric (you can tweak this)
   const getColorForMetric = (metric) => {
     const colors = {
-      precision: "#1f77b4",
+      precision: "#0b304b",
       recall: "#ff7f0e",
       "f1-score": "#2ca02c",
-      TP: "#d62728",
-      FP: "#9467bd",
-      FN: "#8c564b",
-      TN: "#e377c2",
+      TP: "#2ca02c",
+      FP: "#d62728",
+      FN: "#c85d00",
+      TN: "#1f77b4",
     };
     return colors[metric] || "#777";
   };
@@ -572,12 +572,32 @@ export function ClassMetricsTable({ combined, className , metrics }) {
                       (r) => r.severity === sev
                     );
 
+                    // let value = row?.[metric];
+
+                    // if (
+                    //   typeof value === "number"
+                    // ) {
+                    //   value = value.toFixed(3);
+                    // }
+
                     let value = row?.[metric];
 
-                    if (
-                      typeof value === "number"
-                    ) {
-                      value = value.toFixed(3);
+                    if (typeof value === "number") {
+                      // Special formatting for confusion matrix counts
+                      if (["TP", "FP", "FN", "TN"].includes(metric)) {
+                        const total =
+                          (row?.TP ?? 0) +
+                          (row?.FP ?? 0) +
+                          (row?.FN ?? 0) +
+                          (row?.TN ?? 0);
+
+                        const pct = total > 0 ? (value / total) * 100 : 0;
+
+                        value = `${value.toFixed(1)} (${pct.toFixed(1)}%)`;
+                      } else {
+                        // Default formatting for all other metrics
+                        value = value.toFixed(3);
+                      }
                     }
 
                     return (

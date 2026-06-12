@@ -1,0 +1,284 @@
+<div
+  style={{
+    width: "100%",
+    padding: "16px",
+    marginBottom: "24px",
+    border: "1px solid #e5e7eb",
+    borderRadius: "8px",
+    backgroundColor: "#fafafa",
+    boxSizing: "border-box",
+  }}
+>
+  <h3>Table of Augmentations</h3>
+
+  <p>
+    This table provides an overview of the image corruption and augmentation
+    techniques available in the robustness toolbox. For each augmentation, it
+    describes the type of perturbation applied, how a similar effect may occur
+    in real-world scenarios, and whether the augmentation is currently
+    supported by the framework.
+  </p>
+
+  <table
+    style={{
+      width: "100%",
+      borderCollapse: "collapse",
+      textAlign: "center",
+    }}
+  >
+    <thead>
+      <tr>
+        <th style={{ border: "1px solid #000", padding: "8px" }}>Corruption Category</th>
+        <th style={{ border: "1px solid #000", padding: "8px" }}>Corruption</th>
+        <th style={{ border: "1px solid #000", padding: "8px" }}>Description</th>
+        <th style={{ border: "1px solid #000", padding: "8px" }}>
+          How It May Occur in Real Life
+        </th>
+        <th style={{ border: "1px solid #000", padding: "8px" }}>
+          Currently Supported
+        </th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>Blur</td>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>Gaussian Blur</td>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>
+          Applies a Gaussian kernel to smooth the image and reduce high-frequency details.
+        </td>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>
+          Out-of-focus camera lens, shallow depth of field, slight camera shake.
+        </td>
+        <td style={{ border: "1px solid #000", padding: "8px", color: "green", fontWeight: "bold" }}>Yes</td>
+      </tr>
+
+      <tr>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>Blur</td>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>Motion Blur</td>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>
+          Blurs the image along a direction to simulate movement.
+        </td>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>
+          Camera movement during exposure, fast-moving objects.
+        </td>
+        <td style={{ border: "1px solid #000", padding: "8px", color: "red", fontWeight: "bold" }}>No</td>
+      </tr>
+
+      <tr>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>Blur</td>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>Defocus Blur</td>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>
+          Simulates optical defocus from incorrect focal length.
+        </td>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>
+          Autofocus failure, lens miscalibration.
+        </td>
+        <td style={{ border: "1px solid #000", padding: "8px", color: "red", fontWeight: "bold" }}>No</td>
+      </tr>
+
+      <tr>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>Digital</td>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>Brightness</td>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>
+          Uniformly increases or decreases pixel intensity.
+        </td>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>
+          Overexposure or underexposure due to lighting conditions.
+        </td>
+        <td style={{ border: "1px solid #000", padding: "8px", color: "green", fontWeight: "bold" }}>Yes</td>
+      </tr>
+
+      <tr>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>Digital</td>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>Contrast</td>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>
+          Adjusts the difference between dark and light regions.
+        </td>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>
+          Poor lighting, camera auto-adjustment errors.
+        </td>
+        <td style={{ border: "1px solid #000", padding: "8px", color: "orange", fontWeight: "bold" }}>Only up</td>
+      </tr>
+
+      <tr>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>Digital</td>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>Perspective Transform</td>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>
+          Warps the image to simulate viewpoint change.
+        </td>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>
+          Object viewed from different camera angles or positions.
+        </td>
+        <td style={{ border: "1px solid #000", padding: "8px", color: "green", fontWeight: "bold" }}>Yes</td>
+      </tr>
+
+      <tr>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>Digital</td>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>Image Compression</td>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>
+          Introduces compression artifacts (blocking, ringing).
+        </td>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>
+          JPEG compression during storage, messaging apps, streaming.
+        </td>
+        <td style={{ border: "1px solid #000", padding: "8px", color: "green", fontWeight: "bold" }}>Yes</td>
+      </tr>
+
+      <tr>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>Digital</td>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>Erasing (Occlusion)</td>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>
+          Randomly removes or masks regions of the image.
+        </td>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>
+          Objects partially blocking the camera (e.g., pedestrians, poles, dirt).
+        </td>
+        <td style={{ border: "1px solid #000", padding: "8px", color: "green", fontWeight: "bold" }}>Yes</td>
+      </tr>
+
+      <tr>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>Digital</td>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>Saturation</td>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>
+          Changes the intensity of colours.
+        </td>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>
+          Different lighting environments, white balance shifts.
+        </td>
+        <td style={{ border: "1px solid #000", padding: "8px", color: "red", fontWeight: "bold" }}>No</td>
+      </tr>
+
+      <tr>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>Weather</td>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>Rain</td>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>
+          Adds streak-like artifacts simulating rainfall.
+        </td>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>
+          Outdoor surveillance during rain.
+        </td>
+        <td style={{ border: "1px solid #000", padding: "8px", color: "green", fontWeight: "bold" }}>Yes</td>
+      </tr>
+
+      <tr>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>Weather</td>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>Snow</td>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>
+          Adds white particle noise simulating snowfall.
+        </td>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>
+          Outdoor cameras during snowstorms.
+        </td>
+        <td style={{ border: "1px solid #000", padding: "8px", color: "green", fontWeight: "bold" }}>Yes</td>
+      </tr>
+
+      <tr>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>Weather</td>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>Fog / Haze</td>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>
+          Reduces contrast and adds atmospheric blur.
+        </td>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>
+          Humid weather, pollution, mist.
+        </td>
+        <td style={{ border: "1px solid #000", padding: "8px", color: "red", fontWeight: "bold" }}>No</td>
+      </tr>
+
+      <tr>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>Noise</td>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>Gaussian Noise</td>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>
+          Adds random pixel-wise noise sampled from a Gaussian distribution.
+        </td>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>
+          Low-light sensor noise, high ISO settings.
+        </td>
+        <td style={{ border: "1px solid #000", padding: "8px", color: "green", fontWeight: "bold" }}>Yes</td>
+      </tr>
+
+      <tr>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>Noise</td>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>Salt-and-Pepper Noise</td>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>
+          Random black and white pixels appear.
+        </td>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>
+          Transmission errors, faulty sensors.
+        </td>
+        <td style={{ border: "1px solid #000", padding: "8px", color: "red", fontWeight: "bold" }}>No</td>
+      </tr>
+
+      <tr>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>Noise</td>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>Speckle Noise</td>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>
+          Multiplicative noise affecting pixel intensities.
+        </td>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>
+          Radar imaging, medical ultrasound imaging.
+        </td>
+        <td style={{ border: "1px solid #000", padding: "8px", color: "red", fontWeight: "bold" }}>No</td>
+      </tr>
+
+      <tr>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>Directional / Geometric</td>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>Shear</td>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>
+          Slants the image along one axis.
+        </td>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>
+          Camera misalignment or rolling shutter effects.
+        </td>
+        <td style={{ border: "1px solid #000", padding: "8px", color: "green", fontWeight: "bold" }}>Yes</td>
+      </tr>
+
+      <tr>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>Directional / Geometric</td>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>Translate</td>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>
+          Shifts the image along the x or y axis.
+        </td>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>
+          Object shifts within the frame, tracking misalignment.
+        </td>
+        <td style={{ border: "1px solid #000", padding: "8px", color: "green", fontWeight: "bold" }}>Yes</td>
+      </tr>
+
+      <tr>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>Directional / Geometric</td>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>Scale</td>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>
+          Zooms in or out of the image.
+        </td>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>
+          Object distance changes from the camera.
+        </td>
+        <td style={{ border: "1px solid #000", padding: "8px", color: "green", fontWeight: "bold" }}>Yes</td>
+      </tr>
+
+      <tr>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>Directional / Geometric</td>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>Rotate</td>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>
+          Rotates the image by a given angle.
+        </td>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>
+          Camera tilt, handheld shooting.
+        </td>
+        <td style={{ border: "1px solid #000", padding: "8px", color: "green", fontWeight: "bold" }}>Yes</td>
+      </tr>
+
+      <tr>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>Directional / Geometric</td>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>Crop</td>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>
+          Removes outer regions of the image.
+        </td>
+        <td style={{ border: "1px solid #000", padding: "8px" }}>
+          Object partially outside the field of view.
+        </td>
+        <td style={{ border: "1px solid #000", padding: "8px", color: "green", fontWeight: "bold" }}>Yes</td>
+      </tr>
+    </tbody>
+  </table>
+</div>

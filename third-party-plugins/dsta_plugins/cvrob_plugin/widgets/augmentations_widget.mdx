@@ -174,6 +174,16 @@ export const AugmentationFigurePanel = ({ props }) => {
         >
           <thead>
             <tr>
+              {/* NEW LEFT HEADER CELL */}
+              <th
+                style={{
+                  border: "1px solid #ccc",
+                  padding: "6px",
+                  fontSize: "0.85em",
+                }}
+              >
+                Severity
+              </th>
               {severityKeys.map((sev) => (
                 <th
                   key={sev}
@@ -191,6 +201,16 @@ export const AugmentationFigurePanel = ({ props }) => {
 
           <tbody>
             <tr>
+              {/* NEW LEFT BODY LABEL */}
+              <td
+                style={{
+                  border: "1px solid #ccc",
+                  padding: "6px",
+                  fontWeight: "bold",
+                }}
+              >
+                Accuracy (%)
+              </td>
               {severityKeys.map((sev) => (
                 <td
                   key={sev}
@@ -215,152 +235,4 @@ export const AugmentationFigurePanel = ({ props }) => {
 };
 
 <AugmentationFigurePanel props={props} />
-
-{props.getResults(cid) ? (
-  <>
-    <b>Accuracy per augmentation severity</b>
-
-    {Array.isArray(props.getResults(cid).results) ? (
-      props.getResults(cid).results.map((aug, augIdx) => {
-
-        const acc = aug.accuracies || {};
-
-        // ✅ Sort severities
-        const severityKeys = Object.keys(acc).sort((a, b) => {
-          if (a === "None") return -1;
-          if (b === "None") return 1;
-
-          const numA = parseFloat(a.match(/[\d.]+/)?.[0] || 0);
-          const numB = parseFloat(b.match(/[\d.]+/)?.[0] || 0);
-
-          return numA - numB;
-        });
-
-        const yValues = severityKeys.map((label) => acc[label] ?? 0);
-        const maxAcc = Math.max(...yValues);
-
-        const barHeight = (v) =>
-          maxAcc === 0 ? 0 : (v / maxAcc) * 100;
-
-        return (
-          <div
-            key={augIdx}
-            style={{
-              marginTop: "2em",
-              padding: "1em",
-              border: "1px solid #ddd",
-              borderRadius: "8px",
-            }}
-          >
-            {/* 🔴 Title */}
-            <div
-              style={{
-                fontSize: "1.3em",
-                fontWeight: "bold",
-                marginBottom: "0.5em",
-              }}
-            >
-              {aug.Augmentation}
-            </div>
-
-            {/* 📊 Bar Chart */}
-            <div
-              style={{
-                display: "flex",
-                alignItems: "flex-end",
-                height: "120px",
-                gap: "6px",
-                marginBottom: "0.5em",
-              }}
-            >
-              {yValues.map((v, i) => (
-                <div
-                  key={i}
-                  style={{
-                    flex: 1,
-                    backgroundColor: "#4CAF50",
-                    height: `${barHeight(v)}%`,
-                    display: "flex",
-                    alignItems: "flex-end",
-                    justifyContent: "center",
-                    fontSize: "0.75em",
-                    color: "black",
-                    borderRadius: "4px 4px 0 0",
-                  }}
-                >
-                  {v.toFixed(1)}
-                </div>
-              ))}
-            </div>
-
-            {/* 📌 X Labels */}
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                fontSize: "0.75em",
-                marginBottom: "1em",
-              }}
-            >
-              {severityKeys.map((label, i) => (
-                <div key={i} style={{ flex: 1, textAlign: "center" }}>
-                  {label === "None" ? "No Aug" : label}
-                </div>
-              ))}
-            </div>
-
-            {/* 📋 Table */}
-            <table
-              style={{
-                width: "100%",
-                borderCollapse: "collapse",
-                tableLayout: "fixed",
-              }}
-            >
-              <thead>
-                <tr>
-                  {severityKeys.map((sev) => (
-                    <th
-                      key={sev}
-                      style={{
-                        border: "1px solid #ccc",
-                        padding: "6px",
-                        fontSize: "0.8em",
-                      }}
-                    >
-                      {sev === "None" ? "No Aug" : sev}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-
-              <tbody>
-                <tr>
-                  {severityKeys.map((sev) => (
-                    <td
-                      key={sev}
-                      style={{
-                        border: "1px solid #ccc",
-                        padding: "6px",
-                        textAlign: "center",
-                        fontWeight: "bold",
-                      }}
-                    >
-                      {acc[sev]?.toFixed(1) ?? "-"}
-                    </td>
-                  ))}
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        );
-      })
-    ) : (
-      <div>No results array</div>
-    )}
-  </>
-) : (
-  <div>No algorithm data</div>
-)}
-
 

@@ -1,0 +1,52 @@
+export const cid = "augmentation_algorithm"
+
+{props.getResults(cid) ? (
+  (() => {
+    const results = props.getResults(cid).results;
+    const baseAccuracy = results?.[0]?.accuracies?.["None"];
+
+    const accuracyColor =
+      baseAccuracy == null ? "#6b7280"
+      : baseAccuracy > 70  ? "#15803d"
+      : baseAccuracy < 30  ? "#b91c1c"
+      :                       "#a16207";
+
+    return (
+      <div style={{
+        border: "2px solid #d1d5db",
+        borderRadius: "12px",
+        padding: "2rem",
+        background: "#fafafa",
+        display: "inline-block",
+        textAlign: "center",
+        margin: "1rem auto",
+        width: "fit-content",
+        minWidth: "220px",
+      }}>
+        <div style={{
+          fontSize: "1.6rem",
+          fontWeight: "bold",
+          textDecoration: "underline",
+        }}>
+          Base Accuracy:
+        </div>
+
+        <div style={{
+          marginTop: "1rem",
+          border: "2px solid #d1d5db",
+          borderRadius: "8px",
+          padding: "0.75rem 1.5rem",
+          display: "inline-block",
+          fontSize: "2rem",
+          fontWeight: "bold",
+          color: accuracyColor,
+          background: "#ffffff",
+        }}>
+          {baseAccuracy != null ? `${baseAccuracy.toFixed(1)}%` : "N/A"}
+        </div>
+      </div>
+    );
+  })()
+) : (
+  <div>No results data available</div>
+)}

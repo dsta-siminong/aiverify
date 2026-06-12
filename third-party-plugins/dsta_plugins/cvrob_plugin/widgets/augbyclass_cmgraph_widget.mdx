@@ -16,7 +16,6 @@ export const cid = "augmentation_by_class_algorithm"
   </div>
 </div>
 
-
 import {
   transformData,
   ClassLineChart,
@@ -112,6 +111,7 @@ export const AugmentationClassPlots = ({ props }) => {
             </div>
           );
         }
+        
         const classPlot = plot_paths.class_plot;
         const matplotlibPath = plot_paths.matplotlib_image_path;
         const plotlyPath = plot_paths.plotly_image_path;
@@ -166,15 +166,15 @@ export const AugmentationClassPlots = ({ props }) => {
                     Class {className}
                   </h3>
 
-                  {/* Population Section */}
+                  {/* CM Section */}
                   <div style={{ marginBottom: "1rem", fontStyle: "italic" }}>
-                    Populations for Class {className}
+                    Confusion Matrix values for Class {className}
                   </div>
 
-                  {popUrl && (
+                  {confmUrl && (
                     <img
-                      src={popUrl}
-                      alt={`pop-${className}`}
+                      src={confmUrl}
+                      alt={`confm-${className}`}
                       style={{
                         maxWidth: "600px",
                         width: "100%",
@@ -185,59 +185,12 @@ export const AugmentationClassPlots = ({ props }) => {
                     />
                   )}
 
-                  <ClassMetricsTable combined={combined} className={className} metrics={["preds_population", "actual_population"]} />
+                  <ClassMetricsTable combined={combined} className={className} metrics={["TP", "FP", "FN", "TN"]} />
+
                 </div>
               );
             })}
 
-            {/* 🔹 Final Matplotlib Summary Image */}
-            {matplotlibPath && (
-              <div style={{ textAlign: "center", marginTop: "2rem" }}>
-                <h3 style={{ marginBottom: "1rem" }}>
-                  Overall Matplotlib Summary for {Augmentation}
-                </h3>
-
-                <img
-                  src={props.getArtifactURL(cid, matplotlibPath)}
-                  alt="matplotlib-summary"
-                  style={{
-                    maxWidth: "800px",
-                    width: "100%",
-                    height: "auto",
-                    margin: "0 auto",
-                    display: "block",
-                  }}
-                />
-              </div>
-            )}
-
-            {/* 🔹 Final Plotly Summary (HTML) */}
-            {plotlyPath && (
-              <div style={{ textAlign: "center", marginTop: "2rem" }}>
-                <h3 style={{ marginBottom: "1rem" }}>
-                  Overall Plotly Summary for {Augmentation}
-                </h3>
-
-                <div
-                  style={{
-                    width: "100%",
-                    height: "700px",
-                    overflow: "hidden",
-                  }}
-                >
-                  <iframe
-                    src={props.getArtifactURL(cid, plotlyPath)}
-                    title={`plotly-summary-${Augmentation}`}
-                    style={{
-                      width: "100%",
-                      height: "100%",
-                      border: "none",
-                      display: "block",
-                    }}
-                  />
-                </div>
-              </div>
-            )}
           </div>
         );
       })}

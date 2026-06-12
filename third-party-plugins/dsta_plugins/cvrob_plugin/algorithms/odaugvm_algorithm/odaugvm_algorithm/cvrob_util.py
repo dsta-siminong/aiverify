@@ -84,49 +84,55 @@ def augmentation_gradient_det(model, test_loader, device, aug_class, plot_graphs
 
 def get_num_classes(model: nn.Module) -> int:
     """
-    Infer the number of output classes from a PyTorch classification model.
-
-    The function attempts to determine the number of classes by inspecting the
-    final Linear or Conv2d layer, or common classifier attributes such as
-    'fc', 'classifier', 'head', or 'heads'.
-
-    Args:
-        model (nn.Module): A PyTorch model assumed to be used for classification.
-
-    Returns:
-        int: The inferred number of output classes.
-
-    Raises:
-        RuntimeError: If the number of classes cannot be determined from the model.
+    Infer number of classes from classification OR detection models.
     """
-    # 1. Look for last Linear layer
-    last_linear = None
-    for module in model.modules():
-        if isinstance(module, nn.Linear):
-            last_linear = module
-    if last_linear is not None:
-        return last_linear.out_features
 
-    # 2. Fallback: look for last Conv layer (e.g., some classifiers end with conv)
-    last_conv = None
-    for module in model.modules():
-        if isinstance(module, nn.Conv2d):
-            last_conv = module
-    if last_conv is not None:
-        return last_conv.out_channels
+    # =========================
+    # 1. Detection models (torchvision Faster R-CNN style)
+    # =========================
+    roi_heads = getattr(model, "roi_heads", None)
+    if roi_heads is not None:
+        box_predictor = getattr(roi_heads, "box_predictor", None)
 
-    # 3. Fallback: try classifier / fc attributes
-    for attr in ["fc", "classifier", "head", "heads"]:
+        if box_predictor is not None:
+            cls_score = getattr(box_predictor, "cls_score", None)
+
+            if isinstance(cls_score, nn.Linear):
+                return cls_score.out_features
+
+    # =========================
+    # 2. Classification head patterns
+    # =========================
+    for attr in ["classifier", "fc", "head", "heads"]:
         if hasattr(model, attr):
             module = getattr(model, attr)
+
+            # single linear
             if isinstance(module, nn.Linear):
                 return module.out_features
-            elif isinstance(module, nn.Sequential):
+
+            # sequential head
+            if isinstance(module, nn.Sequential):
                 for layer in reversed(module):
                     if isinstance(layer, nn.Linear):
                         return layer.out_features
 
-    raise RuntimeError("Could not determine number of classes.")
+    # =========================
+    # 3. Last resort (but safer than before)
+    #    ONLY consider "final-ish" Linear layers
+    # =========================
+    linear_layers = [
+        m for m in model.modules()
+        if isinstance(m, nn.Linear)
+    ]
+
+    if linear_layers:
+        # heuristic: smallest output dim is usually classifier in detectors
+        # (bbox heads are usually larger or multiples of 4)
+        best = min(linear_layers, key=lambda m: m.out_features)
+        return best.out_features
+
+    raise RuntimeError(f"Could not determine number of classes for {type(model)}")
 
 def handle_class_names_arg(class_names_arg, model):
     """
@@ -214,15 +220,12 @@ def plot_accuracy_vs_severity_mpl(accuracies, severities=None):
     fig, ax = plt.subplots(figsize=(8, 5))
     ax.plot(severities, accuracies, marker='o', linestyle='-', color='b')
     ax.set_xlabel("Severity")
-    ax.set_ylabel("Accuracy")
-    ax.set_title("Model Accuracy vs Severity")
-    y_limit = 100
-    if max(accuracies) <= 1:
-        y_limit = 1
-    ax.set_ylim(0, y_limit)
+    ax.set_ylabel("mAP value")
+    ax.set_title("Mean Average Precision (mAP) vs Severity")
+    ax.set_ylim(0, 1)
     ax.set_xticks(severities)
     ax.tick_params(axis='x', rotation=45)
-    ax.grid(True)
+    ax.grid(False)
     fig.tight_layout()  
 
     return fig

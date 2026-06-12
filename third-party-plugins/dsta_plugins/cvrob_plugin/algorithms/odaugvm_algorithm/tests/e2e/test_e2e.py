@@ -5,14 +5,23 @@ from odaugvm_algorithm.algo_init import AlgoInit
 from aiverify_test_engine.plugins.enums.model_type import ModelType
 
 binary_classification_pipeline = {
+    # "data_path": str(
+    #     "/home/bjieyong/aiverify/cvrob/pedestrian/PennFudanPed/PennFudanPed/PNGImages"
+    # ),
+    # "model_path": str(
+    #     "/home/bjieyong/aiverify/cvrob/pedestrian/PennFudanPed/PennFudanPed/pedModel"
+    # ),
+    # "ground_truth_path": str(
+    #     "/home/bjieyong/aiverify/cvrob/pedestrian/PennFudanPed/PennFudanPed/pennfudan_detection_gt.csv"
+    # ),
     "data_path": str(
-        "/home/bjieyong/aiverify/cvrob/pedestrian/PennFudanPed/PennFudanPed/PNGImages"
+        "/home/bjieyong/aiverify/cvrob/bccd/BCCD/JPEGImages"
     ),
     "model_path": str(
-        "/home/bjieyong/aiverify/cvrob/pedestrian/PennFudanPed/PennFudanPed/pedModel"
+        "/home/bjieyong/aiverify/cvrob/bccd/BCCD/bccdModel"
     ),
     "ground_truth_path": str(
-        "/home/bjieyong/aiverify/cvrob/pedestrian/PennFudanPed/PennFudanPed/pennfudan_detection_gt.csv"
+        "/home/bjieyong/aiverify/cvrob/bccd/BCCD/bccd_detection.csv"
     ),
     "run_pipeline": True,
     "model_type": ModelType.CLASSIFICATION,

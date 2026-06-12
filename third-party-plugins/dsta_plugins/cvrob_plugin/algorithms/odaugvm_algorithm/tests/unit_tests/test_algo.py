@@ -31,14 +31,23 @@ def test_discover_plugin():
 
 
 # Variables for testing
+# valid_data_path = str(
+#     "/home/bjieyong/aiverify/cvrob/pedestrian/PennFudanPed/PennFudanPed/PNGImages"
+# )
+# valid_model_path = str(
+#     "/home/bjieyong/aiverify/cvrob/pedestrian/PennFudanPed/PennFudanPed/pedModel"
+# )
+# valid_ground_truth_path = str(
+#     "/home/bjieyong/aiverify/cvrob/pedestrian/PennFudanPed/PennFudanPed/pennfudan_detection_gt.csv"
+# )
 valid_data_path = str(
-    "/home/bjieyong/aiverify/cvrob/pedestrian/PennFudanPed/PennFudanPed/PNGImages"
+    "/home/bjieyong/aiverify/cvrob/bccd/BCCD/JPEGImages"
 )
 valid_model_path = str(
-    "/home/bjieyong/aiverify/cvrob/pedestrian/PennFudanPed/PennFudanPed/pedModel"
+    "/home/bjieyong/aiverify/cvrob/bccd/BCCD/bccdModel"
 )
 valid_ground_truth_path = str(
-    "/home/bjieyong/aiverify/cvrob/pedestrian/PennFudanPed/PennFudanPed/pennfudan_detection_gt.csv"
+    "/home/bjieyong/aiverify/cvrob/bccd/BCCD/bccd_detection.csv"
 )
 
 test_string = "data_str"

@@ -30,7 +30,6 @@ import json
 import matplotlib.pyplot as plt
 import plotly.express as px 
 from pprint import pprint
-import gc
 
 # =====================================================================================
 # NOTE:
@@ -453,10 +452,6 @@ class Plugin(IAlgorithm):
             print(aug_class.determine_severity(severities[0]))
         loader_B = aug_class.corr_func_dataloader(test_loader, severity_idx = severities[1])
 
-        # imgs_A, scores_A = collect_detection_scores(model, loader_A, None)
-        # imgs_B, scores_B = collect_detection_scores(model, loader_B, None)
-        # print('scores shape', scores_A.shape, scores_B.shape)
-
         imgs_A, scores_A = collect_detection_predictions(model, loader_A, None)
         imgs_B, scores_B = collect_detection_predictions(model, loader_B, None)
 
@@ -465,24 +460,10 @@ class Plugin(IAlgorithm):
             for a, b in zip(scores_A, scores_B)
         ])
         # brittleness = scores_A - scores_B
-        print("?")
-        print(f"results brit stats \n min {min(brittleness)}, \nmax {max(brittleness)}, \nmean {sum(brittleness)/len(brittleness)}")
-        print("?")
+        # print("?")
+        # print(f"results brit stats \n min {min(brittleness)}, \nmax {max(brittleness)}, \nmean {sum(brittleness)/len(brittleness)}")
+        # print("?")
         
-        # print("lengths:", len(ground_truths), len(scores_A), len(scores_B), len(brittleness))
-        # print("brittle stage 3")
-        # results_all = [
-        #     BrittlenessResultIndiv(
-        #         index=i,
-        #         label=ground_truths[i],
-        #         predA=None,
-        #         predB=None,
-        #         pA=float(scores_A[i]),
-        #         pB=float(scores_B[i]),
-        #         brittleness=float(brittleness[i]),
-        #     )
-        #     for i in range(len(ground_truths))
-        # ]
         results_all = [
             BrittlenessResultIndiv(
                 index=i,
@@ -495,7 +476,6 @@ class Plugin(IAlgorithm):
             )
             for i in range(len(ground_truths))
         ]
-
 
         # Sort (most brittle first)
         results_all_sorted = sorted(results_all, key=lambda x: x.brittleness, reverse=True)
@@ -517,7 +497,6 @@ class Plugin(IAlgorithm):
         results_list = output_results['results']
         top_k = sorted(results_list, key=lambda x: x["brittleness"], reverse=True)[:min(TOPK_SAFE, len(results_list))]
         top_k_indices = [item["index"] for item in top_k]
-        #predictions = collect_detection_predictions(model, test_loader, device)
 
         model.eval()
         with torch.no_grad():
@@ -534,9 +513,7 @@ class Plugin(IAlgorithm):
                 with torch.no_grad():
                     outputs = model(list(images_tensor))
 
-                #corrupted_images = self._get_corrupted_images(test_loader, aug_class, s)
                 corrupted_dir = Path(aug_name) / f"severity_{s}"
-                #corrupted_image_paths = self._save_images(corrupted_images, str(corrupted_dir))
 
                 for i,idx in enumerate(top_k_indices):
 
@@ -562,15 +539,7 @@ class Plugin(IAlgorithm):
                     ]
                     display_info.append({f"severity_{s}_number_{i+1}": random_display})
 
-                #     import psutil, os
-                #     print(f"[s={s}, i={i}] RAM used: {psutil.Process(os.getpid()).memory_info().rss / 1e9:.2f} GB")
-
-                # del outputs, images_tensor, corrupted_images
-                # gc.collect()
-                # if torch.cuda.is_available():
-                #     torch.cuda.empty_cache()
-
-        print("brittle stage 5")
+        # print("brittle stage 5")
         output_results.update(
             {"display_info": display_info}
         )
@@ -579,7 +548,7 @@ class Plugin(IAlgorithm):
             #if r.brittleness > 0.1
         ]
         all_brit = [r.brittleness for r in results]
-        print(f"results brit stats min {min(all_brit)}, max {max(all_brit)}, mean {sum(all_brit)/len(all_brit)}")
+        # print(f"results brit stats min {min(all_brit)}, max {max(all_brit)}, mean {sum(all_brit)/len(all_brit)}")
         results = [
             r for r in results if r.brittleness > 0.1
         ]
@@ -600,7 +569,8 @@ class Plugin(IAlgorithm):
             class_names=class_names_int, 
             transform=None,
             directory=mpl_dir,
-            image_paths=image_paths
+            image_paths=image_paths,
+            gt_labels=ground_truths
         )
         # print("brittle stage 7")
         plotly_path = visualize_topk_plotly(
@@ -613,7 +583,8 @@ class Plugin(IAlgorithm):
             class_names=class_names_int, 
             transform=None,
             directory = plotly_dir,
-            image_paths=image_paths
+            image_paths=image_paths,
+            gt_labels=ground_truths
         )
         # print("brittle stage 8")
         html_path = visualize_in_html(
@@ -626,7 +597,8 @@ class Plugin(IAlgorithm):
             class_names=class_names_int, 
             transform=None,
             directory = plotly_dir,
-            image_paths=image_paths
+            image_paths=image_paths,
+            draw_detections=True
         )
         output_results.update(
             {
@@ -638,20 +610,20 @@ class Plugin(IAlgorithm):
 
         self._results = output_results
 
-    def _get_corrupted_images(self, testloader, aug_class, _severity):
-        corrupted_images = []
-        for images, labels in testloader:   
-            images_np = (images * 255).byte().numpy().transpose(0, 2, 3, 1)  # Convert to HWC format and uint8
+    # def _get_corrupted_images(self, testloader, aug_class, _severity):
+    #     corrupted_images = []
+    #     for images, labels in testloader:   
+    #         images_np = (images * 255).byte().numpy().transpose(0, 2, 3, 1)  # Convert to HWC format and uint8
             
-            # Apply corruption function with provided parameters
-            if aug_class.name == "None" or _severity == "None":
-                corrupted = images_np
-            else:
-                corrupted = aug_class.corr_func_arr(images_np, _severity)
+    #         # Apply corruption function with provided parameters
+    #         if aug_class.name == "None" or _severity == "None":
+    #             corrupted = images_np
+    #         else:
+    #             corrupted = aug_class.corr_func_arr(images_np, _severity)
             
-            corrupted = (torch.tensor(corrupted.transpose(0, 3, 1, 2), dtype=torch.float32) / 255.0).numpy()  #as opposed to torch.tensor
-            corrupted_images.append(corrupted)
-        return np.concatenate(corrupted_images, axis=0)
+    #         corrupted = (torch.tensor(corrupted.transpose(0, 3, 1, 2), dtype=torch.float32) / 255.0).numpy()  #as opposed to torch.tensor
+    #         corrupted_images.append(corrupted)
+    #     return np.concatenate(corrupted_images, axis=0)
 
     def _load_images(self, image_paths: list[str], labels) -> list[np.ndarray]:
         """
@@ -682,28 +654,28 @@ class Plugin(IAlgorithm):
 
         return dataset, loader
 
-    def _save_images(self, images: list[np.ndarray], subfolder_name: str) -> list[str]:
-        """
-        Save a list of numpy arrays as images in a subfolder.
+    # def _save_images(self, images: list[np.ndarray], subfolder_name: str) -> list[str]:
+    #     """
+    #     Save a list of numpy arrays as images in a subfolder.
 
-        Args:
-            images (list[np.ndarray]): A list of numpy images
-            subfolder_name (str): The name of the subfolder to save images
+    #     Args:
+    #         images (list[np.ndarray]): A list of numpy images
+    #         subfolder_name (str): The name of the subfolder to save images
 
-        Returns:
-            list[str]: A list of saved image paths
-        """
-        image_paths = []
-        save_dir = self._save_folder / subfolder_name
-        save_dir.mkdir(parents=True, exist_ok=True)
+    #     Returns:
+    #         list[str]: A list of saved image paths
+    #     """
+    #     image_paths = []
+    #     save_dir = self._save_folder / subfolder_name
+    #     save_dir.mkdir(parents=True, exist_ok=True)
 
-        for idx, image in enumerate(images):
-            image_path = save_dir / f"{idx}.png"
-            # print("image shape", image.shape)
-            image = np.transpose(image, (1, 2, 0))
-            Image.fromarray((image * 255.0).astype(np.uint8)).save(image_path)
-            image_paths.append(str(image_path))
-        return image_paths
+    #     for idx, image in enumerate(images):
+    #         image_path = save_dir / f"{idx}.png"
+    #         # print("image shape", image.shape)
+    #         image = np.transpose(image, (1, 2, 0))
+    #         Image.fromarray((image * 255.0).astype(np.uint8)).save(image_path)
+    #         image_paths.append(str(image_path))
+    #     return image_paths
 
 
     def _save_one_image(self, image: np.ndarray, subfolder_name: str, idx: int) -> str:

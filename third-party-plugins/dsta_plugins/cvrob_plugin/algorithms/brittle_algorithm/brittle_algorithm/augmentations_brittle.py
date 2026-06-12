@@ -150,7 +150,7 @@ def visualize_topk_matplotlib(
         axes[row, 0].axis("off")
         axes[row, 0].text(
             0.02, 0.98,
-            f"image idx: {idx}\nA (before) | pred={classA}\n\npred_proba of classA={predA[1]:.3f}",
+            f"image idx: {idx}\nA (before) | pred={classA}\n\npred_proba of {classA}={predA[1]:.3f}",
             transform=axes[row, 0].transAxes,
             va="top",
             ha="left",
@@ -164,7 +164,7 @@ def visualize_topk_matplotlib(
         axes[row, 1].axis("off")
         axes[row, 1].text(
             0.02, 0.98,
-            f"image idx: {idx}\nB (after) | pred={classB}\npred_proba of classB={predB[1]:.3f}\npred_proba of classA={(predA[1]-res.brittleness):.3f} | Δ={res.brittleness:.3f}",
+            f"image idx: {idx}\nB (after) | pred={classB}\npred_proba of {classB}={predB[1]:.3f}\npred_proba of {classA}={(predA[1]-res.brittleness):.3f} | Δ={res.brittleness:.3f}",
             transform=axes[row, 1].transAxes,
             va="top",
             ha="left",
@@ -172,23 +172,10 @@ def visualize_topk_matplotlib(
             bbox=dict(boxstyle="round", facecolor="white", alpha=0.8)
         )
 
-        # axes[row, 1].imshow(imgB)
-        # axes[row, 1].set_title(
-        #     f"image idx: {idx}\n"
-        #     f"B (after) | pred={classB}\n"
-        #     f"pred_proba of classB={predB[1]:.3f}\n"
-        #     f"pred_proba of classA={(predA[1]-res.brittleness):.3f} | Δ={res.brittleness:.3f}"
-        # )
-        # axes[row, 1].axis("off")
-        # plt.tight_layout()
-
-    # plt.tight_layout()
     save_path = directory / "brittleness_top_k_gaussianblur.png"
     plt.savefig(save_path)
     print("SAVING FIGURE")
     return save_path
-    #plt.show(block=False)  # show without blocking
-    #input("Press Enter to close the figure and continue...")  # optional, keeps it open
 
 def visualize_topk_plotly(
     results_sorted, 
@@ -213,12 +200,11 @@ def visualize_topk_plotly(
     fig = make_subplots(
         rows=K,
         cols=3,
-        column_widths=[0.4, 0.2, 0.4],  # third column narrower
+        column_widths=[0.35, 0.3, 0.35],  # third column narrower
         horizontal_spacing=0.05,
         vertical_spacing=0.05,
         specs=[[{"type": "image"}, {"type": "xy"}, {"type": "image"}] for _ in range(K)],
     )
-    # between_x = get_between_columns_x(fig)
 
     for r, res in enumerate(topk, start=1):
         i = res.index
@@ -226,7 +212,7 @@ def visualize_topk_plotly(
             idx = Path(str(image_paths[i])).name
         else:
             idx = i
-        # row_center_y = get_row_center_y(fig, r)
+
         imgA = tensor_to_plotly_img(imgs_A[i], transform)
         imgB = tensor_to_plotly_img(imgs_B[i], transform)
 
@@ -250,15 +236,16 @@ def visualize_topk_plotly(
                 text=[(
                     f"<b>idx:</b> {idx} <br><br>"
                     f"<b>Prediction</b><br>"
-                    f"A: ŷ={classA} | B: ŷ={classB} <br>"
-                    f"<b>Predict_Proba Class A</b><br>"
-                    f"A: {predA[1]:.3f} | B: {(predA[1]-res.brittleness):.3f}<br>"
+                    f"A: ŷ={classA} | B: ŷ={classB} <br><br>"
+                    f"<b>Before Corruption:</b><br>"
+                    f"Predict Proba for Class<br> {classA}: {predA[1]:.3f}<br><br>"
+                    f"<b>After Corruption:</b><br>"
+                    f"Predict Proba for Class<br> {classA}:  {(predA[1]-res.brittleness):.3f}<br>"
                     f"Δ={res.brittleness:.3f}<br>"
-                    f"<b>Predict_Proba Class B</b><br>"
-                    f"B: {predB[1]:.3f}"
+                    f"Predict_Proba for Class<br> {classB}: {predB[1]:.3f}"
                 )],
                 textposition="middle center",
-                textfont=dict(size=16),
+                textfont=dict(size=12),
                 showlegend=False
             ),
             row=r,
@@ -293,7 +280,7 @@ def visualize_topk_plotly(
 
 def visualize_in_html(
     results_sorted, 
-    imgsA, imgsB, 
+    imgs_A, imgs_B, 
     probsA, probsB, 
     labels, 
     class_names=None, 
@@ -314,8 +301,8 @@ def visualize_in_html(
         else:
             idx = i
         # images
-        imgA_b64 = "data:image/png;base64," + tensor_to_base64(imgsA[i], transform)
-        imgB_b64 = "data:image/png;base64," + tensor_to_base64(imgsB[i], transform)
+        imgA_b64 = "data:image/png;base64," + tensor_to_base64(imgs_A[i], transform, jpeg_quality=85)
+        imgB_b64 = "data:image/png;base64," + tensor_to_base64(imgs_B[i], transform, jpeg_quality=85)
 
         # predictions
         predA_cls = probsA[i].argmax().item()
@@ -450,144 +437,144 @@ def visualize_in_html(
     return save_path
 
 
-def visualize_in_html2(
-    results_sorted, 
-    imgsA, imgsB, 
-    probsA, probsB, 
-    labels, 
-    class_names=None, 
-    transform=None,
-    directory=Path(),
-    image_paths=None
-):
-    # Prepare image & info lists
-    img_base64_list = []
-    imageA_list = []
-    imageB_list = []
-    info_list = []
+# def visualize_in_html2(
+#     results_sorted, 
+#     imgsA, imgsB, 
+#     probsA, probsB, 
+#     labels, 
+#     class_names=None, 
+#     transform=None,
+#     directory=Path(),
+#     image_paths=None
+# ):
+#     # Prepare image & info lists
+#     img_base64_list = []
+#     imageA_list = []
+#     imageB_list = []
+#     info_list = []
 
-    for res in results_sorted:
-        i = res.index
-        if image_paths is not None:
-            idx = Path(str(image_paths[i])).name
-        else:
-            idx = i
-        # images
-        imgA_b64 = "data:image/png;base64," + tensor_to_base64(imgsA[i], transform)
-        imgB_b64 = "data:image/png;base64," + tensor_to_base64(imgsB[i], transform)
+#     for res in results_sorted:
+#         i = res.index
+#         if image_paths is not None:
+#             idx = Path(str(image_paths[i])).name
+#         else:
+#             idx = i
+#         # images
+#         imgA_b64 = "data:image/png;base64," + tensor_to_base64(imgsA[i], transform)
+#         imgB_b64 = "data:image/png;base64," + tensor_to_base64(imgsB[i], transform)
 
-        # predictions
-        predA_cls = probsA[i].argmax().item()
-        predB_cls = probsB[i].argmax().item()
+#         # predictions
+#         predA_cls = probsA[i].argmax().item()
+#         predB_cls = probsB[i].argmax().item()
 
-        predA_p = probsA[i, predA_cls].item()
-        predB_p = probsB[i, predB_cls].item()
+#         predA_p = probsA[i, predA_cls].item()
+#         predB_p = probsB[i, predB_cls].item()
 
-        gt = labels[i].item()
+#         gt = labels[i].item()
 
-        imageA_list.append(f'"{imgA_b64}"')
-        imageB_list.append(f'"{imgB_b64}"')
+#         imageA_list.append(f'"{imgA_b64}"')
+#         imageB_list.append(f'"{imgB_b64}"')
 
-        if class_names is not None:
-            predA_cls = class_names[predA_cls]
-            predB_cls = class_names[predB_cls]
-            gt = class_names[gt]
+#         if class_names is not None:
+#             predA_cls = class_names[predA_cls]
+#             predB_cls = class_names[predB_cls]
+#             gt = class_names[gt]
 
-        info_list.append(
-            f'"'
-            f'<b>Index:</b> {idx}<br>'
-            f'<b>Ground Truth class:</b> {gt}<br><br>'
-            f'<b>Predictions:</b><br>'
-            f'<b>A:</b> ŷ={predA_cls} | <b>B:</b> ŷ={predB_cls}<br><br>'
-            f'<b>Before Image predict_proba:</b><br>'
-            f'<b>Class {predA_cls}:</b> {predA_p:.3f} <br><br>'
-            f'<b>Brittleness Δ:</b> {res.brittleness:.3f}<br><br>'
-            f'<b>After Image predict_proba:</b><br>'
-            f'<b><b>Class {predA_cls}:</b> {(predA_p - res.brittleness):.3f} | Class {predB_cls}:</b> {predB_p:.3f}'
-            f'"'
-        )
+#         info_list.append(
+#             f'"'
+#             f'<b>Index:</b> {idx}<br>'
+#             f'<b>Ground Truth class:</b> {gt}<br><br>'
+#             f'<b>Predictions:</b><br>'
+#             f'<b>A:</b> ŷ={predA_cls} | <b>B:</b> ŷ={predB_cls}<br><br>'
+#             f'<b>Before Image predict_proba:</b><br>'
+#             f'<b>Class {predA_cls}:</b> {predA_p:.3f} <br><br>'
+#             f'<b>Brittleness Δ:</b> {res.brittleness:.3f}<br><br>'
+#             f'<b>After Image predict_proba:</b><br>'
+#             f'<b><b>Class {predA_cls}:</b> {(predA_p - res.brittleness):.3f} | Class {predB_cls}:</b> {predB_p:.3f}'
+#             f'"'
+#         )
 
-    html = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-    <meta charset="utf-8">
-    <title>Brittleness Carousel</title>
+#     html = f"""
+#     <!DOCTYPE html>
+#     <html>
+#     <head>
+#     <meta charset="utf-8">
+#     <title>Brittleness Carousel</title>
 
-    <style>
-    body {{ font-family: Arial, sans-serif; }}
-    #container {{ text-align: center; margin-top: 30px; }}
-    .images {{ display: flex; justify-content: center; gap: 40px; }}
-    img {{ max-width: 320px; max-height: 320px; border: 1px solid #ccc; }}
-    button {{ padding: 10px 20px; font-size: 16px; margin: 10px; }}
-    #info {{ margin-top: 15px; font-size: 16px; }}
-    </style>
-    </head>
+#     <style>
+#     body {{ font-family: Arial, sans-serif; }}
+#     #container {{ text-align: center; margin-top: 30px; }}
+#     .images {{ display: flex; justify-content: center; gap: 40px; }}
+#     img {{ max-width: 320px; max-height: 320px; border: 1px solid #ccc; }}
+#     button {{ padding: 10px 20px; font-size: 16px; margin: 10px; }}
+#     #info {{ margin-top: 15px; font-size: 16px; }}
+#     </style>
+#     </head>
 
-    <body>
-    <div id="container">
+#     <body>
+#     <div id="container">
 
-    <h2>Most Brittle Images (A → B)</h2>
+#     <h2>Most Brittle Images (A → B)</h2>
 
-    <div class="images">
-    <div>
-        <h3>Before Corruption</h3>
-        <img id="imgA">
-    </div>
-    <div>
-        <h3>After Corruption</h3>
-        <img id="imgB">
-    </div>
-    </div>
+#     <div class="images">
+#     <div>
+#         <h3>Before Corruption</h3>
+#         <img id="imgA">
+#     </div>
+#     <div>
+#         <h3>After Corruption</h3>
+#         <img id="imgB">
+#     </div>
+#     </div>
 
-    <div id="info"></div>
+#     <div id="info"></div>
 
-    <button onclick="prev()">⬅ Prev</button>
-    <button onclick="next()">Next ➡</button>
+#     <button onclick="prev()">⬅ Prev</button>
+#     <button onclick="next()">Next ➡</button>
 
-    </div>
+#     </div>
 
-    <script>
-    let imagesA = [{",".join(imageA_list)}];
-    let imagesB = [{",".join(imageB_list)}];
-    let infos   = [{",".join(info_list)}];
+#     <script>
+#     let imagesA = [{",".join(imageA_list)}];
+#     let imagesB = [{",".join(imageB_list)}];
+#     let infos   = [{",".join(info_list)}];
 
-    let idx = 0;
+#     let idx = 0;
 
-    function show() {{
-    document.getElementById("imgA").src = imagesA[idx];
-    document.getElementById("imgB").src = imagesB[idx];
-    document.getElementById("info").innerHTML =
-        infos[idx] + "<br><br>" + (idx+1) + " / " + imagesA.length;
-    }}
+#     function show() {{
+#     document.getElementById("imgA").src = imagesA[idx];
+#     document.getElementById("imgB").src = imagesB[idx];
+#     document.getElementById("info").innerHTML =
+#         infos[idx] + "<br><br>" + (idx+1) + " / " + imagesA.length;
+#     }}
 
-    function next() {{
-    idx = (idx + 1) % imagesA.length;
-    show();
-    }}
+#     function next() {{
+#     idx = (idx + 1) % imagesA.length;
+#     show();
+#     }}
 
-    function prev() {{
-    idx = (idx - 1 + imagesA.length) % imagesA.length;
-    show();
-    }}
+#     function prev() {{
+#     idx = (idx - 1 + imagesA.length) % imagesA.length;
+#     show();
+#     }}
 
-    document.addEventListener("keydown", function(e) {{
-    if (e.key === "ArrowRight") next();
-    if (e.key === "ArrowLeft") prev();
-    }});
+#     document.addEventListener("keydown", function(e) {{
+#     if (e.key === "ArrowRight") next();
+#     if (e.key === "ArrowLeft") prev();
+#     }});
 
-    show();
-    </script>
+#     show();
+#     </script>
 
-    </body>
-    </html>
-    """
-    save_path = directory / "brittleness_carousel.html"
-    with open(save_path, "w") as f:
-        f.write(html)
+#     </body>
+#     </html>
+#     """
+#     save_path = directory / "brittleness_carousel.html"
+#     with open(save_path, "w") as f:
+#         f.write(html)
 
-    print("Saved brittleness_carousel.html")
-    return save_path
+#     print("Saved brittleness_carousel.html")
+#     return save_path
 
 # ==== HELPER FUNCTIONS ====
 
@@ -635,37 +622,37 @@ def get_topk_predictions(probs, k=3):
     vals, inds = probs.topk(k)
     return list(zip(inds.tolist(), vals.tolist()))
 
-def get_between_columns_x(fig):
+def tensor_to_base64(img_tensor, transform=None, max_size: int = None, jpeg_quality: int = None):
     """
-    Compute the midpoint x-coordinate between the first two x-axes of a Plotly figure.
-
-    Args:
-        fig (plotly.graph_objs.Figure): Plotly figure object with at least two x-axes.
-
-    Returns:
-        float: Midpoint between the end of the first x-axis and the start of the second.
-    """    
-    x1 = fig.layout.xaxis.domain
-    x2 = fig.layout.xaxis2.domain
-    return 0.5 * (x1[1] + x2[0])
-
-def tensor_to_base64(img_tensor, transform=None):
-    """
-    Convert a C,H,W image tensor to a base64-encoded PNG string.
+    Convert a C,H,W image tensor to a base64-encoded image string.
 
     Args:
         img_tensor (torch.Tensor): Image tensor with shape (C, H, W), values in [0,1].
-        transform (torchvision.transforms, optional): Transform used during preprocessing,
-            used to unnormalize the tensor if needed.
+        transform: Optional preprocessing transform, used to unnormalize if needed.
+        max_size (int, optional): Downscale so the longest edge is at most this many pixels.
+        jpeg_quality (int, optional): If set (1-95), encode as JPEG. Otherwise PNG.
 
     Returns:
-        str: Base64-encoded PNG image suitable for embedding in HTML or JSON.
+        str: Base64-encoded image. Caller prepends the data URI prefix.
     """
-    img = unnormalize(img_tensor, transform)#img_tensor.permute(1,2,0).numpy()
+    img = unnormalize(img_tensor, transform)
     img = (img * 255).astype(np.uint8)
     pil_img = Image.fromarray(img)
+
+    if max_size is not None:
+        w, h = pil_img.size
+        scale = max_size / max(w, h)
+        if scale < 1.0:
+            pil_img = pil_img.resize(
+                (int(w * scale), int(h * scale)),
+                Image.LANCZOS
+            )
+
     buffer = io.BytesIO()
-    pil_img.save(buffer, format="PNG")
+    if jpeg_quality is not None:
+        pil_img.save(buffer, format="JPEG", quality=jpeg_quality, optimize=True)
+    else:
+        pil_img.save(buffer, format="PNG")
     return base64.b64encode(buffer.getvalue()).decode()
 
 def extract_normalize(transform):
@@ -691,136 +678,3 @@ def extract_normalize(transform):
                 return t.mean, t.std
 
     return None
-
-# ==== OTHER FUNCTIONS THAT ARE NOT USED FOR THIS WHOLE ALGO BUT I DON'T WANT TO DELETE THEM YET ====
-
-def get_row_center_y(fig, r):
-    # Left column y-axis for row r
-    axis_index = 2 * r - 1
-    yaxis = getattr(fig.layout, "yaxis" if axis_index == 1 else f"yaxis{axis_index}")
-    y0, y1 = yaxis.domain
-    return 0.5 * (y0 + y1)
-
-def brittle_method(
-    model, 
-    test_loader, 
-    device, 
-    aug_dict,
-    transform=None,
-    augmentation_method=None,
-    severities=(0,1),
-):  
-    aug_class = None
-    for k, v in aug_dict.items():
-        if k == augmentation_method:
-            aug_class = v
-            break 
-    if aug_class == None:
-        raise ValueError("aug method not valid")
-
-    if severities[0] in ["None", 0]:
-        loader_A = test_loader
-    else: 
-        loader_A = aug_class.corr_func_dataloader(test_loader, severity_idx = severities[0])
-    loader_B = aug_class.corr_func_dataloader(test_loader, severity_idx = severities[1])
-
-
-    imgs_A, probs_A, labels = collect_probs(model, loader_A, device)
-    imgs_B, probs_B, _      = collect_probs(model, loader_B, device)
-
-    N = len(labels)
-    idx = torch.arange(N)
-
-    pA = probs_A[idx, labels]
-    pB = probs_B[idx, labels]
-
-    brittleness = pA - pB
-
-    results_all = [
-        BrittlenessResultIndiv(
-            index=i,
-            label=int(labels[i]),
-            predA=probs_A[i].argmax().item(),
-            predB=probs_B[i].argmax().item(),
-            pA=float(pA[i]),
-            pB=float(pB[i]),
-            brittleness=float(brittleness[i]),
-        ) for i in range(N)
-    ]
-    # Sort (most brittle first)
-    results_all_sorted = sorted(results_all, key=lambda x: x.brittleness, reverse=True)
-
-    b_result = BrittlenessResult(
-        results = results_all_sorted,
-        imgsA = imgs_A, 
-        imgsB = imgs_B, 
-        probs_A = probs_A,
-        probs_B = probs_B,
-        labels = labels
-    )
-
-    return b_result
-# =============================================================================================
-
-# if __name__ == "__main__":
-#     from cvrob_util import SimpleCNN
-#     from torchvision import datasets
-#     import torchvision.transforms as transforms
-
-#     device = torch.device("cpu")#"cuda" if torch.cuda.is_available() else "cpu")
-
-#     transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.5,), (0.5,))])
-#     # train_dataset = datasets.CIFAR10(root="./data", train=True, transform=transform, download=True)
-#     # test_dataset = datasets.CIFAR10(root="./data", train=False, transform=transform, download=True)
-#     # class_names = train_dataset.classes
-#     # ===============================================================================================================
-
-#     print("noisy indices done! let's go to: robustness evaluation")
-#     model = SimpleCNN().to(device)
-#     model.load_state_dict(torch.load('label_noise_simplecnn.h5', weights_only=True))
-
-#     clean_test_dataset = datasets.CIFAR10(root="./data", train=False, transform=transform, download=True)
-#     clean_test_loader = torch.utils.data.DataLoader(clean_test_dataset, batch_size=128, shuffle=False)
-#     class_names = clean_test_dataset.classes
-
-#     augmentation_list, augmentation_str, corrupt_func = get_corruption_helpers('album')
-
-#     b_result = brittle_method_simple(
-#         model, 
-#         clean_test_loader, 
-#         device, 
-#         corrupt_func, 
-#         augmentation_list,
-#         augmentation_str,
-#         transform=transform,
-#         augmentation_method="Gaussian Blur",
-#         severities=(0,1),
-#         # top_proportion=0.05,
-#         class_names=class_names
-#     )
-
-#     results = [
-#         r for r in b_result.results
-#         if r.predA == r.label and r.predB != r.label
-#     ]
-#     # results_sorted = sorted(results, key=lambda x: x.brittleness, reverse=True)
-
-#     print(f"TRANSFORM: {transform}")
-#     visualize_topk_matplotlib(results, b_result.imgsA, b_result.imgsB, b_result.probs_A, b_result.probs_B,  K=10, class_names=class_name, transform=transform)
-#     visualize_topk_plotly(results, b_result.imgsA, b_result.imgsB, b_result.probs_A, b_result.probs_B, K=10, class_names=class_names, transform=transform)
-#     visualize_in_html(results, b_result.imgsA, b_result.imgsB, b_result.probs_A, b_result.probs_B, b_result.labels, class_names=class_names, transform=transform)
-
-#     # # probability of the correct class
-#     # idx = torch.arange(len(labels))
-#     # pA = probs_A[idx, labels]
-#     # pB = probs_B[idx, labels]
-
-#     # brittleness = pA - pB
-#     # sorted_indices = torch.argsort(brittleness, descending=True)
-
-#     # # Most brittle images first
-#     top_proportion=0.05
-#     K = int(top_proportion*len(b_result.results)) if top_proportion < 1 else top_proportion
-#     most_brittle = b_result.results[:K]
-
-#     # return most_brittle
