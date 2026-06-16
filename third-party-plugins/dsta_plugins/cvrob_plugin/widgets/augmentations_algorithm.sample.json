@@ -3,6 +3,11 @@
     {
       "Augmentation": "augmentation_name",
       "display_info": {
+        "None": [
+          "images/Random Rain/severity1/51.png",
+          7,
+          7
+        ],
         "severity1": [
           "images/Random Rain/severity1/51.png",
           7,
@@ -30,12 +35,12 @@
         ]
       },
       "accuracies": {
-        "acc 0": 75,
-        "acc 1": 55,
-        "acc 2": 40,
-        "acc 3": 30,
-        "acc 4": 25,
-        "acc 5": 20
+        "None": 75,
+        "severity1": 55,
+        "severity2": 40,
+        "severity3": 30,
+        "severity4": 25,
+        "severity5": 20
       }
     }
   ],

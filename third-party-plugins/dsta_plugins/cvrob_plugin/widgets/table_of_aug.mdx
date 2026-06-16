@@ -1,29 +1,40 @@
-<div
-  style={{
-    width: "100%",
-    padding: "16px",
-    marginBottom: "24px",
-    border: "1px solid #e5e7eb",
-    borderRadius: "8px",
-    backgroundColor: "#fafafa",
-    boxSizing: "border-box",
-  }}
->
-  <h3>Table of Augmentations</h3>
+<div style={{ width: "100%" }}>
 
-  <p>
-    This table provides an overview of the image corruption and augmentation
-    techniques available in the robustness toolbox. For each augmentation, it
-    describes the type of perturbation applied, how a similar effect may occur
-    in real-world scenarios, and whether the augmentation is currently
-    supported by the framework.
-  </p>
+  <div
+    style={{
+      width: "100%",
+      padding: "16px",
+      marginBottom: "24px",
+      border: "1px solid #e5e7eb",
+      borderRadius: "8px",
+      backgroundColor: "#fafafa",
+      boxSizing: "border-box",
+    }}
+  >
+    <h3>Table of Augmentations</h3>
+
+    <p>
+      This table provides an overview of the image corruption and augmentation
+      techniques available in the robustness toolbox. For each augmentation, it
+      describes the type of perturbation applied, how a similar effect may occur
+      in real-world scenarios, and whether the augmentation is currently
+      supported by the framework.
+    </p>
+  </div>
+
+  <div style={{ height: "24px", breakInside: "avoid", pageBreakInside: "avoid" }} />
 
   <table
     style={{
       width: "100%",
+      breakBefore: "avoid",      // ← add this
+      pageBreakBefore: "avoid",  // ← and this (legacy alias for older engines)
       borderCollapse: "collapse",
       textAlign: "center",
+      breakInside: "auto",
+      pageBreakInside: "auto",
+      orphans: 1,
+      widows: 1,
     }}
   >
     <thead>

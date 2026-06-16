@@ -1,7 +1,7 @@
 {
   "cid": "odbri_algorithm",
   "gid": "cvrob_plugin",
-  "name": "OD Brittleness Algorithm",
+  "name": "[WIP] OD Brittleness Algorithm",
   "modelType": [
     "classification"
   ],

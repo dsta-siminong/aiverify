@@ -464,7 +464,8 @@ class Plugin(IAlgorithm):
             "results": combined_results,
             "gradients": gradients,
             "first_drops": first_drops,
-            "augmentation_names": [x["Augmentation"] for x in combined_results]
+            "augmentation_names": [x["Augmentation"] for x in combined_results],
+            "dataset_size": len(image_paths)
         })
 
         self._results = output_results

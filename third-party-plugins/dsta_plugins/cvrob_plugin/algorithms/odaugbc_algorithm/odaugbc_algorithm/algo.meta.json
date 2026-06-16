@@ -1,7 +1,7 @@
 {
   "cid": "odaugbc_algorithm",
   "gid": "cvrob_plugin",
-  "name": "OD Augmentation by Class Algorithm",
+  "name": "[WIP] OD Augmentation by Class Algorithm",
   "modelType": [
     "classification"
   ],

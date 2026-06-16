@@ -2,71 +2,6 @@ export const cid = "augmentation_algorithm"
 //export const ib_cid = "augmentations_inputblock"
 
 
-<div style={{ marginBottom: "1rem" }}>
-  <div
-    style={{
-      textAlign: "center",
-      fontWeight: "bold",
-      fontSize: "2.2rem",
-      color: "#b91c1c",
-      textDecoration: "underline"
-    }}
-  >
-    {props.properties.title}
-  </div>
-</div>
-
-
-{props.getResults(cid)?(
-  (() => {
-    const args = props.getResults(cid).ALGORITHM_ARGUMENTS;
-
-    return (
-      <div style={{
-        border: "1px solid #e5e7eb",
-        borderRadius: "8px",
-        padding: "1rem",
-        background: "#fafafa",
-        margin: "1rem 0"
-      }}>
-        <div style={{
-          fontWeight: "bold",
-          marginBottom: "0.75rem",
-          fontSize: "1.05rem"
-        }}>
-          Algorithm Parameters
-        </div>
-
-        <table style={{ width: "100%", borderCollapse: "collapse" }}>
-          <tbody>
-            {Object.entries(args).map(([key, value]) => (
-              <tr key={key}>
-                <td style={{
-                  fontWeight: "600",
-                  padding: "0.35rem 0.5rem",
-                  verticalAlign: "top",
-                  width: "35%"
-                }}>
-                  {key.replace(/_/g, " ")}
-                </td>
-                <td style={{
-                  padding: "0.35rem 0.5rem",
-                  color: "#374151",
-                  wordBreak: "break-all"
-                }}>
-                  {String(value)}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    );
-  })()
-):(
-  <div>No algorithm data</div>
-)}
-
 import {
   transformData,
   ClassLineChart,
@@ -74,6 +9,28 @@ import {
   StackedBarChart,
   ClassMetricsTable
 } from './augbyclass-chart.jsx';
+
+import { ALL_AUGMENTATIONS_LONG } from "./augmentationInfo.jsx";
+
+
+export const Header = (props) => {
+  return (
+    <div style={{ marginBottom: "1rem" }}>
+      <div
+        style={{
+          textAlign: "center",
+          fontWeight: "bold",
+          fontSize: "2.2rem",
+          color: "#b91c1c",
+          textDecoration: "underline",
+        }}
+      >
+        {props.properties.title}
+      </div>
+    </div>
+  );
+};
+
 
 export const AugmentationFigurePanel = ({ props }) => {
   const resultsData = props.getResults
@@ -83,6 +40,12 @@ export const AugmentationFigurePanel = ({ props }) => {
   if (!resultsData || resultsData.length === 0) {
     return <div>No results data available</div>;
   }
+
+  const AUGMENTATION_LOOKUP = Object.fromEntries(
+    ALL_AUGMENTATIONS_LONG.flatMap((aug) =>
+      aug.keys.map((key) => [key, aug])
+    )
+  );
 
   const panels = resultsData.map((item, index) => {
     const { Augmentation, fig_img, accuracies } = item;
@@ -113,9 +76,11 @@ export const AugmentationFigurePanel = ({ props }) => {
       console.error(`Error loading ${fig_img}`, error);
     }
 
+    const augmentationInfo = AUGMENTATION_LOOKUP[Augmentation];
     const acc = accuracies || {};
 
-    // ✅ Sort severities properly
+    const MAX_COLUMNS = 5;
+
     const severityKeys = Object.keys(acc).sort((a, b) => {
       if (a === "None") return -1;
       if (b === "None") return 1;
@@ -125,6 +90,11 @@ export const AugmentationFigurePanel = ({ props }) => {
 
       return numA - numB;
     });
+
+    const severityChunks = [];
+    for (let i = 0; i < severityKeys.length; i += MAX_COLUMNS) {
+      severityChunks.push(severityKeys.slice(i, i + MAX_COLUMNS));
+    }
 
     return (
       <div
@@ -146,87 +116,128 @@ export const AugmentationFigurePanel = ({ props }) => {
             marginBottom: "1rem",
           }}
         >
-          {Augmentation}
+          Augmentation Name: {Augmentation}
         </h2>
 
-        {/* 📈 Figure */}
-        {imageUrl && (
-          <img
-            src={imageUrl}
-            alt={Augmentation}
-            style={{
-              maxWidth: "700px",
-              width: "100%",
-              height: "auto",
-              borderRadius: "6px",
-              marginBottom: "1.5rem",
-            }}
-          />
-        )}
-
-        {/* 📋 Table */}
-        <table
+        <h3
           style={{
-            width: "100%",
-            borderCollapse: "collapse",
-            tableLayout: "fixed",
+            color: "blue",
+            fontWeight: "bold",
+            textDecoration: "underline",
+            marginTop: "1rem",
+            marginBottom: "1rem",
           }}
         >
-          <thead>
-            <tr>
-              {/* NEW LEFT HEADER CELL */}
-              <th
-                style={{
-                  border: "1px solid #ccc",
-                  padding: "6px",
-                  fontSize: "0.85em",
-                }}
-              >
-                Severity
-              </th>
-              {severityKeys.map((sev) => (
-                <th
-                  key={sev}
-                  style={{
-                    border: "1px solid #ccc",
-                    padding: "6px",
-                    fontSize: "0.85em",
-                  }}
-                >
-                  {sev === "None" ? "No Aug" : sev}
-                </th>
-              ))}
-            </tr>
-          </thead>
+          &gt;&gt; Augmentation Description: &lt;&lt;
+        </h3>
 
-          <tbody>
-            <tr>
-              {/* NEW LEFT BODY LABEL */}
-              <td
-                style={{
-                  border: "1px solid #ccc",
-                  padding: "6px",
-                  fontWeight: "bold",
-                }}
-              >
-                Accuracy (%)
-              </td>
-              {severityKeys.map((sev) => (
-                <td
-                  key={sev}
-                  style={{
-                    border: "1px solid #ccc",
-                    padding: "6px",
-                    textAlign: "center",
-                    fontWeight: "bold",
-                  }}
-                >
-                  {acc[sev]?.toFixed(1) ?? "-"}
-                </td>
-              ))}
-            </tr>
-          </tbody>
-        </table>
+        {/* Description */}
+        {augmentationInfo.longDescription.map((p, i) => (
+          p.split('\n').map((line, j) => (
+            line.trim() === '' 
+              ? <br key={`${i}-${j}`} /> 
+              : <p key={`${i}-${j}`} style={{ margin: "0.5em 0" }}>{line}</p>
+          ))
+        ))}
+
+        <div
+          style={{
+            breakInside: "avoid",
+            pageBreakInside: "avoid",
+            paddingTop: "1rem",
+            marginBottom: "1rem",
+          }}
+        >
+          <h3
+            style={{
+              color: "blue",
+              fontWeight: "bold",
+              textDecoration: "underline",
+              marginTop: 0,
+              marginBottom: "1rem",
+            }}
+          >
+            &gt;&gt; Figure for Augmentation - {Augmentation}: &lt;&lt;
+          </h3>
+
+          {/* 📈 Figure */}
+          {imageUrl && (
+            <img
+              src={imageUrl}
+              alt={Augmentation}
+              style={{
+                maxWidth: "700px",
+                width: "100%",
+                height: "auto",
+                borderRadius: "6px",
+                marginBottom: "1.5rem",
+              }}
+            />
+          )}
+
+          {/* 📋 Tables */}
+          {severityChunks.map((chunk, tableIndex) => (
+            <table
+              key={tableIndex}
+              style={{
+                width: "100%",
+                borderCollapse: "collapse",
+                tableLayout: "fixed",
+                marginBottom: "1.5em",
+              }}
+            >
+              <thead>
+                <tr>
+                  <th style={{ border: "1px solid #ccc", padding: "6px" }}>
+                    Severity
+                  </th>
+
+                  {chunk.map((sev) => (
+                    <th
+                      key={sev}
+                      style={{
+                        border: "1px solid #ccc",
+                        padding: "6px",
+                        fontSize: "0.85em",
+                      }}
+                    >
+                      {sev === "None" ? "No Aug" : sev}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+
+              <tbody>
+                <tr>
+                  <td
+                    style={{
+                      border: "1px solid #ccc",
+                      padding: "6px",
+                      fontWeight: "bold",
+                    }}
+                  >
+                    Accuracy (%)
+                  </td>
+
+                  {chunk.map((sev) => (
+                    <td
+                      key={sev}
+                      style={{
+                        border: "1px solid #ccc",
+                        padding: "6px",
+                        textAlign: "center",
+                        fontWeight: "bold",
+                      }}
+                    >
+                      {acc[sev]?.toFixed(1) ?? "-"}
+                    </td>
+                  ))}
+                </tr>
+              </tbody>
+            </table>
+          ))}
+          <div style={{ pageBreakAfter: "always" }} />
+        </div>
       </div>
     );
   });
@@ -234,5 +245,6 @@ export const AugmentationFigurePanel = ({ props }) => {
   return <div>{panels}</div>;
 };
 
-<AugmentationFigurePanel props={props} />
+<Header properties={props.properties} />
 
+<AugmentationFigurePanel props={props} />

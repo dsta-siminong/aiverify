@@ -12,10 +12,10 @@ export const summary = (data) => {
 
 {/* Return progress in percentage (0-100) */}
 export const progress = (data) => {
-	// TODO: replace below code with percentage of user completion.
+    // TODO: replace below code with percentage of user completion.
   if (!data)
     return 0;
-  const totalKeys = 3;
+  const totalKeys = 5;
   const numKeys = Object.values(data).filter(v => {
     if (typeof (v) === "string" || Array.isArray(v)) {
       return v.length > 0;
@@ -29,5 +29,5 @@ export const progress = (data) => {
 {/* Validate data. */}
 export const validate = (data) => {
   // TODO: replace below code with data validation. 
-  return true
+  return true;
 }

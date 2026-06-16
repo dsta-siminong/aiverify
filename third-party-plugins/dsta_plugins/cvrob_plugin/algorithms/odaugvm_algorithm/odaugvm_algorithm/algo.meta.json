@@ -1,7 +1,7 @@
 {
   "cid": "odaugvm_algorithm",
   "gid": "cvrob_plugin",
-  "name": "OD Algorithm v Metric Algorithm",
+  "name": "[WIP] OD Algorithm v Metric Algorithm",
   "modelType": [
     "classification"
   ],

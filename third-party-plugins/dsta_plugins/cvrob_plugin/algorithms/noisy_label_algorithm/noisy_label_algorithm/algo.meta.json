@@ -1,7 +1,7 @@
 {
   "cid": "noisy_label_algorithm",
   "gid": "cvrob_plugin",
-  "name": "Noisy Label Algorithm",
+  "name": "[WIP] Noisy Label Algorithm",
   "modelType": [
     "classification"
   ],

@@ -1,0 +1,273 @@
+export const cid = "augmentation_algorithm"
+export const ib_cid = "avm_inputblock"
+
+{(() => {
+  const ib = props.getIBData ? props.getIBData(ib_cid) : null;
+  const data = props.getResults ? props.getResults(cid) : null;
+
+  const results   = data?.results ?? [];
+  const augNames  = data?.augmentation_names ?? [];
+  const firstDrops = data?.first_drops ?? [];
+  const numClasses  = augNames.length > 0 ? augNames.length : null;
+  const datasetSize = data?.dataset_size ?? null;
+
+  // Base accuracy
+  const firstAccuracies = results[0]?.accuracies ?? {};
+  const baseAccuracy = firstAccuracies["None"] ?? null;
+
+  // Worst-case accuracy
+  let worstAccuracy = null;
+  for (const item of results) {
+    for (const val of Object.values(item.accuracies ?? {})) {
+      if (worstAccuracy === null || val < worstAccuracy) worstAccuracy = val;
+    }
+  }
+
+  // Most damaging augmentation by first_drop
+  let mostDamagingName = null;
+  if (firstDrops.length > 0 && augNames.length > 0) {
+    let minDrop = Infinity;
+    firstDrops.forEach((drop, i) => {
+      if (drop < minDrop) { minDrop = drop; mostDamagingName = augNames[i] ?? null; }
+    });
+  }
+
+  const accuracyColor = (val) =>
+    val == null ? "#6b7280" : val > 70 ? "#15803d" : val < 30 ? "#b91c1c" : "#a16207";
+
+  // ── Styles ──────────────────────────────────────────────────────────────────
+
+  const pageStyle = {
+    fontFamily: "'Segoe UI', system-ui, sans-serif",
+    maxWidth: "860px",
+    margin: "0 auto",
+    padding: "2rem 1.5rem",
+    color: "#1f2937",
+  };
+
+  const dividerStyle = {
+    border: "none",
+    borderTop: "2px solid #e5e7eb",
+    margin: "2rem 0",
+  };
+
+  const sectionTitleStyle = {
+    fontSize: "1.15rem",
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: "0.08em",
+    color: "#6b7280",
+    marginBottom: "1rem",
+    marginTop: "0",
+  };
+
+  const fieldRowStyle = {
+    display: "grid",
+    gridTemplateColumns: "180px 1fr",
+    gap: "0.4rem 1rem",
+    alignItems: "baseline",
+    marginBottom: "0.5rem",
+  };
+
+  const fieldLabelStyle = {
+    fontWeight: "600",
+    color: "#374151",
+    fontSize: "0.95rem",
+  };
+
+  const fieldValueStyle = {
+    color: "#1f2937",
+    fontSize: "0.95rem",
+  };
+
+  const tagStyle = {
+    display: "inline-block",
+    background: "#e0e7ff",
+    color: "#3730a3",
+    borderRadius: "999px",
+    padding: "0.2rem 0.75rem",
+    fontSize: "0.85rem",
+    fontWeight: "600",
+    margin: "0.2rem",
+  };
+
+  const summaryBoxStyle = {
+    border: "2px solid #e5e7eb",
+    borderRadius: "16px",
+    padding: "1.5rem 2rem",
+    background: "#f9fafb",
+  };
+
+  const metricCardStyle = {
+    flex: "1",
+    minWidth: "180px",
+    textAlign: "center",
+    padding: "1.25rem 1rem",
+    background: "#ffffff",
+    border: "1.5px solid #e5e7eb",
+    borderRadius: "12px",
+  };
+
+  const metricLabelStyle = {
+    fontSize: "0.85rem",
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: "0.06em",
+    color: "#6b7280",
+    marginBottom: "0.6rem",
+  };
+
+  const Field = ({ label, value }) => (
+    <div style={fieldRowStyle}>
+      <span style={fieldLabelStyle}>{label}</span>
+      <span style={fieldValueStyle}>{value ?? <em style={{ color: "#9ca3af" }}>Not specified</em>}</span>
+    </div>
+  );
+
+  return (
+    <div style={pageStyle}>
+
+      {/* ── Report Header ─────────────────────────────────────────────────── */}
+      <div style={{ textAlign: "center", marginBottom: "0.5rem" }}>
+        <div style={{
+          fontSize: "2.4rem",
+          fontWeight: "800",
+          color: "#111827",
+          letterSpacing: "-0.02em",
+        }}>
+          Model Robustness Report
+        </div>
+        <div style={{
+          marginTop: "0.75rem",
+          fontSize: "1rem",
+          color: "#6b7280",
+          maxWidth: "600px",
+          margin: "0.75rem auto 0",
+          lineHeight: "1.6",
+        }}>
+          This report evaluates how the model's classification accuracy changes when input images
+          are subjected to visual corruptions of increasing severity — simulating real-world
+          degradation such as weather effects, noise, or blur.
+        </div>
+      </div>
+
+      <hr style={dividerStyle} />
+
+      {/* ── Model Identity ────────────────────────────────────────────────── */}
+      <p style={sectionTitleStyle}>Model Identity</p>
+      <Field label="Model Name"    value={ib?.modelname} />
+      <Field label="Model Details" value={ib?.modeldetails} />
+
+      <hr style={dividerStyle} />
+
+      {/* ── Intended Use ──────────────────────────────────────────────────── */}
+      <p style={sectionTitleStyle}>Intended Use</p>
+      <Field label="Deployment Context"    value={ib?.deploycon} />
+      <Field label="Operating Environment" value={ib?.operv} />
+
+      <div style={{ marginTop: "1rem" }}>
+        <div style={{ ...fieldLabelStyle, marginBottom: "0.5rem" }}>Corruption Algorithms Tested</div>
+        <div>
+          {augNames.length > 0
+            ? augNames.map((name) => <span key={name} style={tagStyle}>{name}</span>)
+            : <em style={{ color: "#9ca3af", fontSize: "0.9rem" }}>No algorithms found</em>
+          }
+        </div>
+      </div>
+
+      <hr style={dividerStyle} />
+
+      {/* ── Data Identity ─────────────────────────────────────────────────── */}
+      <p style={sectionTitleStyle}>Data Identity</p>
+      <Field label="Dataset Details" value={ib?.testdatadetails} />
+      <Field label="Number of Classes" value={numClasses ?? "N/A"} />
+      <Field label="Dataset Size"      value={datasetSize != null ? `${datasetSize} images` : undefined} />
+
+      <hr style={dividerStyle} />
+
+      {/* ── Performance Summary ───────────────────────────────────────────── */}
+      <div
+        style={{
+          breakInside: "avoid",
+          pageBreakInside: "avoid",
+          paddingTop: "1rem",
+          marginBottom: "1rem",
+        }}
+      >
+        <p style={sectionTitleStyle}>Performance Summary</p>
+        <div style={summaryBoxStyle}>
+          <div style={{
+            fontSize: "0.8rem",
+            color: "#9ca3af",
+            marginBottom: "1.25rem",
+            fontStyle: "italic",
+          }}>
+            Accuracy colour: <span style={{ color: "#15803d", fontWeight: 600 }}>Green &gt; 70%</span>
+            {" · "}
+            <span style={{ color: "#a16207", fontWeight: 600 }}>Yellow 30–70%</span>
+            {" · "}
+            <span style={{ color: "#b91c1c", fontWeight: 600 }}>Red &lt; 30%</span>
+          </div>
+
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "1rem" }}>
+
+            {/* Base Accuracy */}
+            <div style={metricCardStyle}>
+              <div style={metricLabelStyle}>Base Accuracy</div>
+              <div style={{ fontSize: "2.2rem", fontWeight: "800", color: accuracyColor(baseAccuracy) }}>
+                {baseAccuracy != null ? `${baseAccuracy.toFixed(1)}%` : "N/A"}
+              </div>
+              <div style={{ fontSize: "0.78rem", color: "#9ca3af", marginTop: "0.4rem" }}>
+                No augmentation applied
+              </div>
+            </div>
+
+            {/* Worst-Case Accuracy */}
+            <div style={metricCardStyle}>
+              <div style={metricLabelStyle}>Worst-Case Accuracy</div>
+              <div style={{ fontSize: "2.2rem", fontWeight: "800", color: accuracyColor(worstAccuracy) }}>
+                {worstAccuracy != null ? `${worstAccuracy.toFixed(1)}%` : "N/A"}
+              </div>
+              <div style={{ fontSize: "0.78rem", color: "#9ca3af", marginTop: "0.4rem" }}>
+                Lowest across all corruptions &amp; severities
+              </div>
+            </div>
+
+            {/* Most Impactful Corruption */}
+            <div style={metricCardStyle}>
+              <div style={metricLabelStyle}>Most Impactful Corruption</div>
+              <div style={{ fontSize: "1.6rem", fontWeight: "800", color: "#1d4ed8", lineHeight: "1.2", marginTop: "0.25rem" }}>
+                {mostDamagingName ?? "N/A"}
+              </div>
+              <div style={{ fontSize: "0.78rem", color: "#9ca3af", marginTop: "0.4rem" }}>
+                Largest accuracy drop at first severity
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <hr style={dividerStyle} />
+
+      </div>
+
+      {/* ── Disclaimer ────────────────────────────────────────────────────── */}
+      <div style={{
+        background: "#fefce8",
+        border: "1.5px solid #fde047",
+        borderRadius: "10px",
+        padding: "1rem 1.25rem",
+        display: "flex",
+        gap: "0.75rem",
+        alignItems: "flex-start",
+      }}>
+        <span style={{ fontSize: "1.2rem", lineHeight: "1.5" }}>⚠️</span>
+        <p style={{ margin: 0, fontSize: "0.88rem", color: "#713f12", lineHeight: "1.6" }}>
+          <strong>Disclaimer:</strong> Results presented in this report should be interpreted in the context of the model's intended deployment environment. Not all corruption types evaluated may realistically occur in a given use case, and the relevance of each corruption should be assessed against plausible real-world conditions. Furthermore, the severity levels tested represent a standardised digital scale and may not directly correspond to the degree of degradation expected in practice — practitioners should consider which severity levels are plausible for their specific operating conditions before drawing conclusions.
+        </p>
+      </div>
+
+
+    </div>
+  );
+})()}

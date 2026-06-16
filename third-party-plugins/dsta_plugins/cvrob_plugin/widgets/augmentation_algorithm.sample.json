@@ -1,1 +1,60 @@
-{}
+{
+  "results": [
+    {
+      "Augmentation": "augmentation_name",
+      "display_info": {
+        "None": [
+          "images/Random Rain/severity1/51.png",
+          7,
+          7
+        ],
+        "severity1": [
+          "images/Random Rain/severity1/51.png",
+          7,
+          7
+        ],
+        "severity2": [
+          "images/Random Rain/severity2/51.png",
+          7,
+          7
+        ],
+        "severity3": [
+          "images/Random Rain/severity3/51.png",
+          0,
+          7
+        ],
+        "severity4": [
+          "images/Random Rain/severity4/51.png",
+          0,
+          7
+        ],
+        "severity5": [
+          "images/Random Rain/severity5/51.png",
+          0,
+          7
+        ]
+      },
+      "accuracies": {
+        "None": 75,
+        "severity1": 55,
+        "severity2": 40,
+        "severity3": 30,
+        "severity4": 25,
+        "severity5": 20
+      }
+    }
+  ],
+  "gradients": [
+    -3
+  ],
+  "first_drops": [
+    -6
+  ],
+  "augmentation_names": [
+    "augmentation_name"
+  ],
+  "dataset_size": 67,
+  "ALGORITHM_ARGUMENTS": {
+      "num_epochs": 5
+  }
+}
