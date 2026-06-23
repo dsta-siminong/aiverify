@@ -475,7 +475,7 @@ class Plugin(IAlgorithm):
                     test_loader, aug_class, severity_name, display_idx
                 )
 
-                image_path = self._save_one_image(display_image, str(corrupted_dir), display_idx)
+                image_path = self._save_one_image(display_image, str(corrupted_dir), Path(str(image_paths[display_idx])).name)
                 image = torch.tensor(display_image).unsqueeze(0).float()
                 model = model.float()
 
@@ -488,7 +488,6 @@ class Plugin(IAlgorithm):
 
                 random_display = [
                     str(Path(image_path).relative_to(self._output_folder)),
-                    # str(Path(corrupted_image_paths[display_idx]).relative_to(self._output_folder)),
                     class_names[str(ground_truth)],
                     class_names[str(prediction)],
                 ]
@@ -529,29 +528,6 @@ class Plugin(IAlgorithm):
 
         self._results = output_results
 
-    # def _get_corrupted_images(self, testloader, aug_class, _severity):
-    #     corrupted_images = []#; dataset_len = len(testloader.dataset)
-    #     for images, labels in testloader:   
-    #         # images_np = (images * 255).byte().numpy().transpose(0, 2, 3, 1)  # Convert to HWC format and uint8
-    #         images_np = (
-    #             images.mul(255)
-    #             .byte()
-    #             .numpy()
-    #             .transpose(0, 2, 3, 1)  # BCHW → BHWC
-    #         )
-    #         # Apply corruption function with provided parameters
-    #         if aug_class.name == "None" or _severity == "None":
-    #             corrupted = images_np
-    #         else:
-    #             corrupted = aug_class.corr_func_arr(images_np, _severity)
-            
-    #         # corrupted = (torch.tensor(corrupted.transpose(0, 3, 1, 2), dtype=torch.float32) / 255.0).numpy()  #as opposed to torch.tensor
-    #         corrupted = corrupted.astype(np.float32) / 255.0
-    #         corrupted = np.transpose(corrupted, (0, 3, 1, 2))
-    #         corrupted_images.append(corrupted)
-
-        # return np.concatenate(corrupted_images, axis=0)
-
     def _load_images(self, image_paths: list[str], labels) -> list[np.ndarray]:
         """
         Load a list of numpy images from file paths.
@@ -580,29 +556,6 @@ class Plugin(IAlgorithm):
         loader = DataLoader(dataset, batch_size=128, shuffle=False)
 
         return dataset, loader
-
-    # def _save_images(self, images: list[np.ndarray], subfolder_name: str) -> list[str]:
-    #     """
-    #     Save a list of numpy arrays as images in a subfolder.
-
-    #     Args:
-    #         images (list[np.ndarray]): A list of numpy images
-    #         subfolder_name (str): The name of the subfolder to save images
-
-    #     Returns:
-    #         list[str]: A list of saved image paths
-    #     """
-    #     image_paths = []
-    #     save_dir = self._save_folder / subfolder_name
-    #     save_dir.mkdir(parents=True, exist_ok=True)
-
-    #     for idx, image in enumerate(images):
-    #         image_path = save_dir / f"{idx}.png"
-    #         # print("image shape", image.shape)
-    #         image = np.transpose(image, (1, 2, 0))
-    #         Image.fromarray((image * 255.0).astype(np.uint8)).save(image_path)
-    #         image_paths.append(str(image_path))
-    #     return image_paths
 
     def _sklearn_method(self, data, data2, severities, class_names, subfolder_name, aug_name):
         plt.rcParams.update({'font.size': 18})
@@ -921,19 +874,6 @@ class Plugin(IAlgorithm):
         for idx, col in enumerate(metric_cols):
             mask = nan_mask_metrics[col].values
 
-            # fig.add_scatter(
-            #     x=plot_df.loc[mask, "severity"],
-            #     y=plot_df.loc[mask, col],   # now correctly aligned (0 after fill)
-            #     mode="markers",
-            #     marker=dict(
-            #         symbol="x",
-            #         size=10,
-            #         color=trace_colors[idx]
-            #     ),
-            #     name=f"{col} (undefined)",
-            #     showlegend=False
-            # )
-
             if mask.sum() == 0:
                 continue
 
@@ -1116,11 +1056,11 @@ class Plugin(IAlgorithm):
         print(f"Saved to {save_path1} [plotly]")
         return save_path , save_path1
 
-    def _save_one_image(self, image: np.ndarray, subfolder_name: str, idx: int) -> str:
+    def _save_one_image(self, image: np.ndarray, subfolder_name, image_path_original):
         save_dir = self._save_folder / subfolder_name
         save_dir.mkdir(parents=True, exist_ok=True)
 
-        image_path = save_dir / f"{idx}.png"
+        image_path = save_dir / image_path_original
         image = np.transpose(image, (1, 2, 0))
         Image.fromarray((image * 255.0).astype(np.uint8)).save(image_path)
 

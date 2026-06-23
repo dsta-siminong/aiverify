@@ -355,6 +355,9 @@ class AlgoInit:
             for k in ["matplotlib_image_path", "plotly_image_path", "html_carousel_path"]:
                 if k in results:
                     artifact_list.append(results[k])
+            
+            if "matplotlib_fragment_paths" in results:
+                artifact_list += results["matplotlib_fragment_paths"] 
 
             # Debug print: what artifact_list looks like before creating ITestResult
             print(">>> artifact_list before creating ITestResult:", artifact_list)

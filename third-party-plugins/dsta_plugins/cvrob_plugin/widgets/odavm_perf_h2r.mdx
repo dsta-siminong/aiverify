@@ -1,0 +1,68 @@
+<div style={{
+  width: "100%",
+  padding: "16px",
+  marginBottom: "24px",
+  border: "1px solid #e5e7eb",
+  borderRadius: "8px",
+  backgroundColor: "#fafafa",
+  boxSizing: "border-box"
+}}>
+  <h3>mAP Under Corruption</h3>
+
+  <span>
+    This widget shows how the model's Mean Average Precision (mAP), representing its predictive performance,
+    is affected for each specified corruption algorithm as the severity of the corruption
+    increases.
+  </span>
+</div>
+
+<div style={{
+  width: "100%",
+  padding: "16px",
+  marginBottom: "24px",
+  border: "1px solid #e5e7eb",
+  borderRadius: "8px",
+  backgroundColor: "#fafafa",
+  boxSizing: "border-box"
+}}>
+  <h4>
+    <b>How to read?</b>
+  </h4>
+
+  <p>
+    Each line graph corresponds to a selected corruption algorithm. It tracks the model's
+    mAP as the severity of the corruption increases. In this context, mAP is
+    the average of "Average Precision" scores across all the object classes, calculated
+    based on how well the model locates objects and avoids false alarms. It can be 
+    thought of this model's "accuracy" or performance within the object detection task.
+  </p>
+
+  <p>
+    In general, good model performance is indicated by high mAP. However, as severity
+    increases, the model’s predictive performance — and therefore its mAP — is expected
+    to decline.
+  </p>
+</div>
+
+<div>
+  <span>
+    <b>Interpretation</b>
+  </span>
+
+  <span>
+    A steeper decline in mAP indicates a less robust model. In such cases, the
+    recommended action is to retrain the model and include more training samples augmented
+    with this corruption type.
+  </span>
+
+  <span>
+    If mAP remains stable, the model can be considered robust to this corruption,
+    and no further action is required.
+  </span>
+
+  <span>
+    If mAP improves as severity increases, this may indicate that the model has
+    overfitted to this corruption type during training. In this case, retraining with
+    fewer augmented samples of this corruption type is recommended.
+  </span>
+</div>

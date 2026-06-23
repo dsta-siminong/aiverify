@@ -17,56 +17,6 @@ export const cid = "brittle_algorithm"
 </div>
 
 
-{props.getResults(cid)?(
-  (() => {
-    const args = props.getResults(cid).ALGORITHM_ARGUMENTS;
-
-    return (
-      <div style={{
-        border: "1px solid #e5e7eb",
-        borderRadius: "8px",
-        padding: "1rem",
-        background: "#fafafa",
-        margin: "1rem 0"
-      }}>
-        <div style={{
-          fontWeight: "bold",
-          marginBottom: "0.75rem",
-          fontSize: "1.05rem"
-        }}>
-          Algorithm Parameters
-        </div>
-
-        <table style={{ width: "100%", borderCollapse: "collapse" }}>
-          <tbody>
-            {Object.entries(args).map(([key, value]) => (
-              <tr key={key}>
-                <td style={{
-                  fontWeight: "600",
-                  padding: "0.35rem 0.5rem",
-                  verticalAlign: "top",
-                  width: "35%"
-                }}>
-                  {key.replace(/_/g, " ")}
-                </td>
-                <td style={{
-                  padding: "0.35rem 0.5rem",
-                  color: "#374151",
-                  wordBreak: "break-all"
-                }}>
-                  {String(value)}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    );
-  })()
-):(
-  <div>No algorithm data</div>
-)}
-
 export const BrittleDisplay = ({ props }) => {
   const key = Object.keys(props.artifacts || {})[0];
   const artifactList = key ? props.artifacts[key] : [];
@@ -89,11 +39,6 @@ export const BrittleDisplay = ({ props }) => {
       {filteredArtifacts.map((url, i) => {
         const filename = url.split("/").pop();
 
-        const title = filename
-          ?.replace(".png", "")
-          ?.replace(".html", "")
-          ?.replace(/_/g, " ");
-
         if (!url.endsWith("carousel.html")) return null;
 
         return (
@@ -106,7 +51,7 @@ export const BrittleDisplay = ({ props }) => {
               boxShadow: "0 2px 8px rgba(0,0,0,0.06)"
             }}
           >
-            <h3 style={{ marginBottom: "1rem" }}>{title}</h3>
+            <h3 style={{ marginBottom: "1rem" }}>Brittleness Click-through HTML (For newly misclassified images)</h3>
 
             <iframe
               src={url}

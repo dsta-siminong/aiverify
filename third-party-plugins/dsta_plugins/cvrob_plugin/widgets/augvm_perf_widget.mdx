@@ -112,7 +112,6 @@ export const AugmentationFigurePanel = ({ props }) => {
           style={{
             fontWeight: "bold",
             textDecoration: "underline",
-            color: "red",
             marginBottom: "1rem",
           }}
         >
@@ -121,7 +120,6 @@ export const AugmentationFigurePanel = ({ props }) => {
 
         <h3
           style={{
-            color: "blue",
             fontWeight: "bold",
             textDecoration: "underline",
             marginTop: "1rem",
@@ -132,13 +130,19 @@ export const AugmentationFigurePanel = ({ props }) => {
         </h3>
 
         {/* Description */}
-        {augmentationInfo.longDescription.map((p, i) => (
-          p.split('\n').map((line, j) => (
-            line.trim() === '' 
-              ? <br key={`${i}-${j}`} /> 
-              : <p key={`${i}-${j}`} style={{ margin: "0.5em 0" }}>{line}</p>
-          ))
-        ))}
+        <div style={{ textAlign: "left" }}>
+          {augmentationInfo.longDescription.map((p, i) =>
+            p.split("\n").map((line, j) =>
+              line.trim() === "" ? (
+                <br key={`${i}-${j}`} />
+              ) : (
+                <p key={`${i}-${j}`} style={{ margin: "0.5em 0" }}>
+                  {line}
+                </p>
+              )
+            )
+          )}
+        </div>
 
         <div
           style={{
@@ -150,7 +154,6 @@ export const AugmentationFigurePanel = ({ props }) => {
         >
           <h3
             style={{
-              color: "blue",
               fontWeight: "bold",
               textDecoration: "underline",
               marginTop: 0,

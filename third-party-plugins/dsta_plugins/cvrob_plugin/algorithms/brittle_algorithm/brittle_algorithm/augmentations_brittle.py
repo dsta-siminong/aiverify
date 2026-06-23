@@ -116,7 +116,11 @@ def visualize_topk_matplotlib(
     directory=Path(),
     image_paths=None
 ):
+
     topk = results_sorted[:K]
+    top_k_indices = [item.index for item in topk]
+    # print("&& TOPK INDICES 2", top_k_indices)
+
     fig, axes = plt.subplots(
         K, 2,
         figsize=(12, 3 * K),
@@ -125,6 +129,10 @@ def visualize_topk_matplotlib(
     for ax in axes.flat:
         for spine in ax.spines.values():
             spine.set_visible(True)
+
+    fragments_dir = directory / "fragments"
+    fragments_dir.mkdir(parents=True, exist_ok=True)
+    fragment_paths = []
 
     print(f"TRANSFORM: {transform}")
     for row, res in enumerate(topk):
@@ -137,34 +145,57 @@ def visualize_topk_matplotlib(
         imgA = unnormalize(imgs_A[i], transform)
         imgB = unnormalize(imgs_B[i], transform)
 
-        predA = get_topk_predictions(probs_A[i], k=1)[0]
-        predB = get_topk_predictions(probs_B[i], k=1)[0]
+        # predA = get_topk_predictions(probs_A[i], k=1)[0]
+        # predB = get_topk_predictions(probs_B[i], k=1)[0]
+        # predA_int = predA[0]; initial_class_prob_A = predA[1]
+        # predB_int = predB[0]; resultant_class_prob_B = predB[1]
+        # classA = predA[0]
+        # classB = predB[0]
+        # if class_names is not None:
+        #     classA = class_names[predA[0]]
+        #     classB = class_names[predB[0]]
+        # print('&'*16)
+        # print(predA_int , res.predA)
+        # print(predB_int , res.predB)
+        # print(initial_class_prob_A , probs_A[i][predA_int].item())
+        # print(resultant_class_prob_B, probs_B[i][predB_int].item())
+        # print('&'*16)
 
-        classA = predA[0]
-        classB = predB[0]
+        predA_int = res.predA
+        predB_int = res.predB
+        classA = predA_int
+        classB = predB_int
         if class_names is not None:
-            classA = class_names[predA[0]]
-            classB = class_names[predB[0]]
+            classA = class_names[predA_int]
+            classB = class_names[predB_int]
+
+        initial_class_prob_A = probs_A[i][predA_int].item()
+        resultant_initial_class_prob_B = probs_B[i][predA_int].item()
+        resultant_class_prob_B = probs_B[i][predB_int].item()
+        # resultant_initial_class_prob_B = predA[1]-res.brittleness
+        # resultant_initial_class_prob_B_0 = probs_B[i][predA_int].item()
+        # print(resultant_initial_class_prob_B_0 , resultant_initial_class_prob_B)
+        # assert resultant_initial_class_prob_B_0 == resultant_initial_class_prob_B
 
         axes[row, 0].imshow(imgA)
         axes[row, 0].axis("off")
         axes[row, 0].text(
             0.02, 0.98,
-            f"image idx: {idx}\nA (before) | pred={classA}\n\npred_proba of {classA}={predA[1]:.3f}",
+            f"image path: {idx}\nA (before) | pred={classA}\n\npred_proba of class {classA}={initial_class_prob_A:.3f}",
             transform=axes[row, 0].transAxes,
             va="top",
             ha="left",
             fontsize=9,
             bbox=dict(boxstyle="round", facecolor="white", alpha=0.8)
         )
-        
-        # plt.tight_layout()
 
         axes[row, 1].imshow(imgB)
         axes[row, 1].axis("off")
         axes[row, 1].text(
             0.02, 0.98,
-            f"image idx: {idx}\nB (after) | pred={classB}\npred_proba of {classB}={predB[1]:.3f}\npred_proba of {classA}={(predA[1]-res.brittleness):.3f} | Δ={res.brittleness:.3f}",
+            f"image path: {idx}\nB (after) | pred={classB}\n"
+            f"pred_proba of {classB}={resultant_class_prob_B:.3f}\n"
+            f"pred_proba of {classA}={resultant_initial_class_prob_B:.3f} | Δ={res.brittleness:.3f}",
             transform=axes[row, 1].transAxes,
             va="top",
             ha="left",
@@ -172,10 +203,53 @@ def visualize_topk_matplotlib(
             bbox=dict(boxstyle="round", facecolor="white", alpha=0.8)
         )
 
-    save_path = directory / "brittleness_top_k_gaussianblur.png"
+        # Save this row as its own 1x2 figure
+        fig_row, axes_row = plt.subplots(
+            1, 2,
+            figsize=(12, 3),
+            constrained_layout=True
+        )
+
+        for ax in axes_row:
+            for spine in ax.spines.values():
+                spine.set_visible(True)
+
+        axes_row[0].imshow(imgA)
+        axes_row[0].axis("off")
+        axes_row[0].text(
+            0.02, 0.98,
+            f"image path: {idx}\nA (before) | pred={classA}\n\npred_proba of class {classA}={initial_class_prob_A:.3f}",
+            transform=axes_row[0].transAxes,
+            va="top",
+            ha="left",
+            fontsize=9,
+            bbox=dict(boxstyle="round", facecolor="white", alpha=0.8)
+        )
+
+        axes_row[1].imshow(imgB)
+        axes_row[1].axis("off")
+        axes_row[1].text(
+            0.02, 0.98,
+            f"image path: {idx}\nB (after) | pred={classB}\n"
+            f"pred_proba of {classB}={resultant_class_prob_B:.3f}\n"
+            f"pred_proba of {classA}={resultant_initial_class_prob_B:.3f} | Δ={res.brittleness:.3f}",
+            transform=axes_row[1].transAxes,
+            va="top",
+            ha="left",
+            fontsize=9,
+            bbox=dict(boxstyle="round", facecolor="white", alpha=0.8)
+        )
+
+        fragment_path = fragments_dir / f"brittleness_top_{row + 1}.png"
+        fragment_paths.append(fragment_path)
+        fig_row.savefig(fragment_path)
+        plt.close(fig_row)
+
+    save_path = directory / f"brittleness_topk.png"
     plt.savefig(save_path)
-    print("SAVING FIGURE")
-    return save_path
+    plt.close(fig)
+
+    return save_path, fragment_paths
 
 def visualize_topk_plotly(
     results_sorted, 
@@ -213,16 +287,37 @@ def visualize_topk_plotly(
         else:
             idx = i
 
-        imgA = tensor_to_plotly_img(imgs_A[i], transform)
-        imgB = tensor_to_plotly_img(imgs_B[i], transform)
+        # predA = get_topk_predictions(probs_A[i], k=1)[0]
+        # predB = get_topk_predictions(probs_B[i], k=1)[0]
+        # predA_int = predA[0]; initial_class_prob_A = predA[1]
+        # predB_int = predB[0]; resultant_class_prob_B = predB[1]
+        # classA = predA[0]
+        # classB = predB[0]
+        # if class_names is not None:
+        #     classA = class_names[predA[0]]
+        #     classB = class_names[predB[0]]
+        # print('&'*16)
+        # print(predA_int , res.predA)
+        # print(predB_int , res.predB)
+        # print(initial_class_prob_A , probs_A[i][predA_int].item())
+        # print(resultant_class_prob_B, probs_B[i][predB_int].item())
+        # print('&'*16)
 
-        predA = get_topk_predictions(probs_A[i], k=1)[0]
-        predB = get_topk_predictions(probs_B[i], k=1)[0]
-        classA = predA[0]
-        classB = predB[0]
+        predA_int = res.predA
+        predB_int = res.predB
+        classA = predA_int
+        classB = predB_int
         if class_names is not None:
-            classA = class_names[predA[0]]
-            classB = class_names[predB[0]]
+            classA = class_names[predA_int]
+            classB = class_names[predB_int]
+
+        initial_class_prob_A = probs_A[i][predA_int].item()
+        resultant_initial_class_prob_B = probs_B[i][predA_int].item()
+        resultant_class_prob_B = probs_B[i][predB_int].item()
+        # resultant_initial_class_prob_B = predA[1]-res.brittleness
+        # resultant_initial_class_prob_B_0 = probs_B[i][predA_int].item()
+        # print(resultant_initial_class_prob_B_0 , resultant_initial_class_prob_B)
+        # assert resultant_initial_class_prob_B_0 == resultant_initial_class_prob_B
 
         fig.add_trace(
             go.Image(z=imgA),
@@ -234,15 +329,15 @@ def visualize_topk_plotly(
                 y=[0.5],
                 mode="text",
                 text=[(
-                    f"<b>idx:</b> {idx} <br><br>"
+                    f"<b>File path:</b> {idx} <br><br>"
                     f"<b>Prediction</b><br>"
                     f"A: ŷ={classA} | B: ŷ={classB} <br><br>"
                     f"<b>Before Corruption:</b><br>"
-                    f"Predict Proba for Class<br> {classA}: {predA[1]:.3f}<br><br>"
+                    f"Predict Proba for Class {classA}: {initial_class_prob_A:.3f}<br><br>"
                     f"<b>After Corruption:</b><br>"
-                    f"Predict Proba for Class<br> {classA}:  {(predA[1]-res.brittleness):.3f}<br>"
+                    f"Predict Proba for Class {classA}:  {resultant_initial_class_prob_B:.3f}<br>"
                     f"Δ={res.brittleness:.3f}<br>"
-                    f"Predict_Proba for Class<br> {classB}: {predB[1]:.3f}"
+                    f"Predict_Proba for Class {classB}: {resultant_class_prob_B:.3f}"
                 )],
                 textposition="middle center",
                 textfont=dict(size=12),
@@ -268,7 +363,7 @@ def visualize_topk_plotly(
         autosize=True,
         template="plotly_white"
     )
-    save_path = directory / "brittleness_top_k_gaussianblur.html"
+    save_path = directory / "brittleness_top_k.html"
 
     fig.write_html(
         save_path,
@@ -349,8 +444,6 @@ def visualize_in_html(
             f'0 = no change &nbsp;·&nbsp; 1 = detection confidently mispredicted'
             f'</small>'
         )
-
-
 
     html = f"""
     <!DOCTYPE html>
@@ -436,146 +529,6 @@ def visualize_in_html(
     print("Saved brittleness_carousel.html")
     return save_path
 
-
-# def visualize_in_html2(
-#     results_sorted, 
-#     imgsA, imgsB, 
-#     probsA, probsB, 
-#     labels, 
-#     class_names=None, 
-#     transform=None,
-#     directory=Path(),
-#     image_paths=None
-# ):
-#     # Prepare image & info lists
-#     img_base64_list = []
-#     imageA_list = []
-#     imageB_list = []
-#     info_list = []
-
-#     for res in results_sorted:
-#         i = res.index
-#         if image_paths is not None:
-#             idx = Path(str(image_paths[i])).name
-#         else:
-#             idx = i
-#         # images
-#         imgA_b64 = "data:image/png;base64," + tensor_to_base64(imgsA[i], transform)
-#         imgB_b64 = "data:image/png;base64," + tensor_to_base64(imgsB[i], transform)
-
-#         # predictions
-#         predA_cls = probsA[i].argmax().item()
-#         predB_cls = probsB[i].argmax().item()
-
-#         predA_p = probsA[i, predA_cls].item()
-#         predB_p = probsB[i, predB_cls].item()
-
-#         gt = labels[i].item()
-
-#         imageA_list.append(f'"{imgA_b64}"')
-#         imageB_list.append(f'"{imgB_b64}"')
-
-#         if class_names is not None:
-#             predA_cls = class_names[predA_cls]
-#             predB_cls = class_names[predB_cls]
-#             gt = class_names[gt]
-
-#         info_list.append(
-#             f'"'
-#             f'<b>Index:</b> {idx}<br>'
-#             f'<b>Ground Truth class:</b> {gt}<br><br>'
-#             f'<b>Predictions:</b><br>'
-#             f'<b>A:</b> ŷ={predA_cls} | <b>B:</b> ŷ={predB_cls}<br><br>'
-#             f'<b>Before Image predict_proba:</b><br>'
-#             f'<b>Class {predA_cls}:</b> {predA_p:.3f} <br><br>'
-#             f'<b>Brittleness Δ:</b> {res.brittleness:.3f}<br><br>'
-#             f'<b>After Image predict_proba:</b><br>'
-#             f'<b><b>Class {predA_cls}:</b> {(predA_p - res.brittleness):.3f} | Class {predB_cls}:</b> {predB_p:.3f}'
-#             f'"'
-#         )
-
-#     html = f"""
-#     <!DOCTYPE html>
-#     <html>
-#     <head>
-#     <meta charset="utf-8">
-#     <title>Brittleness Carousel</title>
-
-#     <style>
-#     body {{ font-family: Arial, sans-serif; }}
-#     #container {{ text-align: center; margin-top: 30px; }}
-#     .images {{ display: flex; justify-content: center; gap: 40px; }}
-#     img {{ max-width: 320px; max-height: 320px; border: 1px solid #ccc; }}
-#     button {{ padding: 10px 20px; font-size: 16px; margin: 10px; }}
-#     #info {{ margin-top: 15px; font-size: 16px; }}
-#     </style>
-#     </head>
-
-#     <body>
-#     <div id="container">
-
-#     <h2>Most Brittle Images (A → B)</h2>
-
-#     <div class="images">
-#     <div>
-#         <h3>Before Corruption</h3>
-#         <img id="imgA">
-#     </div>
-#     <div>
-#         <h3>After Corruption</h3>
-#         <img id="imgB">
-#     </div>
-#     </div>
-
-#     <div id="info"></div>
-
-#     <button onclick="prev()">⬅ Prev</button>
-#     <button onclick="next()">Next ➡</button>
-
-#     </div>
-
-#     <script>
-#     let imagesA = [{",".join(imageA_list)}];
-#     let imagesB = [{",".join(imageB_list)}];
-#     let infos   = [{",".join(info_list)}];
-
-#     let idx = 0;
-
-#     function show() {{
-#     document.getElementById("imgA").src = imagesA[idx];
-#     document.getElementById("imgB").src = imagesB[idx];
-#     document.getElementById("info").innerHTML =
-#         infos[idx] + "<br><br>" + (idx+1) + " / " + imagesA.length;
-#     }}
-
-#     function next() {{
-#     idx = (idx + 1) % imagesA.length;
-#     show();
-#     }}
-
-#     function prev() {{
-#     idx = (idx - 1 + imagesA.length) % imagesA.length;
-#     show();
-#     }}
-
-#     document.addEventListener("keydown", function(e) {{
-#     if (e.key === "ArrowRight") next();
-#     if (e.key === "ArrowLeft") prev();
-#     }});
-
-#     show();
-#     </script>
-
-#     </body>
-#     </html>
-#     """
-#     save_path = directory / "brittleness_carousel.html"
-#     with open(save_path, "w") as f:
-#         f.write(html)
-
-#     print("Saved brittleness_carousel.html")
-#     return save_path
-
 # ==== HELPER FUNCTIONS ====
 
 def unnormalize(img_tensor, transform=None):
@@ -607,20 +560,20 @@ def unnormalize(img_tensor, transform=None):
 
     return img.permute(1,2,0).numpy()
 
-def get_topk_predictions(probs, k=3):
-    """
-    Get the top-k predicted class indices and their probabilities.
+# def get_topk_predictions(probs, k=3):
+#     """
+#     Get the top-k predicted class indices and their probabilities.
 
-    Args:
-        probs (torch.Tensor): Tensor of predicted probabilities (1D or batch 2D).
-        k (int, optional): Number of top predictions to return. Defaults to 3.
+#     Args:
+#         probs (torch.Tensor): Tensor of predicted probabilities (1D or batch 2D).
+#         k (int, optional): Number of top predictions to return. Defaults to 3.
 
-    Returns:
-        List[Tuple[int, float]]: List of tuples containing (class_index, probability)
-        for the top-k predictions.
-    """
-    vals, inds = probs.topk(k)
-    return list(zip(inds.tolist(), vals.tolist()))
+#     Returns:
+#         List[Tuple[int, float]]: List of tuples containing (class_index, probability)
+#         for the top-k predictions.
+#     """
+#     vals, inds = probs.topk(k)
+#     return list(zip(inds.tolist(), vals.tolist()))
 
 def tensor_to_base64(img_tensor, transform=None, max_size: int = None, jpeg_quality: int = None):
     """
@@ -678,3 +631,228 @@ def extract_normalize(transform):
                 return t.mean, t.std
 
     return None
+
+def visualize_topk_without_plotly(
+    results_sorted,
+    imgs_A, imgs_B,
+    probs_A, probs_B,
+    K=10,
+    class_names=None,
+    transform=None,
+    directory=Path(),
+    image_paths=None
+):
+    topk = results_sorted[:K]
+
+    rows_html = []
+
+    for rank, res in enumerate(topk, start=1):
+        i = res.index
+
+        if image_paths is not None:
+            idx = Path(str(image_paths[i])).name
+        else:
+            idx = i
+
+        imgA_b64 = tensor_to_base64(
+            imgs_A[i],
+            transform,
+            jpeg_quality=85
+        )
+        imgB_b64 = tensor_to_base64(
+            imgs_B[i],
+            transform,
+            jpeg_quality=85
+        )
+
+        # predA = get_topk_predictions(probs_A[i], k=1)[0]
+        # predB = get_topk_predictions(probs_B[i], k=1)[0]
+        # predA_int = predA[0]; initial_class_prob_A = predA[1]
+        # predB_int = predB[0]; resultant_class_prob_B = predB[1]
+        # classA = predA[0]
+        # classB = predB[0]
+        # if class_names is not None:
+        #     classA = class_names[predA[0]]
+        #     classB = class_names[predB[0]]
+        # print('&'*16)
+        # print(predA_int , res.predA)
+        # print(predB_int , res.predB)
+        # print(initial_class_prob_A , probs_A[i][predA_int].item())
+        # print(resultant_class_prob_B, probs_B[i][predB_int].item())
+        # print('&'*16)
+
+        predA_int = res.predA
+        predB_int = res.predB
+        classA = predA_int
+        classB = predB_int
+        if class_names is not None:
+            classA = class_names[predA_int]
+            classB = class_names[predB_int]
+
+        initial_class_prob_A = probs_A[i][predA_int].item()
+        resultant_initial_class_prob_B = probs_B[i][predA_int].item()
+        resultant_class_prob_B = probs_B[i][predB_int].item()
+        # resultant_initial_class_prob_B = predA[1]-res.brittleness
+        # resultant_initial_class_prob_B_0 = probs_B[i][predA_int].item()
+        # print(resultant_initial_class_prob_B_0 , resultant_initial_class_prob_B)
+        # assert resultant_initial_class_prob_B_0 == resultant_initial_class_prob_B
+
+        classA_html = f'<span class="classA">{classA}</span>'
+        classB_html = f'<span class="classB">{classB}</span>'
+
+        if classA == classB:
+            after_classB_line = ""
+        else:
+            after_classB_line = (f"P({classB_html}) = {resultant_class_prob_B:.3f}")
+
+        info = f"""
+        <div class="info">
+            <h3>#{rank} Most Brittle Image</h3>
+
+            <p><b>Image:</b> {idx}</p>
+
+            <p>
+                <b>Prediction:</b><br>
+                Before: {classA_html}<br>
+                After: {classB_html}
+            </p>
+
+            <p>
+                <b>Before Corruption</b><br>
+                P({classA_html}) = {initial_class_prob_A:.3f}
+            </p>
+
+            <p>
+                <b>After Corruption</b><br>
+                P({classA_html}) = {resultant_initial_class_prob_B:.3f}<br>
+                Δ = {res.brittleness:.3f}<br>
+                {after_classB_line}
+            </p>
+        </div>
+        """
+
+        rows_html.append(f"""
+        <div class="row">
+            <div class="image-container">
+                <img src="data:image/png;base64,{imgA_b64}">
+                <div class="caption before-caption">Before</div>
+            </div>
+
+            {info}
+
+            <div class="image-container">
+                <img src="data:image/png;base64,{imgB_b64}">
+                <div class="caption after-caption">After</div>
+            </div>
+        </div>
+        """)
+
+    html = f"""
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+
+<style>
+
+.before-caption {{
+    color: blue;
+}}
+
+.after-caption {{
+    color: orange;
+}}
+
+.classA {{
+    color: blue;
+    font-weight: bold;
+}}
+
+.classB {{
+    color: orange;
+    font-weight: bold;
+}}
+
+body {{
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 20px;
+    background: #fafafa;
+}}
+
+.container {{
+    display: flex;
+    flex-direction: column;
+    gap: 30px;
+}}
+
+.row {{
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(250px, 0.8fr) minmax(0, 1fr);
+    gap: 20px;
+
+    background: white;
+    padding: 20px;
+    border-radius: 12px;
+
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+
+    align-items: center;
+}}
+
+.image-container {{
+    text-align: center;
+}}
+
+.image-container img {{
+    width: 100%;
+    max-width: 400px;
+    height: auto;
+    border-radius: 8px;
+}}
+
+.caption {{
+    margin-top: 8px;
+    font-weight: bold;
+    text-align: center;
+}}
+
+.info {{
+    min-width: 0;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    line-height: 1.5;
+    text-align: center;
+}}
+
+.info h3 {{
+    text-align: center;
+    text-decoration: underline;
+}}
+
+@media (max-width: 900px) {{
+    .row {{
+        grid-template-columns: 1fr;
+    }}
+}}
+
+</style>
+
+</head>
+
+<body>
+
+<div class="container">
+{''.join(rows_html)}
+</div>
+
+</body>
+</html>
+"""
+
+    save_path = directory / "brittleness_topk.html"
+
+    with open(save_path, "w", encoding="utf-8") as f:
+        f.write(html)
+
+    return save_path

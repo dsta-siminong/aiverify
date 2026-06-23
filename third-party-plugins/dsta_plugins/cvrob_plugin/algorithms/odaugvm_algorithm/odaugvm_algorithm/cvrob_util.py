@@ -9,6 +9,7 @@ from tqdm import tqdm
 import torch.nn as nn
 from pathlib import Path
 from torchmetrics.detection.mean_ap import MeanAveragePrecision
+import gc
 
 def evaluate_detection(model, loader, device, iou_thresh=0.5):
     metric = MeanAveragePrecision(iou_thresholds=[iou_thresh])
@@ -27,6 +28,7 @@ def evaluate_detection(model, loader, device, iou_thresh=0.5):
             metric.update(preds, gts)
 
     result = metric.compute()
+    metric.reset()
     return result["map_50"].item() #generalize in future
 
 def triplets(s):
@@ -69,6 +71,10 @@ def augmentation_gradient_det(model, test_loader, device, aug_class, plot_graphs
             corr_map = evaluate_detection(model, corrupted_loader, device)
             all_map.append(corr_map)
             print(f"epoch {i+1}: {corr_map}")
+
+            del corrupted_loader
+            torch.cuda.empty_cache()
+            gc.collect()
         final_map = sum(all_map)/len(all_map)
         maps.append(final_map)
         print(f"mAP at severity {severity}: {final_map:.4f}")

@@ -514,7 +514,15 @@ export function ClassMetricsTable({ combined, className , metrics }) {
   return (
     <>
       {severityChunks.map((chunk, chunkIndex) => (
-        <div style={{ width: "100%", overflowX: "auto", marginBottom: "1em" }}>
+        <div
+          style={{
+            width: "100%",
+            overflowX: "auto",
+            marginBottom: "1em",
+            breakInside: "avoid",
+            pageBreakInside: "avoid",
+          }}
+        >
           <table
             key={chunkIndex}
             style={{
@@ -571,14 +579,6 @@ export function ClassMetricsTable({ combined, className , metrics }) {
                     const row = classRows.find(
                       (r) => r.severity === sev
                     );
-
-                    // let value = row?.[metric];
-
-                    // if (
-                    //   typeof value === "number"
-                    // ) {
-                    //   value = value.toFixed(3);
-                    // }
 
                     let value = row?.[metric];
 

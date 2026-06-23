@@ -478,11 +478,23 @@ class Plugin(IAlgorithm):
 
                 ground_truth = ground_truths[display_idx]
 
+                image_path2 = self._save_image_with_predictions(
+                    image=display_image,
+                    pred_boxes=prediction['boxes'],#pred_boxes,
+                    pred_labels=prediction['labels'],#pred_labels,
+                    pred_scores=prediction['scores'],#pred_scores,
+                    gt_boxes=ground_truth,        # list of {"bbox": [...], "label": ...}
+                    gt_labels=[obj["label"] for obj in ground_truth],
+                    class_names=class_names,
+                    subfolder_name=str(corrupted_dir),
+                    idx=display_idx,
+                )
+
                 random_display = [
                     str(Path(image_path).relative_to(self._output_folder)),
-                    # str(Path(corrupted_image_paths[display_idx]).relative_to(self._output_folder)),
-                    ground_truth,#class_names[str(ground_truth)],
-                    prediction#class_names[str(prediction)],
+                    ground_truth,#gt_classes,
+                    prediction,#pred_classes,
+                    str(Path(image_path2).relative_to(self._output_folder)),
                 ]
                 display_info.update({str(severity_name): random_display})
 
@@ -521,169 +533,6 @@ class Plugin(IAlgorithm):
 
         self._results = output_results
 
-    # def _get_corrupted_images(self, testloader, aug_class, _severity):
-    #     corrupted_images = []#; dataset_len = len(testloader.dataset)
-    #     for images, labels in testloader:   
-    #         # images_np = (images * 255).byte().numpy().transpose(0, 2, 3, 1)  # Convert to HWC format and uint8
-    #         images_np = (
-    #             images.mul(255)
-    #             .byte()
-    #             .numpy()
-    #             .transpose(0, 2, 3, 1)  # BCHW → BHWC
-    #         )
-    #         # Apply corruption function with provided parameters
-    #         if aug_class.name == "None" or _severity == "None":
-    #             corrupted = images_np
-    #         else:
-    #             corrupted = aug_class.corr_func_arr(images_np, _severity)
-            
-    #         # corrupted = (torch.tensor(corrupted.transpose(0, 3, 1, 2), dtype=torch.float32) / 255.0).numpy()  #as opposed to torch.tensor
-    #         corrupted = corrupted.astype(np.float32) / 255.0
-    #         corrupted = np.transpose(corrupted, (0, 3, 1, 2))
-    #         corrupted_images.append(corrupted)
-
-    #     return np.concatenate(corrupted_images, axis=0)
-
-    # def _load_images(self, image_paths: list[str], labels) -> list[np.ndarray]:
-    #     """
-    #     Load a list of numpy images from file paths.
-
-    #     Args:
-    #         image_paths (list[str]): A list of image file paths
-
-    #     Returns:
-    #         np.ndarray: A list of numpy images
-    #     """
-    #     transform = transforms.Compose([
-    #         transforms.Resize((240, 320)),  # H, W
-    #         transforms.ToTensor()
-    #     ])
-
-    #     # Load all images into a tensor
-    #     image_tensors = torch.stack([transform(Image.open(p).convert("RGB")) for p in image_paths])
-
-    #     # Convert labels to tensor
-    #     label_tensors = torch.tensor(labels, dtype=torch.long)
-
-    #     # Create TensorDataset
-    #     dataset = TensorDataset(image_tensors, label_tensors)
-
-    #     # Create DataLoader
-    #     loader = DataLoader(dataset, batch_size=128, shuffle=False)
-
-    #     return dataset, loader
-
-    # def _save_images(self, images: list[np.ndarray], subfolder_name: str) -> list[str]:
-    #     """
-    #     Save a list of numpy arrays as images in a subfolder.
-
-    #     Args:
-    #         images (list[np.ndarray]): A list of numpy images
-    #         subfolder_name (str): The name of the subfolder to save images
-
-    #     Returns:
-    #         list[str]: A list of saved image paths
-    #     """
-    #     image_paths = []
-    #     save_dir = self._save_folder / subfolder_name
-    #     save_dir.mkdir(parents=True, exist_ok=True)
-
-    #     for idx, image in enumerate(images):
-    #         image_path = save_dir / f"{idx}.png"
-    #         # print("image shape", image.shape)
-    #         image = np.transpose(image, (1, 2, 0))
-    #         Image.fromarray((image * 255.0).astype(np.uint8)).save(image_path)
-    #         image_paths.append(str(image_path))
-    #     return image_paths
-
-    # def _sklearn_method(self, data, data2, severities, class_names, subfolder_name, aug_name):
-    #     plt.rcParams.update({'font.size': 18})
-
-    #     save_dir0 = self._save_folder / subfolder_name
-    #     save_dir0.mkdir(parents=True, exist_ok=True)
-    #     save_dir = save_dir0 / "figures"
-    #     save_dir.mkdir(parents=True, exist_ok=True)
-    #     big_df = None; rows = []
-
-    #     for severity, cr, cm in zip(severities, data, data2):
-    #         print(f"Severity: {severity}")
-    #         print("CR keys:", list(cr.keys()))
-
-    #         df = pd.DataFrame.from_dict(cr).T
-    #         print(df.index.value_counts())
-    #         df['severity'] = severity
-    #         df['class'] = df.index
-
-    #         for cl,stats in cm.items():
-    #             row = {"severity": severity, "class": cl}
-    #             row.update(stats); rows.append(row)
-    #         if big_df is None:
-    #             big_df = df 
-    #         else:
-    #             big_df = pd.concat([big_df, df])
-
-    #     cm_df = pd.DataFrame(rows)
-    #     combined_df = pd.merge(big_df, cm_df, on=['class', 'severity'])
-    #     combined_df['preds_population'] = combined_df['TP'] + combined_df['FP']
-    #     combined_df['actual_population'] = combined_df['TP'] + combined_df['FN']
-    #     print("combined_df")
-    #     print(combined_df.head())
-
-    #     path_dict = {}
-    #     temp = {}
-
-    #     for i in class_names:
-    #         ax_path, ax_path1, ax_path2 = self._matplotlib_class_images(combined_df, class_names, i, save_dir, aug_name)
-    #         html_path, html_path1, html_path2 = self._plotly_class_images(combined_df, class_names, i, save_dir, aug_name)
-
-    #         temp[class_names[i]] = [
-    #             str(ax_path.relative_to(self._output_folder)), 
-    #             str(ax_path1.relative_to(self._output_folder)), 
-    #             str(ax_path2.relative_to(self._output_folder)),
-    #             str(html_path.relative_to(self._output_folder)), 
-    #             str(html_path1.relative_to(self._output_folder)), 
-    #             str(html_path2.relative_to(self._output_folder))
-    #         ]
-
-    #     path_dict['class_plot'] = temp
-
-    #     plot_df = combined_df.pivot(index='severity', columns='class', values='preds_population')
-    #     plt.figure(figsize=(16,9))
-
-    #     colors = plt.cm.jet(np.linspace(0,1,len(class_names)))
-
-    #     bottom = None 
-    #     for c in class_names:
-    #         if bottom is None:
-    #             plt.bar(plot_df.index, plot_df[class_names[c]], label=class_names[c], color=colors[int(c)])
-    #             bottom = plot_df[class_names[c]].values
-    #         else:
-    #             plt.bar(plot_df.index, plot_df[class_names[c]], label=class_names[c], color=colors[int(c)], bottom=bottom)
-    #             bottom = bottom + plot_df[class_names[c]].values 
-
-    #     plt.xlabel('severity', fontsize=20); plt.ylabel('fraction of all samples predicted', fontsize=20)
-    #     plt.xticks(fontsize=18 , rotation=45); plt.yticks(fontsize=18)
-    #     plt.legend(title='class', bbox_to_anchor=(1.02,1), loc='upper left', fontsize=18)
-    #     plt.title(f'{aug_name}: Predictions and Label Proportions per class vs Augmentation Severity', fontsize=24, pad=30)
-    #     plt.subplots_adjust(left=0.15, right=0.8, top=0.88, bottom=0.3)
-    #     plt_path = save_dir / "all_classes_proportions_barchart.png"
-    #     plt.savefig(plt_path, bbox_inches="tight")
-    #     path_dict['matplotlib_image_path'] = str(plt_path.relative_to(self._output_folder))
-
-    #     long_df = plot_df.reset_index().melt(id_vars='severity', var_name='class', value_name='pred_frac')
-
-    #     print(long_df.head())
-    #     fx = px.bar(
-    #         long_df, x='severity', y='pred_frac', color='class', 
-    #         title=f'{aug_name}: Predictions and Label Proportions per class vs Augmentation Severity', 
-    #         color_discrete_sequence=px.colors.sample_colorscale("Jet", [i/(len(class_names)-1) for i in range(len(class_names))])
-    #     )
-    #     fx.update_layout(barmode='stack', yaxis_title='fraction of all samples predicted', xaxis_title='severity')
-    #     fx_path = save_dir / "all_classes_proportions_plotly_barchart.html"
-    #     fx.write_html(fx_path)
-    #     path_dict['plotly_image_path'] = str(fx_path.relative_to(self._output_folder))
-    #     return path_dict
-
     def _detection_method(
         self,
         data,
@@ -709,7 +558,7 @@ class Plugin(IAlgorithm):
 
         for severity, stats in zip(severities, data):
 
-            map50 = stats.get("map_50", None)   
+            map50 = stats.get("map_50", None)
 
             if "per_class" in stats:
                 per_class = stats["per_class"]
@@ -733,7 +582,7 @@ class Plugin(IAlgorithm):
 
                     "support": metrics["support"],
 
-                    "map_50": map50,#stats["map_50"]
+                    "map_50": map50,
                 }
 
                 rows.append(row)
@@ -746,6 +595,7 @@ class Plugin(IAlgorithm):
         # CLASS-WISE PLOTS
         # =====================================================
 
+        metric_cols = ['precision', 'recall', 'f1_score']
         path_dict = {}
         temp = {}
 
@@ -753,7 +603,18 @@ class Plugin(IAlgorithm):
 
             class_df = combined_df[
                 combined_df["class"] == class_name
-            ]
+            ].reset_index(drop=True)
+
+            # Preserve NaN masks before filling
+            nan_masks = {col: class_df[col].isna() for col in metric_cols}
+
+            # Fill NaNs with 0 for plotting
+            plot_df = class_df.copy()
+            plot_df[metric_cols] = plot_df[metric_cols].fillna(0)
+
+            # Severity positions for categorical x-axis (fixes scatter alignment)
+            severity_order = plot_df['severity'].tolist()
+            pos_map = {v: i for i, v in enumerate(severity_order)}
 
             # ---------------------------------------------
             # matplotlib
@@ -761,40 +622,43 @@ class Plugin(IAlgorithm):
 
             fig, ax = plt.subplots(figsize=(10, 6))
 
-            ax.plot(
-                class_df["severity"],
-                class_df["precision"],
-                label="precision"
-            )
+            line_colors = {}
+            for col, label in zip(metric_cols, ['precision', 'recall', 'f1']):
+                line, = ax.plot(
+                    plot_df['severity'],
+                    plot_df[col],
+                    label=label
+                )
+                line_colors[col] = line.get_color()
 
-            ax.plot(
-                class_df["severity"],
-                class_df["recall"],
-                label="recall"
-            )
-
-            ax.plot(
-                class_df["severity"],
-                class_df["f1_score"],
-                label="f1"
-            )
+            # Add NaN markers
+            nan_legend_handles = []
+            for col, label in zip(metric_cols, ['precision', 'recall', 'f1']):
+                mask = nan_masks[col]
+                if mask.any():
+                    x_pos = [pos_map[s] for s in plot_df.loc[mask, 'severity']]
+                    y_pos = [0] * len(x_pos)
+                    scatter = ax.scatter(
+                        x_pos,
+                        y_pos,
+                        marker='x',
+                        color=line_colors[col],
+                        alpha=0.8,
+                        zorder=5,
+                        label=f'{label} (NaN→0)'
+                    )
+                    nan_legend_handles.append(scatter)
 
             ax.set_title(f"{aug_name} - {class_name}")
             ax.set_xlabel("severity")
             ax.set_ylabel("score")
-
             ax.legend()
             ax.set_ylim(-0.1, 1.1)
 
             plt.xticks(rotation=45)
 
             png_path = save_dir / f"{class_name}_metrics.png"
-
-            plt.savefig(
-                png_path,
-                bbox_inches="tight"
-            )
-
+            plt.savefig(png_path, bbox_inches="tight")
             plt.close()
 
             # ---------------------------------------------
@@ -802,15 +666,37 @@ class Plugin(IAlgorithm):
             # ---------------------------------------------
 
             fig_html = px.line(
-                class_df,
-                x="severity",
-                y=[
-                    "precision",
-                    "recall",
-                    "f1_score"
-                ],
-                title=f"{aug_name} - {class_name}"
+                plot_df,
+                x='severity',
+                y=metric_cols,
+                title=f"{aug_name} - {class_name}",
+                labels={'value': 'metric', 'variable': 'metric'}
             )
+
+            # Map plotly's default colors to metric cols
+            plotly_colors = px.colors.qualitative.Plotly
+            col_color_map = {col: plotly_colors[i] for i, col in enumerate(metric_cols)}
+
+            # Add NaN scatter markers
+            for col, label in zip(metric_cols, ['precision', 'recall', 'f1']):
+                mask = nan_masks[col]
+                if mask.any():
+                    nan_severities = plot_df.loc[mask, 'severity'].tolist()
+                    fig_html.add_trace(
+                        go.Scatter(
+                            x=nan_severities,
+                            y=[0] * len(nan_severities),
+                            mode='markers',
+                            marker=dict(
+                                symbol='x',
+                                size=12,
+                                color=col_color_map[col],
+                                line=dict(width=2)
+                            ),
+                            name=f'{label} (NaN→0)',
+                            showlegend=True
+                        )
+                    )
 
             fig_html.update_layout(
                 width=1600,
@@ -822,7 +708,6 @@ class Plugin(IAlgorithm):
             )
 
             html_path = save_dir / f"{class_name}_metrics.html"
-
             fig_html.write_html(html_path)
 
             temp[class_name] = [
@@ -833,42 +718,75 @@ class Plugin(IAlgorithm):
         path_dict["class_plot"] = temp
 
         # =====================================================
-        # mAP PLOT
+        # mAP PLOT (NaN handling too, for consistency)
         # =====================================================
 
         map_df = combined_df[
             ["severity", "map_50"]
-        ].drop_duplicates()
+        ].drop_duplicates().reset_index(drop=True)
 
+        map_nan_mask = map_df['map_50'].isna()
+        plot_map_df = map_df.copy()
+        plot_map_df['map_50'] = plot_map_df['map_50'].fillna(0)
+
+        map_severity_order = plot_map_df['severity'].tolist()
+        map_pos_map = {v: i for i, v in enumerate(map_severity_order)}
+
+        # --- matplotlib mAP ---
         fig, ax = plt.subplots(figsize=(10, 6))
 
-        ax.plot(
-            map_df["severity"],
-            map_df["map_50"]
-        )
+        map_line, = ax.plot(plot_map_df['severity'], plot_map_df['map_50'])
+        map_color = map_line.get_color()
+
+        if map_nan_mask.any():
+            x_pos = [map_pos_map[s] for s in plot_map_df.loc[map_nan_mask, 'severity']]
+            ax.scatter(
+                x_pos,
+                [0] * len(x_pos),
+                marker='x',
+                color=map_color,
+                alpha=0.8,
+                zorder=5,
+                label='mAP50 (NaN→0)'
+            )
 
         ax.set_title(f"{aug_name} mAP@50")
         ax.set_xlabel("severity")
         ax.set_ylabel("mAP@50")
         ax.set_ylim(-0.1, 1.1)
+        ax.legend()
 
         plt.xticks(rotation=45)
 
         map_png = save_dir / "map50.png"
-
-        plt.savefig(
-            map_png,
-            bbox_inches="tight"
-        )
-
+        plt.savefig(map_png, bbox_inches="tight")
         plt.close()
 
+        # --- plotly mAP ---
         fig_html = px.line(
-            map_df,
-            x="severity",
-            y="map_50",
+            plot_map_df,
+            x='severity',
+            y='map_50',
             title=f"{aug_name} mAP@50"
         )
+
+        if map_nan_mask.any():
+            nan_severities = plot_map_df.loc[map_nan_mask, 'severity'].tolist()
+            fig_html.add_trace(
+                go.Scatter(
+                    x=nan_severities,
+                    y=[0] * len(nan_severities),
+                    mode='markers',
+                    marker=dict(
+                        symbol='x',
+                        size=12,
+                        color=px.colors.qualitative.Plotly[0],
+                        line=dict(width=2)
+                    ),
+                    name='mAP50 (NaN→0)',
+                    showlegend=True
+                )
+            )
 
         fig_html.update_layout(
             width=1600,
@@ -880,7 +798,6 @@ class Plugin(IAlgorithm):
         )
 
         map_html = save_dir / "map50.html"
-
         fig_html.write_html(map_html)
 
         path_dict["map_plot"] = [
@@ -890,431 +807,11 @@ class Plugin(IAlgorithm):
 
         return path_dict
 
-    # def _matplotlib_class_images(self, combined_df, class_names, i, save_dir, aug_name):
-    #     sub_df = combined_df[combined_df['class'] == class_names[i]].copy()
-    #     sub_df = sub_df.reset_index(drop=True)
-    #     # =========================
-    #     # 1. Define columns first
-    #     # =========================
-    #     metric_cols = ['precision', 'recall', 'f1-score']
-    #     cm_cols = ['TP', 'FP', 'FN', 'TN']
-    #     pop_cols = ['preds_population', 'actual_population']
-
-    #     # =========================
-    #     # 2. Preserve NaN masks (important for semantics)
-    #     # =========================
-    #     nan_mask_metrics = sub_df[metric_cols].isna()
-    #     nan_mask_cm = sub_df[cm_cols].isna()
-    #     nan_mask_pop = sub_df[pop_cols].isna()
-
-    #     # =========================
-    #     # 3. Fill NaNs ONLY for plotting stability
-    #     # =========================
-    #     plot_df = sub_df.copy()
-    #     plot_df[metric_cols] = plot_df[metric_cols].fillna(0)
-    #     plot_df[cm_cols] = plot_df[cm_cols].fillna(0)
-    #     plot_df[pop_cols] = plot_df[pop_cols].fillna(0)
-
-    #     # ==========================================================
-    #     # 4. METRICS PLOT (precision / recall / f1-score)
-    #     # ==========================================================
-    #     ax = plot_df.plot(x='severity', y=metric_cols)
-    #     line_colors = [line.get_color() for line in ax.get_lines()]
-
-    #     y_min = plot_df[metric_cols].min().min()
-    #     y_max = plot_df[metric_cols].max().max()
-
-    #     ax.set_xlabel('severity', fontsize=20)
-    #     ax.set_ylabel('metric', fontsize=20)
-    #     ax.figure.set_size_inches(16, 9)
-    #     ax.set_title(
-    #         f"Sklearn report statistics for {aug_name}, class = {class_names[i]}",
-    #         fontsize=24
-    #     )
-
-    #     ax.set_ylim(-0.1, 1.1)
-
-    #     # if np.isfinite(y_min) and np.isfinite(y_max) and y_min < y_max:
-    #     #     ax.set_ylim(y_min - 0.1, y_max + 0.1)
-
-    #     # Optional: mark where NaNs existed (tiny visual cue)
-
-    #     severity_order = plot_df['severity'].tolist()  # ['None', 'sigma_1.50', ...]
-    #     pos_map = {v: i for i, v in enumerate(severity_order)}
-
-    #     for col_idx, col in enumerate(metric_cols):
-    #         mask = nan_mask_metrics[col].values
-    #         x_labels = sub_df.loc[mask, 'severity']
-    #         x_pos = [pos_map[label] for label in x_labels]  # integer positions
-    #         y = np.zeros(mask.sum())
-
-    #         ax.scatter(
-    #             x_pos,
-    #             y,
-    #             marker='x',
-    #             color=line_colors[col_idx],
-    #             alpha=0.8
-    #         )
-
-    #     nan_handles = []
-    #     for col_idx, col in enumerate(metric_cols):
-    #         mask = nan_mask_metrics[col].values
-
-    #         if mask.sum() == 0:
-    #             continue
-
-    #         handle = mlines.Line2D(
-    #             [],
-    #             [],
-    #             color=line_colors[col_idx],
-    #             marker='x',
-    #             linestyle='None',
-    #             markersize=10,
-    #             label=f"x {col} (NaN)"
-    #         )
-
-    #         nan_handles.append(handle)
-
-    #     ax_path = save_dir / f"sklearn_figure_class_{class_names[i]}.png"
-    #     ax.tick_params(axis='x', labelsize=20, labelrotation=45)
-    #     ax.tick_params(axis='y', labelsize=20)
-    #     plt.tight_layout()
-
-    #     handles, labels = ax.get_legend_handles_labels()
-    #     ax.legend(handles=handles + nan_handles, fontsize=16)
-    #     ax.figure.savefig(ax_path)
-    #     plt.close(ax.figure)
-
-    #     # ==========================================================
-    #     # 5. CONFUSION MATRIX PLOT (TP / FP / FN / TN)
-    #     # ==========================================================
-    #     ax1 = plot_df.plot(x='severity', y=cm_cols)
-
-    #     y_min = sub_df[cm_cols].min().min()
-    #     y_max = sub_df[cm_cols].max().max()
-
-    #     ax1.set_xlabel('severity', fontsize=20)
-    #     ax1.set_ylabel('metric', fontsize=20)
-    #     ax1.figure.set_size_inches(16, 9)
-    #     ax1.set_title(
-    #         f"Confusion matrix stats for {aug_name}, class = {class_names[i]}",
-    #         fontsize=24
-    #     )
-
-    #     if np.isfinite(y_min) and np.isfinite(y_max) and y_min < y_max:
-    #         ax1.set_ylim(-5, y_max + 5)
-
-    #     ax_path1 = save_dir / f"cm_figure_class_{class_names[i]}.png"
-    #     ax1.tick_params(axis='x', labelsize=20, labelrotation=45)
-    #     ax1.tick_params(axis='y', labelsize=20)
-    #     plt.tight_layout()
-    #     ax1.figure.savefig(ax_path1)
-    #     plt.close(ax1.figure)
-
-    #     # ==========================================================
-    #     # 6. POPULATION PLOT (safe, usually no NaNs here)
-    #     # ==========================================================
-    #     ax2 = plot_df.plot(x='severity', y=pop_cols)
-
-    #     y_min = sub_df[pop_cols].min().min()
-    #     y_max = sub_df[pop_cols].max().max()
-
-    #     ax2.set_xlabel('severity', fontsize=20)
-    #     ax2.set_ylabel('populations', fontsize=20)
-    #     ax2.figure.set_size_inches(16, 9)
-    #     ax2.set_title(
-    #         f"Raw class populations for {aug_name}, class = {class_names[i]}",
-    #         fontsize=24
-    #     )
-
-    #     if np.isfinite(y_min) and np.isfinite(y_max) and y_min < y_max:
-    #         ax2.set_ylim(-5, y_max + 5)
-
-    #     severity_order = plot_df['severity'].tolist()  # ['None', 'sigma_1.50', ...]
-    #     pos_map = {v: i for i, v in enumerate(severity_order)}
-
-    #     for col_idx, col in enumerate(pop_cols):
-    #         mask = nan_mask_pop[col].values
-    #         x_labels = sub_df.loc[mask, 'severity']
-    #         x_pos = [pos_map[label] for label in x_labels]  # integer positions
-    #         y = np.zeros(mask.sum())
-
-    #         ax2.scatter(
-    #             x_pos,
-    #             y,
-    #             marker='x',
-    #             color=line_colors[col_idx],
-    #             alpha=0.8
-    #         )
-            
-    #     nan_handles = []
-    #     for col_idx, col in enumerate(pop_cols):
-    #         mask = nan_mask_pop[col].values
-
-    #         if mask.sum() == 0:
-    #             continue
-
-    #         handle = mlines.Line2D(
-    #             [],
-    #             [],
-    #             color=line_colors[col_idx],
-    #             marker='x',
-    #             linestyle='None',
-    #             markersize=10,
-    #             label=f"x {col} (NaN)"
-    #         )
-
-    #         nan_handles.append(handle)
-
-    #     ax_path2 = save_dir / f"sklearn_figure_class_{class_names[i]}_popns.png"
-    #     ax2.tick_params(axis='x', labelsize=20, labelrotation=45)
-    #     ax2.tick_params(axis='y', labelsize=20)
-    #     plt.tight_layout()
-    #     handles, labels = ax2.get_legend_handles_labels()
-    #     ax2.legend(handles=handles + nan_handles, fontsize=16)
-    #     ax2.figure.savefig(ax_path2)
-    #     plt.close(ax2.figure)
-
-    #     return ax_path, ax_path1, ax_path2
-
-    # def _plotly_class_images(self, combined_df, class_names, i, save_dir, aug_name):
-    #     sub_df = combined_df[combined_df['class'] == class_names[i]].copy()
-
-    #     # =========================
-    #     # 1. Define columns FIRST
-    #     # =========================
-    #     metric_cols = ['precision', 'recall', 'f1-score']
-    #     cm_cols = ['TP', 'FP', 'FN', 'TN']
-    #     pop_cols = ['preds_population', 'actual_population']
-
-    #     # =========================
-    #     # 2. Fill ONLY for plotting stability
-    #     # =========================
-    #     nan_mask_metrics = sub_df[metric_cols].isna()
-    #     nan_mask_pop = sub_df[pop_cols].isna()
-    #     plot_df = sub_df.copy()
-    #     plot_df[metric_cols] = plot_df[metric_cols].fillna(0)
-    #     plot_df[cm_cols] = plot_df[cm_cols].fillna(0)
-    #     plot_df[pop_cols] = plot_df[pop_cols].fillna(0)
-
-    #     # =========================
-    #     # 3. Metrics plot
-    #     # =========================
-
-    #     fig = px.line(
-    #         plot_df,
-    #         x="severity",
-    #         y=metric_cols,
-    #         markers=True,
-    #         title=f"Sklearn report statistics for {aug_name}, class = {class_names[i]}"
-    #     )
-
-    #     # capture trace colors for reuse
-    #     trace_colors = [trace.line.color for trace in fig.data]
-
-    #     for idx, col in enumerate(metric_cols):
-    #         mask = nan_mask_metrics[col].values
-
-    #         # fig.add_scatter(
-    #         #     x=plot_df.loc[mask, "severity"],
-    #         #     y=plot_df.loc[mask, col],   # now correctly aligned (0 after fill)
-    #         #     mode="markers",
-    #         #     marker=dict(
-    #         #         symbol="x",
-    #         #         size=10,
-    #         #         color=trace_colors[idx]
-    #         #     ),
-    #         #     name=f"{col} (undefined)",
-    #         #     showlegend=False
-    #         # )
-
-    #         if mask.sum() == 0:
-    #             continue
-
-    #         fig.add_scatter(
-    #             x=plot_df.loc[mask, "severity"],
-    #             y=plot_df.loc[mask, col],
-    #             mode="markers",
-    #             marker=dict(
-    #                 symbol="x",
-    #                 size=10,
-    #                 color=trace_colors[idx]
-    #             ),
-    #             name=f"x {col} (NaN)",
-    #             showlegend=True
-    #         )
-
-
-    #     fig.update_layout(
-    #         width=1600,
-    #         height=900,
-    #         xaxis_title="severity",
-    #         yaxis_title="metric",
-    #         font=dict(size=20),
-    #         title_font_size=24
-    #     )
-
-    #     y_min = plot_df[metric_cols].min().min()
-    #     y_max = plot_df[metric_cols].max().max()
-
-    #     fig.update_yaxes(range=[-0.1, 1.1])
-    #     # if np.isfinite(y_min) and np.isfinite(y_max) and y_min < y_max:
-    #     #     fig.update_yaxes(range=[y_min - 0.1, y_max + 0.1])
-
-    #     html_path = save_dir / f"sklearn_figure_class_{class_names[i]}.html"
-    #     fig.write_html(str(html_path))
-
-    #     # =========================
-    #     # 4. Confusion matrix plot
-    #     # =========================
-    #     fig = px.line(
-    #         plot_df,
-    #         x="severity",
-    #         y=cm_cols,
-    #         markers=True,
-    #         title=f"Confusion matrix stats for {aug_name}, class = {class_names[i]}"
-    #     )
-
-    #     fig.update_layout(
-    #         width=1600,
-    #         height=900,
-    #         xaxis_title="severity",
-    #         yaxis_title="metric",
-    #         font=dict(size=20),
-    #         title_font_size=24
-    #     )
-
-    #     y_min = sub_df[cm_cols].min().min()
-    #     y_max = sub_df[cm_cols].max().max()
-
-    #     if np.isfinite(y_min) and np.isfinite(y_max) and y_min < y_max:
-    #         fig.update_yaxes(range=[-5, y_max + 5])
-
-    #     html_path1 = save_dir / f"cm_figure_class_{class_names[i]}.html"
-    #     fig.write_html(str(html_path1))
-
-    #     # =========================
-    #     # 5. Population plot
-    #     # =========================
-    #     fig = px.line(
-    #         plot_df,
-    #         x="severity",
-    #         y=pop_cols,
-    #         markers=True,
-    #         title=f"Raw class populations for {aug_name}, class = {class_names[i]}"
-    #     )
-
-    #     # capture trace colors for reuse
-    #     trace_colors = [trace.line.color for trace in fig.data]
-
-    #     for idx, col in enumerate(pop_cols):
-    #         mask = nan_mask_pop[col].values
-
-    #         if mask.sum() == 0:
-    #             continue
-
-    #         fig.add_scatter(
-    #             x=plot_df.loc[mask, "severity"],
-    #             y=plot_df.loc[mask, col],
-    #             mode="markers",
-    #             marker=dict(
-    #                 symbol="x",
-    #                 size=10,
-    #                 color=trace_colors[idx]
-    #             ),
-    #             name=f"x {col} (NaN)",
-    #             showlegend=True
-    #         )
-
-    #     fig.update_layout(
-    #         width=1600,
-    #         height=900,
-    #         xaxis_title="severity",
-    #         yaxis_title="populations",
-    #         font=dict(size=20),
-    #         title_font_size=24
-    #     )
-
-    #     y_min = sub_df[pop_cols].min().min()
-    #     y_max = sub_df[pop_cols].max().max()
-
-    #     if np.isfinite(y_min) and np.isfinite(y_max) and y_min < y_max:
-    #         fig.update_yaxes(range=[-5, y_max + 5])
-
-    #     html_path2 = save_dir / f"sklearn_figure_class_{class_names[i]}_popns.html"
-    #     fig.write_html(str(html_path2))
-
-    #     return html_path, html_path1, html_path2
-
-    # def _save_cm_path(self, avg_cm, target_names,  corrupted_dir):
-
-    #     n_classes = len(target_names)
-    #     fig_size = max(8, n_classes * 1.5)
-
-    #     fig, ax = plt.subplots(figsize=(fig_size, fig_size))
-
-    #     disp = ConfusionMatrixDisplay(
-    #         confusion_matrix=avg_cm,
-    #         display_labels=target_names
-    #     )
-
-    #     disp.plot(
-    #         ax=ax,
-    #         cmap="Blues",
-    #         colorbar=True,
-    #         values_format=".2f"  # since it's averaged (float)
-    #     )
-    #     for text in disp.text_.ravel():
-    #         text.set_fontsize(8)
-    #     plt.setp(ax.get_xticklabels(), rotation=45, ha="right")
-
-    #     ax.set_title("Average Confusion Matrix")
-
-    #     plt.tight_layout()
-    #     save_dir = self._save_folder / corrupted_dir
-    #     save_dir.mkdir(parents=True, exist_ok=True)
-    #     save_path = save_dir / "avg_confusion_matrix.png"
-    #     plt.savefig(save_path, dpi=300, bbox_inches="tight")
-    #     plt.close(fig)
-
-    #     print(f"Saved to {save_path} [matplotlib]")
-
-    #     fig = go.Figure(
-    #         data=go.Heatmap(
-    #             z=avg_cm,
-    #             x=target_names,
-    #             y=target_names,
-    #             colorscale="Blues",
-    #             colorbar=dict(title="Value"),
-    #             text=np.round(avg_cm, 2),
-    #             texttemplate="%{text}",
-    #             textfont={"size": 12}
-    #         )
-    #     )
-    #     fig.update_layout(
-    #         title="Average Confusion Matrix",
-    #         width=max(600, n_classes * 80),
-    #         height=max(600, n_classes * 80),
-    #         xaxis_title="Predicted label",
-    #         yaxis_title="True label",
-    #     )
-    #     # Rotate x-axis labels
-    #     fig.update_xaxes(tickangle=45)
-
-    #     save_dir = self._save_folder / corrupted_dir
-    #     save_dir.mkdir(parents=True, exist_ok=True)
-
-    #     save_path1 = save_dir / "avg_confusion_matrix.html"
-    #     fig.write_html(str(save_path1))
-
-    #     print(f"Saved to {save_path1} [plotly]")
-    #     return save_path , save_path1
-
     def _save_one_image(self, image: np.ndarray, subfolder_name: str, idx: int) -> str:
         save_dir = self._save_folder / subfolder_name
         save_dir.mkdir(parents=True, exist_ok=True)
 
-        image_path = save_dir / f"{idx}.png"
+        image_path = save_dir / f"{idx}_without_prediction.png"
         image = np.transpose(image, (1, 2, 0))
         Image.fromarray((image * 255.0).astype(np.uint8)).save(image_path)
 
@@ -1327,18 +824,13 @@ class Plugin(IAlgorithm):
         severity,
         target_idx
     ):
-
         current_idx = 0
 
         for images, targets in testloader:
-
             batch_size = len(images)
-
             # target image inside this batch
             if current_idx + batch_size > target_idx:
-
                 local_idx = target_idx - current_idx
-
                 image = images[local_idx]
                 target = targets[local_idx]
 
@@ -1351,11 +843,8 @@ class Plugin(IAlgorithm):
                 )
 
                 if aug_class.name == "None" or severity == "None":
-
                     corrupted_image = image_np
-
                 else:
-
                     corrupted_image, _ = aug_class.corr_func_sample(
                         image_np,
                         target,
@@ -1515,3 +1004,82 @@ class Plugin(IAlgorithm):
 
     def _collate_fn(self, batch):
         return tuple(zip(*batch))
+
+    def _save_image_with_predictions(
+        self,
+        image: np.ndarray,
+        pred_boxes,
+        pred_labels,
+        pred_scores,
+        gt_boxes,
+        gt_labels,
+        class_names: dict,
+        subfolder_name: str,
+        idx: int,
+        score_threshold: float = 0.5,
+    ) -> str:
+        """
+        Overlay ground-truth boxes (green) and predicted boxes (red) on the image,
+        then save it as ``{idx}_with_prediction.png`` in the same subfolder structure
+        used by _save_one_image.
+
+        Args:
+            image (np.ndarray): CHW float image (values in [0, 1] or [0, 255]).
+            pred_boxes: Tensor or array of shape (N, 4) with [x1, y1, x2, y2] predictions.
+            pred_labels: Array of predicted label ids (length N).
+            pred_scores: Array of prediction confidence scores (length N).
+            gt_boxes: List of [x_min, y_min, x_max, y_max] from ground-truth objects.
+            gt_labels: List of ground-truth label ids.
+            class_names (dict): Mapping from str(label_id) -> class name string.
+            subfolder_name (str): Sub-folder name (mirrors the one used by _save_one_image).
+            idx (int): Image index, used in the filename.
+            score_threshold (float): Predictions below this confidence are skipped.
+
+        Returns:
+            str: Absolute path to the saved overlay image.
+        """
+        from PIL import ImageDraw, ImageFont
+
+        save_dir = self._save_folder / subfolder_name
+        save_dir.mkdir(parents=True, exist_ok=True)
+        image_path = save_dir / f"{idx}_with_prediction.png"
+
+        # --- Normalise to HWC uint8 ---
+        img_hwc = image.transpose(1, 2, 0).astype(np.float32)
+        if img_hwc.max() <= 1.5:
+            img_hwc = img_hwc * 255.0
+        img_hwc = np.clip(img_hwc, 0, 255).astype(np.uint8)
+        pil_img = Image.fromarray(img_hwc).convert("RGB")
+        draw = ImageDraw.Draw(pil_img)
+
+        # Try to load a small font; fall back to the default if unavailable.
+        try:
+            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 12)
+        except Exception:
+            font = ImageFont.load_default()
+
+        # --- Ground-truth boxes (green) ---
+        for obj in (gt_boxes or []):
+            bbox = obj if isinstance(obj, (list, tuple)) else obj.get("bbox", [])
+            label = obj.get("label") if isinstance(obj, dict) else None
+            if len(bbox) == 4:
+                x1, y1, x2, y2 = [float(v) for v in bbox]
+                draw.rectangle([x1, y1, x2, y2], outline=(0, 200, 0), width=2)
+                if label is not None:
+                    name = class_names.get(str(label), str(label))
+                    draw.text((x1, max(0, y1 - 13)), f"GT:{name}", fill=(0, 200, 0), font=font)
+
+        # --- Predicted boxes (red) ---
+        if pred_boxes is not None and len(pred_boxes) > 0:
+            # Convert tensors to numpy if needed
+            boxes_np = pred_boxes.cpu().numpy() if hasattr(pred_boxes, "cpu") else np.asarray(pred_boxes)
+            for i, (box, label, score) in enumerate(zip(boxes_np, pred_labels, pred_scores)):
+                if float(score) < score_threshold:
+                    continue
+                x1, y1, x2, y2 = [float(v) for v in box]
+                draw.rectangle([x1, y1, x2, y2], outline=(220, 30, 30), width=2)
+                name = class_names.get(str(label), str(label))
+                draw.text((x1, max(0, y1 - 13)), f"{name} {score:.2f}", fill=(220, 30, 30), font=font)
+
+        pil_img.save(image_path)
+        return str(image_path)

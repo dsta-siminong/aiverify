@@ -414,13 +414,15 @@ class Plugin(IAlgorithm):
             display_info = dict()
             aug_dir =  self._output_folder / aug_name
             os.makedirs(aug_dir, exist_ok=True)
-
             num_epochs = self._input_arguments.get('num_epochs') or 1
+
+            #Main mAP/performance evaluation method
             gradient, maps, fig_path = augmentation_gradient_det(
                 model, test_loader, None, aug_class, 'matplotlib', aug_dir, num_epochs
             )
             first_drop = maps[0] - maps[1]
             severities = ["None"] + aug_class.severities
+
             for severity_idx, severity in enumerate(severities):
 
                 corrupted_dir = Path(aug_name) / f"severity{severity}"
@@ -441,16 +443,8 @@ class Plugin(IAlgorithm):
                     "labels": pred["labels"].cpu().numpy().tolist(),
                     "scores": pred["scores"].cpu().numpy().tolist(),
                 }
-
-                # pred_labels = pred["labels"].cpu().numpy()
-                # pred_scores = pred["scores"].cpu().numpy()
-
-                # pred_classes = [class_names[str(c)] for c in pred_labels]
                 ground_truth = ground_truths[display_idx]
-                # gt_classes = [class_names[str(obj["label"])] for obj in ground_truth]
 
-                # Build the overlay image: predicted boxes (red) + GT boxes (green)
-                # pred_boxes = pred["boxes"].cpu()
                 image_path2 = self._save_image_with_predictions(
                     image=display_image,
                     pred_boxes=prediction['boxes'],#pred_boxes,
@@ -512,44 +506,6 @@ class Plugin(IAlgorithm):
 
         return gt_dict
 
-    # def _get_corrupted_images(self, testloader, aug_class, _severity):
-    #     corrupted_images = []
-    #     for images, targets in testloader:
-    #         for image, target in zip(images, targets):
-
-    #             image_np = (
-    #                 image.mul(255)
-    #                 .byte()
-    #                 .cpu()
-    #                 .numpy()
-    #                 .transpose(1, 2, 0)
-    #             )
-
-    #             corrupted_image, _ = aug_class.corr_func_sample(
-    #                 image_np,
-    #                 target,
-    #                 _severity
-    #             )
-    #             print(
-    #                 "CORRUPTED_IMAGE(s)",
-    #                 corrupted_image.min(),
-    #                 corrupted_image.max(),
-    #                 corrupted_image.dtype
-    #             )
-
-    #             corrupted_image = (
-    #                 torch.from_numpy(
-    #                     corrupted_image.transpose(2, 0, 1)
-    #                 ).float().div_(255.0)
-    #             ).numpy()
-
-    #             if corrupted_image.max() > 1.0:
-    #                 corrupted_image = corrupted_image / 255.0
-    #             corrupted_images.append(corrupted_image)
-
-    #     return np.stack(corrupted_images)
-
-
     def _load_images_objdet(self, image_paths, targets):
         transform = transforms.Compose([
             transforms.ToTensor()
@@ -559,7 +515,7 @@ class Plugin(IAlgorithm):
 
         loader = DataLoader(
             dataset,
-            batch_size=128,
+            batch_size=16,
             shuffle=False,
             collate_fn=self._collate_fn  # IMPORTANT
         )
@@ -648,73 +604,39 @@ class Plugin(IAlgorithm):
         pil_img.save(image_path)
         return str(image_path)
 
-    # def _save_images(self, images: list[np.ndarray], subfolder_name: str) -> list[str]:
-    #     """
-    #     Save a list of numpy arrays as images in a subfolder.
-
-    #     Args:
-    #         images (list[np.ndarray]): A list of numpy images
-    #         subfolder_name (str): The name of the subfolder to save images
-
-    #     Returns:
-    #         list[str]: A list of saved image paths
-    #     """
-    #     image_paths = []
-    #     save_dir = self._save_folder / subfolder_name
-    #     save_dir.mkdir(parents=True, exist_ok=True)
-
-    #     for idx, image in enumerate(images):
-    #         image_path = save_dir / f"{idx}.png"
-    #         # print("image shape", image.shape)
-    #         image = np.transpose(image, (1, 2, 0))
-    #         Image.fromarray((image * 255.0).astype(np.uint8)).save(image_path)
-    #         image_paths.append(str(image_path))
-    #     return image_paths
-
     def _save_one_image(self, image: np.ndarray, subfolder_name: str, idx: int) -> str:
 
         save_dir = self._save_folder / subfolder_name
         save_dir.mkdir(parents=True, exist_ok=True)
-
         image_path = save_dir / f"{idx}_without_prediction.png"
 
         # CHW -> HWC
         image = image.transpose(1, 2, 0)
-
         image = image.astype(np.float32)
-
         # normalize safely
         if image.max() <= 1.5:
             image *= 255.0
 
         image = np.clip(image, 0, 255).astype(np.uint8)
-
         Image.fromarray(image).save(image_path)
-
         return str(image_path)
 
     def _get_one_corrupted_image(self, testloader, aug_class, severity, target_idx):
 
         current_idx = 0
-
         for images, targets in testloader:
-
             for image, target in zip(images, targets):
-
                 if current_idx == target_idx:
-
                     # ---- SAFE CONVERT INPUT IMAGE ----
                     image_np = image.detach().cpu().numpy()
 
                     # if tensor CHW float -> convert to HWC uint8
                     if image_np.shape[0] == 3:
                         image_np = image_np.transpose(1, 2, 0)
-
                     image_np = image_np.astype(np.float32)
 
                     if image_np.max() <= 1.5:
                         image_np *= 255.0
-
                     image_np = np.clip(image_np, 0, 255).astype(np.uint8)
 
                     # ---- CORRUPTION ----
@@ -733,12 +655,8 @@ class Plugin(IAlgorithm):
 
                     if corrupted_image.max() > 1.5:
                         corrupted_image /= 255.0
-
                     corrupted_image = np.clip(corrupted_image, 0, 1)
-
-                    # CHW for saving
-                    corrupted_image = corrupted_image.transpose(2, 0, 1)
-
+                    corrupted_image = corrupted_image.transpose(2, 0, 1) # CHW for saving
                     return corrupted_image
 
                 current_idx += 1

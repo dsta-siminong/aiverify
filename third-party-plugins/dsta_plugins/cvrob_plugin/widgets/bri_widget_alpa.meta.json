@@ -1,0 +1,31 @@
+{
+  "cid": "bri_widget_alpa",
+  "widgetSize": {
+    "minW": 12,
+    "minH": 1,
+    "maxW": 12,
+    "maxH": 36
+  },
+  "name": "Brittleness Widget - ALGO PARAMS",
+  "description": "Brittleness widget - ALGO PARAMS",
+  "dynamicHeight": true,
+  "dependencies": [
+    {
+      "cid": "brittle_algorithm"
+    }
+  ],
+  "mockdata": [
+    {
+      "type": "Algorithm",
+      "cid": "brittle_algorithm",
+      "datapath": "brittle_algorithm.sample.json"
+    }
+  ],
+  "properties": [
+    {
+      "key": "title",
+      "helper": "Set the widget title (default \"Brittleness Widget Title\")",
+      "default": "Brittleness Widget Title"
+    }
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "cid": "augbyclass_widget_alpa",
+  "widgetSize": {
+    "minW": 12,
+    "minH": 1,
+    "maxW": 12,
+    "maxH": 36
+  },
+  "name": "Augmentations By Class Widget - ALGO PARAMS",
+  "description": "Augmentations by class widget - ALGO PARAMS",
+  "dynamicHeight": true,
+  "dependencies": [
+    {
+      "cid": "augmentation_by_class_algorithm"
+    }
+  ],
+  "mockdata": [
+    {
+      "type": "Algorithm",
+      "cid": "augmentation_by_class_algorithm",
+      "datapath": "augmentations_by_class_algorithm.sample.json"
+    }
+  ],
+  "properties": [
+    {
+      "key": "title",
+      "helper": "Set the widget title (default \"Augmentations by class Widget Title\")",
+      "default": "Augmentations by class Widget Title"
+    }
+  ]
+}

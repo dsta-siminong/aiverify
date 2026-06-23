@@ -13,29 +13,6 @@ from torchmetrics.detection.mean_ap import MeanAveragePrecision
 from collections import defaultdict
 from torchvision.ops import box_iou
 
-# def average_detection_stats(all_stats):
-
-#     avg_stats = {}
-
-#     class_keys = all_stats[0].keys()
-
-#     for cls_name in class_keys:
-
-#         avg_stats[cls_name] = {}
-
-#         metric_keys = all_stats[0][cls_name].keys()
-
-#         for metric in metric_keys:
-
-#             values = [
-#                 stats[cls_name][metric]
-#                 for stats in all_stats
-#             ]
-
-#             avg_stats[cls_name][metric] = float(np.mean(values))
-
-#     return avg_stats
-
 def evaluate_detection_detailed(
     model,
     loader,
@@ -276,39 +253,6 @@ def normalize_per_class(per_class):
 
     return out
     
-def augmentation_gradient_det(model, test_loader, device, aug_class, plot_graphs=False, directory=Path(), num_epochs=1):
-    num_epochs = 1 if num_epochs is None else num_epochs
-    num_epochs = 1 if aug_class.deterministic else num_epochs
-    print("===")
-    print("Aug name", aug_class.name)
-    print(f"Evaluating on severity 0/None...")
-    base_map = evaluate_detection(model, test_loader, device)
-    print(f"mAP at severity 0/None: {base_map:.4f}")
-    severities = aug_class.severities #[x for x in range(len(aug_class.severities))]
-    maps = [base_map]
-    for severity_idx, severity in enumerate(severities):
-        print(f"Evaluating on severity {severity}...")
-        all_map = []
-        for i in range(num_epochs):
-            seed = 1000*i + severity_idx 
-            aug_class.set_seed(seed)
-            corrupted_loader = aug_class.corr_func_dataloader(test_loader, severity_idx=severity) #TO BE FIXED
-            corr_map = evaluate_detection(model, corrupted_loader, device)
-            all_map.append(corr_map)
-            print(f"epoch {i+1}: {corr_map}")
-        final_map = sum(all_map)/len(all_map)
-        maps.append(final_map)
-        print(f"mAP at severity {severity}: {final_map:.4f}")
-
-    # Plot results
-    fig = None
-    if plot_graphs is not False:
-        fig = plot_accuracy_vs_severity(maps, ["None"]+severities, plot_graphs)  
-    fig_path = directory / f"accuracy_vs_severity_{aug_class.name}.png"
-    fig.savefig(fig_path)
-    plt.close()
-    return best_fit_gradient(list(range(len(severities)+1)), maps), maps, fig_path
-    
 def get_num_classes(model: nn.Module) -> int:
     """
     Infer number of classes from classification OR detection models.
@@ -408,150 +352,6 @@ def handle_class_names_arg(class_names_arg, model):
 
     return class_names
 
-# ==== HELPER FUNCTIONS FOR AUGMENTATION GRADIENT ====
-
-def plot_accuracy_vs_severity(accuracies, severities=None, graph_lib='matplotlib'):
-    """Plots the accuracy/performance of model changes against severities (of data augmentation)
-
-    Args:
-        accuracies (list): list of accuracies or performances
-        severities (list, optional): list of integers representing severities. Defaults to None.
-        graph_lib (str, optional): graphing library in python. Defaults to 'matplotlib'.
-
-    Raises:
-        ValueError: For invalid graphing library given
-
-    Returns:
-        figure: resultant graph
-    """
-    if graph_lib == 'matplotlib':
-        return plot_accuracy_vs_severity_mpl(accuracies, severities)
-    elif graph_lib == 'plotly':
-        return plot_accuracy_vs_severity_plotly(accuracies, severities)
-    else:
-        raise ValueError('not valid graphing library')
-
-def plot_accuracy_vs_severity_mpl(accuracies, severities=None):
-    """Plots the accuracy/performance of model changes against severities in matplotlib
-
-    Args:
-        accuracies (list): list of accuracies or performances
-        severities (list, optional): list of integers representing severities. Defaults to None.
-
-    Returns:
-        figure: resultant graph
-    """
-    if severities is None:
-        severities = list(range(len(accuracies)))
-
-    fig, ax = plt.subplots(figsize=(8, 5))
-    ax.plot(severities, accuracies, marker='o', linestyle='-', color='b')
-    ax.set_xlabel("Severity")
-    ax.set_ylabel("Accuracy")
-    ax.set_title("Model Accuracy vs Severity")
-    y_limit = 100
-    if max(accuracies) <= 1:
-        y_limit = 1
-    ax.set_ylim(0, y_limit)
-    ax.set_xticks(severities)
-    ax.tick_params(axis='x', rotation=45)
-    ax.grid(True)
-    fig.tight_layout()  
-
-    return fig
-
-def plot_accuracy_vs_severity_plotly(accuracies, severities=None):
-    """Plots the accuracy/performance of model changes against severities in plotly
-
-    Args:
-        accuracies (list): list of accuracies or performances
-        severities (list, optional): list of integers representing severities. Defaults to None.
-
-    Returns:
-        figure: resultant graph
-    """
-    if severities is None:
-        severities = list(range(len(accuracies)))
-
-    fig = go.Figure()
-
-    # Add line plot with markers
-    fig.add_trace(go.Scatter(
-        x=severities,
-        y=accuracies,
-        mode='lines+markers',
-        line=dict(color='blue'),
-        marker=dict(size=8),
-        name='Accuracy'
-    ))
-
-    # Update layout
-    fig.update_layout(
-        title='Model Accuracy vs Severity',
-        xaxis_title='Severity',
-        yaxis_title='Accuracy',
-        xaxis=dict(tickmode='array', tickvals=severities),
-        yaxis=dict(range=[0, 1] if max(accuracies) <= 1 else None),
-        width=800,
-        height=500,
-        template='simple_white'
-    )
-
-    # fig.show()
-    return fig
-
-def best_fit_gradient(x_values, y_values):
-    """
-    Calculate the gradient (slope) of the best-fit line using the least squares method.
-    
-    Args:
-        x_values (list or array): Independent variable values.
-        y_values (list or array): Dependent variable values.
-    
-    Returns:
-        loat: Slope of the best-fit line.
-    """
-    x_mean = np.mean(x_values)
-    y_mean = np.mean(y_values)
-    
-    numerator = np.sum((x_values - x_mean) * (y_values - y_mean))
-    denominator = np.sum((x_values - x_mean) ** 2)
-    
-    return numerator / denominator
-
-# class DetectionDataset(torch.utils.data.Dataset):
-#     def __init__(self, image_paths, targets, transform=None):
-#         self.image_paths = image_paths
-#         self.targets = targets
-#         self.transform = transform
-
-#     def __len__(self):
-#         return len(self.image_paths)
-
-#     def __getitem__(self, idx):
-#         image = Image.open(self.image_paths[idx]).convert("RGB")
-#         target = self.targets[idx]
-
-#         boxes = []
-#         labels = []
-
-#         for obj in target:
-#             boxes.append(obj["bbox"])
-#             labels.append(obj["label"])
-
-#         boxes = torch.tensor(boxes, dtype=torch.float32) if boxes else torch.zeros((0, 4))
-#         labels = torch.tensor(labels, dtype=torch.long) if labels else torch.zeros((0,), dtype=torch.long)
-
-#         target_dict = {
-#             "boxes": boxes,
-#             "labels": labels
-#         }
-
-#         if self.transform:
-#             image = self.transform(image)
-
-#         return image, target_dict
-
 def average_detection_stats(all_stats):
     avg_stats = {}
     class_keys = all_stats[0].keys()
@@ -568,7 +368,6 @@ def average_detection_stats(all_stats):
             avg_stats[cls_name][metric] = float(np.mean(values))
 
     return avg_stats
-
 
 class DetectionDataset(torch.utils.data.Dataset):
     def __init__(self, image_paths, targets, transform=None):

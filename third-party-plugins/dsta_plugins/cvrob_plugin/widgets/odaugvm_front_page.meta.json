@@ -1,0 +1,39 @@
+{
+  "cid": "odaugvm_front_page",
+  "widgetSize": {
+    "minW": 12,
+    "minH": 1,
+    "maxW": 12,
+    "maxH": 36
+  },
+  "name": "OD Augmentations Front Page",
+  "description": "OD Augmentations vs Metric - Front Page",
+  "dynamicHeight": true,
+  "dependencies": [
+    {
+      "cid": "odaugvm_algorithm"
+    },
+    {
+      "cid": "odaugvm_inputblock"
+    }
+  ],
+  "mockdata": [
+    {
+      "type": "Algorithm",
+      "cid": "odaugvm_algorithm",
+      "datapath": "odaugvm_algorithm.sample.json"
+    },
+    {
+      "type": "InputBlock",
+      "cid": "odaugvm_inputblock",
+      "datapath": "odaugvm_inputblock.sample.json"
+    }
+  ],
+  "properties": [
+    {
+      "key": "title",
+      "helper": "Set the widget title (default \"OD Augmentations Front Page\")",
+      "default": "OD Augmentations Front Page"
+    }
+  ]
+}

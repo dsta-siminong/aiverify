@@ -275,10 +275,14 @@ def visualize_topk_matplotlib(
     topk = results_sorted[:K]
 
     fig, axes = plt.subplots(K, 2, figsize=(12, 3 * K), constrained_layout=True)
+    fragments_dir = directory / "fragments"
+    fragments_dir.mkdir(parents=True, exist_ok=True)
+    _suffix = "_with_predictions" if gt_labels is not None else ""
 
     if K == 1:
         axes = np.array([axes])
 
+    fragment_paths = []
     for row, res in enumerate(topk):
         i = res.index
         idx = Path(str(image_paths[i])).name if image_paths else i
@@ -309,23 +313,34 @@ def visualize_topk_matplotlib(
             else "±0"
         )
 
-        axes[row, 0].imshow(imgA)
-        axes[row, 0].axis("off")
-        axes[row, 0].text(
+        # Save this row as its own 1x2 figure
+        fig_row, axes_row = plt.subplots(
+            1, 2,
+            figsize=(12, 3),
+            constrained_layout=True
+        )
+
+        for ax in axes_row:
+            for spine in ax.spines.values():
+                spine.set_visible(True)
+
+        axes_row[0].imshow(imgA)
+        axes_row[0].axis("off")
+        axes_row[0].text(
             0.02, 0.98,
             (
                 f"image: {idx}\n"
                 f"BEFORE corruption\n"
                 f"Detections: {n_A}  |  Top conf: {top_A:.2f}"
             ),
-            transform=axes[row, 0].transAxes,
+            transform=axes_row[0].transAxes,
             va="top", ha="left", fontsize=9,
             bbox=dict(boxstyle="round", facecolor="white", alpha=0.8)
         )
 
-        axes[row, 1].imshow(imgB)
-        axes[row, 1].axis("off")
-        axes[row, 1].text(
+        axes_row[1].imshow(imgB)
+        axes_row[1].axis("off")
+        axes_row[1].text(
             0.02, 0.98,
             (
                 f"image: {idx}\n"
@@ -334,17 +349,21 @@ def visualize_topk_matplotlib(
                 f"Brittleness: {norm_brit:.2f} / 1.00  →  {label}\n"
                 f"(raw penalty: {raw_brit:.3f})"
             ),
-            transform=axes[row, 1].transAxes,
+            transform=axes_row[1].transAxes,
             va="top", ha="left", fontsize=9,
             bbox=dict(boxstyle="round", facecolor="white", alpha=0.8)
         )
 
-    _suffix = "_with_predictions" if gt_labels is not None else ""
+        fragment_path = fragments_dir / f"brittleness_top_{row + 1}{_suffix}.png"
+        fragment_paths.append(fragment_path)
+        fig_row.savefig(fragment_path)
+        plt.close(fig_row)
+
     save_path = directory / f"brittleness_topk{_suffix}.png"
     plt.savefig(save_path)
     plt.close(fig)
 
-    return save_path
+    return save_path, fragment_paths
 
 
 def visualize_topk_plotly(

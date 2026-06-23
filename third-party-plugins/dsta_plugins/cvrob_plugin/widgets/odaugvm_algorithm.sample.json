@@ -1,0 +1,66 @@
+{
+  "results": [
+    {
+      "Augmentation": "augmentation_name",
+      "display_info": {
+        "None": [
+          "images/Random Rain/None/51wop.png",
+          [{"bbox": [1,2,3,4],"label": 1}],
+          {"boxes": [[1,2,3,4]], "labels":[1], "scores":[1]},
+          "images/Random Rain/None/51wp.png"
+        ],
+        "severity1": [
+          "images/Random Rain/severity1/51wop.png",
+          [{"bbox": [1,2,3,4],"label": 1}],
+          {"boxes": [[1,2,3,4]], "labels":[1], "scores":[1]},
+          "images/Random Rain/severity1/51wp.png"
+        ],
+        "severity2": [
+          "images/Random Rain/severity2/51wop.png",
+          [{"bbox": [1,2,3,4],"label": 1}],
+          {"boxes": [[1,2,3,4]], "labels":[1], "scores":[1]},
+          "images/Random Rain/severity2/51wp.png"
+        ],
+        "severity3": [
+          "images/Random Rain/severity3/51wop.png",
+          [{"bbox": [1,2,3,4],"label": 1}],
+          {"boxes": [[1,2,3,4]], "labels":[1], "scores":[1]},
+          "images/Random Rain/severity3/51wp.png"
+        ],
+        "severity4": [
+          "images/Random Rain/severity4/51wop.png",
+          [{"bbox": [1,2,3,4],"label": 1}],
+          {"boxes": [[1,2,3,4]], "labels":[1], "scores":[1]},
+          "images/Random Rain/severity4/51wp.png"
+        ],
+        "severity5": [
+          "images/Random Rain/severity5/51wop.png",
+          [{"bbox": [1,2,3,4],"label": 1}],
+          {"boxes": [[1,2,3,4]], "labels":[1], "scores":[1]},
+          "images/Random Rain/severity5/51wp.png"
+        ]
+      },
+      "maps": {
+        "None": 0.75,
+        "severity1": 0.55,
+        "severity2": 0.40,
+        "severity3": 0.30,
+        "severity4": 0.25,
+        "severity5": 0.20
+      }
+    }
+  ],
+  "gradients": [
+    -3
+  ],
+  "first_drops": [
+    -6
+  ],
+  "augmentation_names": [
+    "augmentation_name"
+  ],
+  "dataset_size": 67,
+  "ALGORITHM_ARGUMENTS": {
+      "num_epochs": 5
+  }
+}
