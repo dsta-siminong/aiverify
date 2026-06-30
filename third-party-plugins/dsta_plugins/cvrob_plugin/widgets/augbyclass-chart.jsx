@@ -1,23 +1,87 @@
+// export function transformData(data, data2, severities, class_names) {
+//   const rows = [];
+//   const cmRows = [];
+//   for (let s = 0; s < severities.length; s++) {
+//     const severity = severities[s];
+//     const cr = data[s];
+//     const cm = data2[s];
+//     // classification_report → wide DF‑like rows
+//     for (const cl of Object.keys(cr)) {
+//       const r = { severity, class: cl, ...cr[cl] };
+//       rows.push(r);
+//     }
+//     // conf_matrix → rows with TP/FP/FN/TN
+//     for (const cl of Object.keys(cm)) {
+//       const stats = cm[cl];
+//       const row = { severity, class: cl, ...stats };
+//       cmRows.push(row);
+//     }
+//   }
+//   // Combine: big_df = rows; cm_df = cmRows
+//   const combined = [];
+//   for (const r of rows) {
+//     const cmRow = cmRows.find(
+//       (c) => c.severity === r.severity && c.class === r.class
+//     );
+//     if (cmRow) {
+//       combined.push({
+//         ...r,
+//         ...cmRow,
+//         preds_population: cmRow.TP + cmRow.FP,
+//         actual_population: cmRow.TP + cmRow.FN,
+//       });
+//     }
+//   }
+//   return combined;
+// }
+
 export function transformData(data, data2, severities, class_names) {
   const rows = [];
   const cmRows = [];
+
+  // Detect OD format: cr[0] has a "map_50" key (or class keys contain TP directly)
+  const isODFormat = data[0] && "map_50" in data[0];
+
   for (let s = 0; s < severities.length; s++) {
     const severity = severities[s];
     const cr = data[s];
     const cm = data2[s];
-    // classification_report → wide DF‑like rows
-    for (const cl of Object.keys(cr)) {
-      const r = { severity, class: cl, ...cr[cl] };
-      rows.push(r);
-    }
-    // conf_matrix → rows with TP/FP/FN/TN
-    for (const cl of Object.keys(cm)) {
-      const stats = cm[cl];
-      const row = { severity, class: cl, ...stats };
-      cmRows.push(row);
+
+    if (isODFormat) {
+      // OD: classification_report already contains TP/FP/FN per class
+      for (const key of Object.keys(cr)) {
+        if (key === "map_50") continue; // skip the top-level mAP key
+        const classStats = cr[key];
+        rows.push({
+          severity,
+          class: key,
+          // Normalise f1_score → "f1-score" to match old consumers
+          "f1-score": classStats.f1_score,
+          ...classStats,
+          preds_population: (classStats.TP ?? 0) + (classStats.FP ?? 0),
+          actual_population: (classStats.TP ?? 0) + (classStats.FN ?? 0),
+        });
+      }
+      // conf_matrix not needed for per-class stats in OD — skip it
+    } else {
+      // Original image-classification path — unchanged
+      for (const cl of Object.keys(cr)) {
+        const r = { severity, class: cl, ...cr[cl] };
+        rows.push(r);
+      }
+      for (const cl of Object.keys(cm)) {
+        const stats = cm[cl];
+        const row = { severity, class: cl, ...stats };
+        cmRows.push(row);
+      }
     }
   }
-  // Combine: big_df = rows; cm_df = cmRows
+
+  if (isODFormat) {
+    return rows; // already fully combined above
+  }
+
+  // Original image-classification merge
   const combined = [];
   for (const r of rows) {
     const cmRow = cmRows.find(
@@ -618,6 +682,74 @@ export function ClassMetricsTable({ combined, className , metrics }) {
             </tbody>
           </table>
         </div>
+      ))}
+    </>
+  );
+}
+
+export function MapTable({ classificationReport, severities }) {
+  const MAX_COLUMNS = 5;
+  const severityChunks = [];
+  for (let i = 0; i < severities.length; i += MAX_COLUMNS) {
+    severityChunks.push(severities.slice(i, i + MAX_COLUMNS));
+  }
+
+  return (
+    <>
+      {severityChunks.map((chunk, tableIndex) => (
+        <table
+          key={tableIndex}
+          style={{
+            width: "100%",
+            borderCollapse: "collapse",
+            tableLayout: "fixed",
+            marginBottom: "1.5em",
+          }}
+        >
+          <thead>
+            <tr>
+              <th style={{ border: "1px solid #ccc", padding: "6px" }}>
+                Severity
+              </th>
+              {chunk.map((sev) => (
+                <th
+                  key={sev}
+                  style={{
+                    border: "1px solid #ccc",
+                    padding: "6px",
+                    fontSize: "0.85em",
+                  }}
+                >
+                  {sev === "None" ? "No Aug" : sev}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style={{ border: "1px solid #ccc", padding: "6px", fontWeight: "bold" }}>
+                mAP@50
+              </td>
+              {chunk.map((sev, i) => {
+                const severityIndex = severities.indexOf(sev);
+                const value = classificationReport[severityIndex]?.map_50;
+                return (
+                  <td
+                    key={sev}
+                    style={{
+                      border: "1px solid #ccc",
+                      padding: "6px",
+                      textAlign: "center",
+                      fontWeight: "bold",
+                    }}
+                  >
+                    {typeof value === "number" ? value.toFixed(3) : "-"}
+                  </td>
+                );
+              })}
+            </tr>
+          </tbody>
+        </table>
       ))}
     </>
   );

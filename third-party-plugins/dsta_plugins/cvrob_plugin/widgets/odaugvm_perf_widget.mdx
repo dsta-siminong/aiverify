@@ -75,7 +75,12 @@ export const AugmentationFigurePanel = ({ props }) => {
       console.error(`Error loading ${fig_img}`, error);
     }
 
-    const augmentationInfo = AUGMENTATION_LOOKUP[Augmentation];
+    const augmentationInfo =
+      AUGMENTATION_LOOKUP[Augmentation] ?? {
+        longDescription: [
+          `No description found for "${Augmentation}".`
+        ],
+      };
     const acc = maps || {};
 
     const MAX_COLUMNS = 5;

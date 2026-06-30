@@ -12,6 +12,37 @@ from torchmetrics.detection.mean_ap import MeanAveragePrecision
 import gc
 
 def evaluate_detection(model, loader, device, iou_thresh=0.5):
+    """Evaluate an object detection model using mean Average Precision (mAP).
+
+    Computes the mAP score at a specified IoU threshold over all samples in
+    the provided dataloader. Predictions and ground-truth annotations are
+    accumulated using TorchMetrics' MeanAveragePrecision metric.
+
+    Args:
+        model (torch.nn.Module):
+            Object detection model that accepts a list of images and returns
+            a list of prediction dictionaries containing keys such as
+            ``boxes``, ``scores``, and ``labels``.
+
+        loader (torch.utils.data.DataLoader):
+            DataLoader yielding batches of ``(images, targets)``, where:
+
+            - ``images`` is a list of image tensors.
+            - ``targets`` is a list of dictionaries containing ground-truth
+              annotations (e.g., ``boxes`` and ``labels``).
+
+        device (torch.device):
+            Device on which inference is performed (e.g., CPU or CUDA device).
+
+        iou_thresh (float, optional):
+            Intersection over Union (IoU) threshold used for mAP computation.
+            Defaults to ``0.5``.
+
+    Returns:
+        float:
+            The mAP value at the specified IoU threshold (``map_50`` when
+            ``iou_thresh=0.5``).
+    """
     metric = MeanAveragePrecision(iou_thresholds=[iou_thresh])
 
     model.eval()

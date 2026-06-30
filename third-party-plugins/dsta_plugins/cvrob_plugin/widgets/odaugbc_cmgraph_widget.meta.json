@@ -1,0 +1,31 @@
+{
+  "cid": "odaugbc_cmgraph_widget",
+  "widgetSize": {
+    "minW": 12,
+    "minH": 1,
+    "maxW": 12,
+    "maxH": 36
+  },
+  "name": "OD Augmentations By Class Widget for Confusion Matrix line graphs",
+  "description": "Object Detections Augmentations By Class Widget for Confusion Matrix line graphs",
+  "dynamicHeight": true,
+  "dependencies": [
+    {
+      "cid": "odaugbc_algorithm"
+    }
+  ],
+  "mockdata": [
+    {
+      "type": "Algorithm",
+      "cid": "odaugbc_algorithm",
+      "datapath": "odaugbc_algorithm.sample.json"
+    }
+  ],
+  "properties": [
+    {
+      "key": "title",
+      "helper": "Set the widget title (default \"OD AUGMENTATIONS BY CLASS - CONFUSION MATRIX - LINE GRAPHS\")",
+      "default": "OD AUGMENTATIONS BY CLASS - CONFUSION MATRIX - LINE GRAPHS"
+    }
+  ]
+}

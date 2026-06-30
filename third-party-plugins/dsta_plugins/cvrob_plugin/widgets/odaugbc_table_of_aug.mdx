@@ -1,0 +1,61 @@
+export const cid = "odaugbc_algorithm"
+import { ALL_AUGMENTATIONS } from "./augmentationInfo.jsx";
+
+{(() => {
+
+
+  const data = props.getResults ? props.getResults(cid) : null;
+  const augNames = data?.augmentation_names ?? [];
+
+  const usedSet = new Set(augNames);
+  const rows = ALL_AUGMENTATIONS.filter(a => a.keys.some(k => usedSet.has(k)));
+
+  const cellStyle = { border: "1px solid #000", padding: "8px", textAlign: "left" };
+  const headCellStyle = { ...cellStyle, textAlign: "center", background: "#f3f4f6" };
+
+  return (
+    <div style={{
+      width: "100%",
+      padding: "16px",
+      marginBottom: "24px",
+      border: "1px solid #e5e7eb",
+      borderRadius: "8px",
+      backgroundColor: "#fafafa",
+      boxSizing: "border-box",
+    }}>
+      <h3>Table of Algorithms Used</h3>
+      <p>
+        This table describes the image corruption algorithms that were applied
+        during this robustness evaluation. For each algorithm, it explains the
+        type of perturbation and how a similar effect may occur in the real world.
+      </p>
+
+      {rows.length === 0 ? (
+        <p style={{ color: "#6b7280", fontStyle: "italic" }}>
+          No matching augmentations found in the catalogue for the algorithms used in this run.
+        </p>
+      ) : (
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <thead>
+            <tr>
+              <th style={headCellStyle}>Corruption Category</th>
+              <th style={headCellStyle}>Corruption</th>
+              <th style={headCellStyle}>Description</th>
+              <th style={headCellStyle}>How It May Occur in Real Life</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, i) => (
+              <tr key={i} style={{ background: i % 2 === 0 ? "#ffffff" : "#f9fafb" }}>
+                <td style={cellStyle}>{row.category}</td>
+                <td style={{ ...cellStyle, fontWeight: "600" }}>{row.name}</td>
+                <td style={cellStyle}>{row.description}</td>
+                <td style={cellStyle}>{row.realLife}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+})()}

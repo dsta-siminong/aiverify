@@ -509,10 +509,10 @@ def test_valid_run(get_data_instance_and_serializer_without_ground_truth):
     # print('-'*24)
     # print(results)
     # print('-'*24)
-    import pickle
-    with open("../../data.pkl", "wb") as f:
-        pickle.dump(results, f)
-    print("DUMPED")
+    # import pickle
+    # with open("../../data.pkl", "wb") as f:
+    #     pickle.dump(results, f)
+    # print("DUMPED")
 
 
     validate_status = validate_json(

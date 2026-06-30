@@ -44,7 +44,12 @@ export const AugmentationClassPlots = ({ props }) => {
     <div style={{ display: "flex", flexDirection: "column", gap: "3rem" }}>
       {resultsData.map((augmentationItem, index) => {
         const { Augmentation, plot_paths } = augmentationItem;
-        const augmentationInfo = AUGMENTATION_LOOKUP[Augmentation];
+        const augmentationInfo =
+          AUGMENTATION_LOOKUP[Augmentation] ?? {
+            longDescription: [
+              `No description found for "${Augmentation}".`
+            ],
+          };
         const result = props.getResults(cid);
         const class_names = result.class_names;
         const combined = transformData(

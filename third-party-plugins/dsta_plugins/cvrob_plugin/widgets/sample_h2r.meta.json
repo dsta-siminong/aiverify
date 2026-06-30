@@ -6,6 +6,6 @@
     "maxW": 12,
     "maxH": 36
   },
-  "name": "How2Read General Sample",
-  "description": "How to read any algo's sample widget"
+  "name": "How2Read Image Classification Sample",
+  "description": "How to read any image classification algo's sample widget"
 }

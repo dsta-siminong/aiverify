@@ -1,0 +1,141 @@
+<div style={{
+  width: "100%",
+  padding: "16px",
+  marginBottom: "24px",
+  border: "1px solid #e5e7eb",
+  borderRadius: "8px",
+  backgroundColor: "#fafafa",
+  boxSizing: "border-box",
+  display: "flex",
+  flexDirection: "column",
+  gap: "16px",
+}}>
+  <h3>Per-Class Detection Statistics (Object Detection)</h3>
+
+  <p>
+    This widget shows how a model's class-specific detection behaviour changes as the
+    severity of image perturbations increases.
+  </p>
+
+  <p>
+    For each specified corruption algorithm and each foreground class in the dataset, it tracks
+    how the following metrics vary across severity levels:
+  </p>
+
+  <ul>
+    <li><b>True Positives (TP)</b> — ground truth boxes of this class correctly detected as this class</li>
+    <li><b>False Positives (FP)</b> — predicted boxes assigned to this class where no such ground truth exists</li>
+    <li><b>False Negatives (FN)</b> — ground truth boxes of this class that the model failed to detect</li>
+  </ul>
+
+  <p style={{ margin: "4px 0 0 0", padding: "10px 14px", backgroundColor: "#f0f4ff", borderLeft: "4px solid #6366f1", borderRadius: "4px" }}>
+    <b>Note:</b> True Negatives (TN) do not exist in object detection. Unlike classification,
+    there is no fixed set of "non-occurrences" to count — the model operates on a variable
+    number of bounding box proposals per image, and background is handled implicitly. TP, FP,
+    and FN over bounding boxes are therefore the complete picture for each foreground class.
+  </p>
+</div>
+
+<div style={{
+  width: "100%",
+  padding: "16px",
+  marginBottom: "24px",
+  border: "1px solid #e5e7eb",
+  borderRadius: "8px",
+  backgroundColor: "#fafafa",
+  boxSizing: "border-box",
+  display: "flex",
+  flexDirection: "column",
+  gap: "16px",
+}}>
+  <h4><b>How to read?</b></h4>
+
+  <p>
+    Each line graph corresponds to one corruption algorithm and one foreground class (e.g. class X).
+    The graph contains three lines, each tracking a bounding-box-level count across corruption severities:
+  </p>
+
+  <ul>
+    <li><b>TP</b> — ground truth boxes labelled class X that were correctly predicted as class X</li>
+    <li><b>FP</b> — predicted boxes assigned to class X that do not match any ground truth box of class X (either no object was present, or the object belongs to a different class)</li>
+    <li><b>FN</b> — ground truth boxes labelled class X that the model missed entirely, or predicted as a different class (including background)</li>
+  </ul>
+
+  <p>
+    The y-axis represents the bounding box count for each metric, and the x-axis represents
+    corruption severity from none to most severe.
+  </p>
+
+  <p>
+    Good model performance is indicated by a <b>high TP</b> count and <b>low FP and FN</b> counts.
+    As severity increases, some degradation is expected — TP tends to decrease while FP and FN tend to rise.
+    The concern is with how steeply and at what severity this degradation begins.
+  </p>
+</div>
+
+<div style={{
+  width: "100%",
+  padding: "16px",
+  marginBottom: "24px",
+  border: "1px solid #e5e7eb",
+  borderRadius: "8px",
+  backgroundColor: "#fafafa",
+  boxSizing: "border-box",
+  display: "flex",
+  flexDirection: "column",
+  gap: "16px",
+}}>
+  <h4><b>Interpretation</b></h4>
+
+  <p>
+    The shape of each curve reveals the nature of the model's failure mode under corruption
+    for that class. The direction of change matters as much as the magnitude.
+  </p>
+
+  <p>
+    A <b>steep decline in TP or rise in FN</b> indicates the model is increasingly missing
+    real objects of that class — reduced recall under corruption. Consider:
+  </p>
+  <ul>
+    <li>Adding targeted augmentation of this corruption type during training for the affected class</li>
+    <li>Increasing diversity of training samples, particularly under degraded conditions</li>
+    <li>Reviewing detection confidence thresholds, as some missed detections may be recoverable by lowering the threshold</li>
+    <li>Improving model architecture or regularisation if degradation is widespread across classes</li>
+  </ul>
+
+  <p>
+    A <b>sharp rise in FP</b> indicates the model is generating spurious detections for that class
+    under corruption — reduced precision. This may indicate:
+  </p>
+  <ul>
+    <li>Feature collapse under the corruption, where the model latches onto fragile or non-robust visual cues</li>
+    <li>Visual similarity between corrupted representations of different classes, causing the model to over-assign this label</li>
+    <li>Class imbalance in training causing the model to favour this class under uncertainty</li>
+  </ul>
+
+  <p>Recommended actions for rising FP include:</p>
+  <ul>
+    <li>Adding corrupted negative examples (boxes of other classes under this corruption) to training</li>
+    <li>Using contrastive learning or stronger class separation objectives</li>
+    <li>Rebalancing class distribution in the training dataset</li>
+    <li>Raising the detection confidence threshold for this class, if precision is the priority</li>
+  </ul>
+
+  <p>
+    If <b>both FP and FN rise simultaneously</b> while TP drops, the model is both missing
+    objects and hallucinating detections — a sign of broad degradation in detection quality
+    for that class under the given corruption.
+  </p>
+
+  <p>
+    If these metrics remain stable across all severities, the model can be considered
+    <b>robust</b> to this corruption for that class, and no further action is required.
+  </p>
+
+  <p>
+    If trends move in the opposite direction — TP rises while FP and FN fall as severity
+    increases — this may indicate the model has <b>overfit to this specific corruption type</b>
+    during training. In this case, retraining with fewer or less aggressive augmentation
+    samples of this corruption type is recommended.
+  </p>
+</div>

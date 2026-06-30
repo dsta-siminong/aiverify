@@ -1,0 +1,128 @@
+export const cid = "odaugbc_algorithm"
+//export const ib_cid = "augbyclass_inputblock"
+
+
+<div style={{ marginBottom: "1rem" }}>
+  <div
+    style={{
+      textAlign: "center",
+      fontWeight: "bold",
+      fontSize: "2.2rem",
+      color: "#b91c1c",
+      textDecoration: "underline"
+    }}
+  >
+    {props.properties.title}
+  </div>
+</div>
+
+import {
+  transformData,
+  ClassLineChart,
+  PopulationChart,
+  StackedBarChart,
+  ClassMetricsTable
+} from './augbyclass-chart.jsx';
+
+
+export const ConfusionMatricesSection = ({ props }) => {
+  const resultsData = props.getResults ? props.getResults(cid).results : null;
+
+  if (!resultsData || resultsData.length === 0) {
+    return <div>No results data available</div>;
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "3rem" }}>
+      <h2
+        style={{
+          textAlign: "center",
+          fontWeight: "bold",
+          textDecoration: "underline",
+          color: "red",
+          marginBottom: "2rem",
+        }}
+      >
+        Confusion Matrices
+      </h2>
+
+      {resultsData.map((augmentationItem, index) => {
+        const { Augmentation, confusion_matrix } = augmentationItem;
+
+        if (!confusion_matrix) {
+          return (
+            <div
+              key={index}
+              style={{
+                padding: "1em",
+                border: "1px dashed #ccc",
+                borderRadius: "8px",
+                textAlign: "center",
+                color: "#777",
+              }}
+            >
+              <h3>{Augmentation}</h3>
+              <div>No image available in sample</div>
+            </div>
+          );
+        }
+        return (
+          <div
+            key={index}
+            style={{
+              border: "1px solid #ccc",
+              borderRadius: "10px",
+              padding: "2rem",
+            }}
+          >
+            <h3
+              style={{
+                textAlign: "center",
+                fontWeight: "bold",
+                marginBottom: "2rem",
+              }}
+            >
+              {Augmentation}
+            </h3>
+
+            {Object.entries(confusion_matrix).map(([severity, paths], i) => {
+              const [pngPath, htmlPath] = paths;
+
+              let pngUrl = null;
+              let htmlUrl = null;
+
+              try {
+                pngUrl = props.getArtifactURL(cid, pngPath);
+                htmlUrl = props.getArtifactURL(cid, htmlPath);
+              } catch (err) {
+                console.error("Artifact URL error:", err);
+              }
+
+              return (
+                <div key={i} style={{ marginBottom: "3rem", breakInside: "avoid", pageBreakInside: "avoid",}}>
+                  <h4 style={{ textAlign: "center", fontWeight: "bold", textDecoration: "underline", marginTop: "1rem", marginBottom: "1rem" }}> Confusion Matrix Plot for severity: {severity}</h4>
+
+                  {pngUrl && (
+                    <img
+                      src={pngUrl}
+                      alt={`Confusion Matrix PNG - ${severity}`}
+                      style={{
+                        maxWidth: "600px",
+                        width: "100%",
+                        display: "block",
+                        marginBottom: "1rem",
+                      }}
+                    />
+                  )}
+
+                </div>
+              );
+            })}
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+<ConfusionMatricesSection props={props} />

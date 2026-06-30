@@ -1,0 +1,84 @@
+<div style={{
+  width: "100%",
+  padding: "16px",
+  marginBottom: "24px",
+  border: "1px solid #e5e7eb",
+  borderRadius: "8px",
+  backgroundColor: "#fafafa",
+  boxSizing: "border-box"
+}}>
+  <h3>Brittle Misclassified Images (Object Detection)</h3>
+
+  <span>
+    This widget shows images from your dataset where that are the most brittle, sorted in descending order of brittleness. “Brittle” images are
+    those where the model's confidence, averaged across all images, drops the most under the specified corruption
+    algorithm and severity interval. An image’s brittleness is defined as the magnitude
+    of this confidence drop.
+  </span>
+
+  <span>
+    Compared to the static image display, this view is designed for closer inspection
+    of individual images, making it easier to examine how and why each sample fails
+    under perturbation.
+  </span>
+</div>
+
+<div style={{
+  width: "100%",
+  padding: "16px",
+  marginBottom: "24px",
+  border: "1px solid #e5e7eb",
+  borderRadius: "8px",
+  backgroundColor: "#fafafa",
+  boxSizing: "border-box"
+}}>
+  <h4>
+    <b>How to read?</b>
+  </h4>
+
+  <p>
+    The widget compares each image before and after applying the chosen corruption severity.
+  </p>
+
+  <p>
+    The left column shows the original (or lower severity) version of each image.
+    The right column shows the same image after applying higher severity corruption.
+  </p>
+
+  <p><b>Legend:</b></p>
+
+  <ul>
+    <li>image: file path or identifier of the image</li>
+    <li>ground truth objects: number of objects in the image (that are of a class the model is trained to detect)</li>
+    <li>detections: number of objects detected by the model within the image</li>
+    <li>top confidence: max confideence of a given detection in the image</li>
+    <li>pred_proba: model confidence (probability) for the predicted class</li>
+    <li>brittleness: brittleness score, a consolidated averaged measure of the drop in confidence of the detections within the image</li>
+  </ul>
+</div>
+
+<div style={{
+  width: "100%",
+  padding: "16px",
+  marginBottom: "24px",
+  border: "1px solid #e5e7eb",
+  borderRadius: "8px",
+  backgroundColor: "#fafafa",
+  boxSizing: "border-box"
+}}>
+  <span>
+    <b>Interpretation</b>
+  </span>
+
+  <span>
+    You can use the shown images to:
+  </span>
+
+  <span>
+    <ul>
+      <li>Identify patterns in unstable image types (e.g., lighting, texture, background clutter)</li>
+      <li>Decide whether the model requires additional training data covering these cases or retraining</li>
+      <li>Consider removing or relabeling problematic samples if they are noisy or inconsistent</li>
+    </ul>
+  </span>
+</div>

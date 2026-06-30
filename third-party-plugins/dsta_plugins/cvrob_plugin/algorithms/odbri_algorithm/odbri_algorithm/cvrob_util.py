@@ -101,50 +101,50 @@ def triplets(s):
     assert len(items) % 3 == 0, "Input length must be a multiple of 3"
     return [items[i:i+3] for i in range(0, len(items), 3)]
 
-def collect_probs(model, dataloader, device):
-    """
-    Collect model predictions, labels, and input images from a DataLoader.
+# def collect_probs(model, dataloader, device):
+#     """
+#     Collect model predictions, labels, and input images from a DataLoader.
 
-    The function runs the model in evaluation mode over all batches in the dataloader,
-    computes softmax probabilities for each batch, and accumulates the input images,
-    predicted probabilities, and ground truth labels.
+#     The function runs the model in evaluation mode over all batches in the dataloader,
+#     computes softmax probabilities for each batch, and accumulates the input images,
+#     predicted probabilities, and ground truth labels.
 
-    Args:
-        model (nn.Module): A PyTorch model for which predictions are collected.
-        dataloader (DataLoader): PyTorch DataLoader providing input batches (images and labels).
-        device (torch.device): Device to run the model on (e.g., CPU or GPU).
+#     Args:
+#         model (nn.Module): A PyTorch model for which predictions are collected.
+#         dataloader (DataLoader): PyTorch DataLoader providing input batches (images and labels).
+#         device (torch.device): Device to run the model on (e.g., CPU or GPU).
 
-    Returns:
-        Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-            - images: Tensor of all input images concatenated across batches.
-            - probs: Tensor of predicted probabilities for each input.
-            - labels: Tensor of ground truth labels for each input.
-    """
-    model.eval()
+#     Returns:
+#         Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+#             - images: Tensor of all input images concatenated across batches.
+#             - probs: Tensor of predicted probabilities for each input.
+#             - labels: Tensor of ground truth labels for each input.
+#     """
+#     model.eval()
 
-    probs = []
-    labels = []
-    images = []
+#     probs = []
+#     labels = []
+#     images = []
 
-    with torch.no_grad():
-        for x, y in dataloader:
-            x = x.to(device)
-            y = y.to(device)
+#     with torch.no_grad():
+#         for x, y in dataloader:
+#             x = x.to(device)
+#             y = y.to(device)
 
-            logits = model(x)
-            p = torch.nn.functional.softmax(logits, dim=1)
+#             logits = model(x)
+#             p = torch.nn.functional.softmax(logits, dim=1)
 
-            probs.append(p.cpu())
-            labels.append(y.cpu())
-            images.append(x.cpu())
+#             probs.append(p.cpu())
+#             labels.append(y.cpu())
+#             images.append(x.cpu())
 
-    return (
-        torch.cat(images),
-        torch.cat(probs),
-        torch.cat(labels),
-    )
+#     return (
+#         torch.cat(images),
+#         torch.cat(probs),
+#         torch.cat(labels),
+#     )
 
-    return torch.cat(probs), torch.cat(labels)
+#     return torch.cat(probs), torch.cat(labels)
 
 def get_num_classes(model: nn.Module) -> int:
     """
@@ -410,135 +410,39 @@ def plot_accuracy_vs_severity_plotly(accuracies, severities=None):
     fig.show()
     return fig
 
-def best_fit_gradient(x_values, y_values):
-    """
-    Calculate the gradient (slope) of the best-fit line using the least squares method.
-    
-    Args:
-        x_values (list or array): Independent variable values.
-        y_values (list or array): Dependent variable values.
-    
-    Returns:
-        loat: Slope of the best-fit line.
-    """
-    x_mean = np.mean(x_values)
-    y_mean = np.mean(y_values)
-    
-    numerator = np.sum((x_values - x_mean) * (y_values - y_mean))
-    denominator = np.sum((x_values - x_mean) ** 2)
-    
-    return numerator / denominator
+# def collect_detection_scores(model, loader, device, score_mode="max"):
+#     model.eval()
 
-def evaluate_1img(model, device, img_array):
-    """
-    Evaluate a single image using a PyTorch model and return predicted probabilities and label.
+#     all_scores = []
+#     all_imgs = []
 
-    Args:
-        model (nn.Module): A PyTorch model for image classification.
-        device (torch.device): Device to run the model on (CPU or GPU).
-        img_array (numpy.ndarray or PIL.Image.Image): Input image as a NumPy array or PIL Image.
+#     with torch.no_grad():
+#         for images, _ in loader:
+#             images = [img.to(device) for img in images]
+#             outputs = model(images)
 
-    Returns:
-        Tuple[numpy.ndarray, int]:
-            - probs: Softmax probabilities for each class as a NumPy array.
-            - label: Predicted class index as an integer.
-    """
-    img_tensor = transforms.ToTensor()(img_array).unsqueeze(0)
-    model.eval()
-    with torch.no_grad():
-        output = model(img_tensor.to(device)).cpu()
-        probs = torch.softmax(output, 1).numpy()[0]
-        label = torch.max(output, 1)[1][0].item()
+#             for img, out in zip(images, outputs):
 
-    return probs, label
+#                 scores = out["scores"]
 
-def get_metric_dict():
-    d = {
-        "accuracy": get_accuracy,
-        "correct_class_proba": get_correct_class_proba,
-        "max_proba": get_max_proba,
-        "f1": get_f1,
-        "recall": get_recall,
-        "precision": get_precision,
-        "auc": get_auc,
-        "ece": get_ece
-    }
-    return d
+#                 if len(scores) == 0:
+#                     image_score = 0.0
+#                 else:
+#                     if score_mode == "max":
+#                         image_score = scores.max().item()
+#                     elif score_mode == "mean":
+#                         image_score = scores.mean().item()
+#                     elif score_mode == "sum":
+#                         image_score = scores.sum().item()
 
-def get_accuracy(base_acc, y_pred, y_true, features, labels, pred_probs):
-    return base_acc/100
+#                 all_scores.append(image_score)
+#                 all_imgs.append(img.cpu())
 
-def get_precision(base_acc, y_pred, y_true, features, labels, pred_probs):
-    return precision_score(y_true, y_pred, average='macro', zero_division=np.nan)
-
-def get_recall(base_acc, y_pred, y_true, features, labels, pred_probs):
-    return recall_score(y_true, y_pred, average='macro', zero_division=np.nan)
-
-def get_f1(base_acc, y_pred, y_true, features, labels, pred_probs):
-    return f1_score(y_true, y_pred, average='macro')
-
-def get_auc(base_acc, y_pred, y_true, features, labels, pred_probs):
-    y_true_bin = label_binarize(y_true, classes=np.unique(y_true))
-    y_pred_proba_filtered = pred_probs[:, np.unique(y_true)]
-    return roc_auc_score(y_true_bin, y_pred_proba_filtered, average='macro', multi_class='ovr')
-
-def get_correct_class_proba(base_acc, y_pred, y_true, features, labels, pred_probs):
-    return np.array([x[labels[i]] for i,x in enumerate(pred_probs)]).mean()
-
-def get_max_proba(base_acc, y_pred, y_true, features, labels, pred_probs):
-    return np.array([max(x) for i,x in enumerate(pred_probs)]).mean()
-
-def get_f1(base_acc, y_pred, y_true, features, labels, pred_probs):
-    return f1_score(y_true, y_pred, average='macro')
-
-def get_ece(base_acc, y_pred, y_true, features, labels, pred_probs, n_bins=20):
-    accs = y_pred == y_true
-    bin_boundaries = np.linspace(0,1,n_bins+1)
-    confs = np.max(pred_probs, axis=1)
-    ece = 0
-    for i in range(n_bins):
-        bin_l, bin_u = bin_boundaries[i], bin_boundaries[i+1]
-        in_bin = (confs > bin_l) & (confs <= bin_u)
-        if in_bin.any():
-            bin_acc = accs[in_bin].mean()
-            bin_conf = confs[in_bin].mean()
-            ece += np.abs(bin_acc - bin_conf) * in_bin.mean()
-
-    return float(ece)
-
-def collect_detection_scores(model, loader, device, score_mode="max"):
-    model.eval()
-
-    all_scores = []
-    all_imgs = []
-
-    with torch.no_grad():
-        for images, _ in loader:
-            images = [img.to(device) for img in images]
-            outputs = model(images)
-
-            for img, out in zip(images, outputs):
-
-                scores = out["scores"]
-
-                if len(scores) == 0:
-                    image_score = 0.0
-                else:
-                    if score_mode == "max":
-                        image_score = scores.max().item()
-                    elif score_mode == "mean":
-                        image_score = scores.mean().item()
-                    elif score_mode == "sum":
-                        image_score = scores.sum().item()
-
-                all_scores.append(image_score)
-                all_imgs.append(img.cpu())
-
-    return torch.stack(all_imgs), torch.tensor(all_scores)
+#     return torch.stack(all_imgs), torch.tensor(all_scores)
 
 def collect_detection_predictions(model, loader, device):
     model.eval()
-    all_imgs = []
+    # all_imgs = []
     all_preds = []
 
     with torch.no_grad():
@@ -547,10 +451,10 @@ def collect_detection_predictions(model, loader, device):
             outputs = model(images)
 
             for img, out in zip(images, outputs):
-                all_imgs.append(img.cpu())
+                # all_imgs.append(img.cpu())
                 all_preds.append({k: v.cpu() for k, v in out.items()})
 
-    return torch.stack(all_imgs), all_preds
+    return all_preds #torch.stack(all_imgs), 
 
 
 def image_brittleness(predA, predB, iou_thresh=0.5):
@@ -596,10 +500,10 @@ def image_brittleness(predA, predB, iou_thresh=0.5):
 
     return max(drops) if drops else 0.0
 
-def serialize_detection(pred):
-    return {
-        k: v.cpu().tolist() for k,v in pred.items()
-    }
+# def serialize_detection(pred):
+#     return {
+#         k: v.cpu().tolist() for k,v in pred.items()
+#     }
 
 class DetectionDataset(torch.utils.data.Dataset):
     def __init__(self, image_paths, targets, transform=None):

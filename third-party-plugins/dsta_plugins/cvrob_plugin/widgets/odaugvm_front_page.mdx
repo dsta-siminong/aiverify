@@ -8,7 +8,11 @@ export const ib_cid = "odaugvm_inputblock"
   const results   = data?.results ?? [];
   const augNames  = data?.augmentation_names ?? [];
   const firstDrops = data?.first_drops ?? [];
-  const numClasses  = augNames.length > 0 ? augNames.length : null;
+  const classesDict = data?.class_names ?? {};
+  const numClasses =
+    classesDict && Object.keys(classesDict).length > 0
+      ? Object.keys(classesDict).length
+      : null;
   const datasetSize = data?.dataset_size ?? null;
 
   // Base MAP
@@ -145,7 +149,8 @@ export const ib_cid = "odaugvm_inputblock"
           margin: "0.75rem auto 0",
           lineHeight: "1.6",
         }}>
-          This report evaluates how the model's classification MAP changes when input images
+          This report evaluates how the model's performance, represented by its 
+          Mean Average Precision (mAP), changes when input images
           are subjected to visual corruptions of increasing severity — simulating real-world
           degradation such as weather effects, noise, or blur.
         </div>
@@ -202,11 +207,11 @@ export const ib_cid = "odaugvm_inputblock"
             marginBottom: "1.25rem",
             fontStyle: "italic",
           }}>
-            MAP colour: <span style={{ color: "#15803d", fontWeight: 600 }}>Green &gt; 70%</span>
+            MAP colour: <span style={{ color: "#15803d", fontWeight: 600 }}>Green &gt; 0.7</span>
             {" · "}
-            <span style={{ color: "#a16207", fontWeight: 600 }}>Yellow 30–70%</span>
+            <span style={{ color: "#a16207", fontWeight: 600 }}>Yellow 0.3-0.7</span>
             {" · "}
-            <span style={{ color: "#b91c1c", fontWeight: 600 }}>Red &lt; 30%</span>
+            <span style={{ color: "#b91c1c", fontWeight: 600 }}>Red &lt; 0.3</span>
           </div>
 
           <div style={{ display: "flex", flexWrap: "wrap", gap: "1rem" }}>

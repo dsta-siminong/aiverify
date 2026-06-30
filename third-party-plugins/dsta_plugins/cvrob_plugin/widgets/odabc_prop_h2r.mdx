@@ -1,0 +1,130 @@
+import InfoBox from "./InfoBox";
+
+<InfoBox>
+  <h3>Class Population Statistics (Object Detection)</h3>
+
+  <h4>Introduction (Object Detection)</h4>
+
+  <p>
+    This widget shows how <b>bounding box population distributions change per class</b> as
+    corruption severity increases, for each augmentation method tested.
+  </p>
+
+  <p>
+    Unlike image classification — where each image carries a single label — object
+    detection models output a variable number of <b>bounding boxes</b> per image. This
+    widget counts two quantities per class across the test set:
+  </p>
+
+  <ul>
+    <li><b>Predicted population</b> — total bounding boxes predicted by the model for that class</li>
+    <li><b>Actual (ground truth) population</b> — total ground truth bounding boxes annotated for that class</li>
+  </ul>
+
+  <p>
+    It reveals whether the model's detection behaviour shifts under perturbation —
+    specifically, which classes become over-detected or under-detected as image
+    quality degrades.
+  </p>
+
+  <p style={{ margin: "12px 0 0 0", padding: "10px 14px", backgroundColor: "#f0f4ff", borderLeft: "4px solid #6366f1", borderRadius: "4px" }}>
+    <b>Note on the background class:</b> Class 0 (background / "no detection") is excluded
+    from all figures in this widget. Background is an implicit class used internally by many
+    detection models to represent the absence of a foreground object. Including it would
+    dominate the scale and obscure meaningful trends in foreground classes. This is also why
+    the stacked bar chart bars may not all reach the same total height — they reflect only
+    foreground detections, and the total volume of those can shift across severities.
+  </p>
+</InfoBox>
+
+<InfoBox>
+  <h4>How to read?</h4>
+
+  <h5><u>Line graphs</u></h5>
+
+  <p>
+    Each line graph corresponds to one augmentation method and one foreground class. It plots
+    both the predicted and actual bounding box counts side by side across corruption severities,
+    from no augmentation to most severe.
+  </p>
+
+  <p>A well-calibrated, robust model should show:</p>
+  <ul>
+    <li>Predicted and actual population lines tracking <b>closely together</b> across all severities</li>
+    <li>No strong upward or downward drift in predicted counts as severity increases</li>
+  </ul>
+
+  <p>As corruption worsens, you may observe:</p>
+  <ul>
+    <li><b>Over-detection</b> — predicted count rises well above actual, meaning the model is generating spurious bounding boxes for that class</li>
+    <li><b>Under-detection</b> — predicted count falls well below actual, meaning the model is missing true instances of that class</li>
+    <li><b>Class confusion</b> — one class's predicted count drops while another's rises simultaneously, suggesting the model is misidentifying objects under corruption</li>
+    <li><b>Suppression towards background</b> — predicted count drops without a corresponding rise in any other class, meaning the model is discarding detections entirely rather than reassigning them</li>
+  </ul>
+
+  <p>
+    There is no expectation that counts must stay perfectly flat across severities.
+    Some degradation is normal; the concern is with <b>large or sustained divergences</b> between
+    predicted and actual population curves.
+  </p>
+
+  <h5><u>Stacked bar chart</u></h5>
+
+  <p>
+    The stacked bar chart provides a summary view across all foreground classes and all severities
+    simultaneously. Each bar represents one severity level, and each coloured segment represents
+    one foreground class's share of the total predicted bounding boxes at that severity.
+  </p>
+
+  <p>Key things to look for:</p>
+  <ul>
+    <li><b>Stable proportions</b> across severities indicate robust class-level detection behaviour</li>
+    <li><b>A growing segment</b> for one class suggests the model is increasingly over-predicting that class under corruption</li>
+    <li><b>A shrinking segment</b> suggests the model is losing sensitivity to that class</li>
+  </ul>
+
+  <p>
+    Because background (class 0) is excluded, bars may differ in absolute height across severities.
+    This is expected and reflects genuine changes in total foreground detection volume under corruption,
+    not a presentation artefact.
+  </p>
+</InfoBox>
+
+<InfoBox>
+  <h4>Interpretation</h4>
+
+  <p>
+    There is no single metric here, but <b>sustained divergence between predicted and actual
+    population curves is the primary signal of reduced robustness.</b>
+  </p>
+
+  <p>
+    If a class shows a strong and sustained <b>increase</b> in predicted population, consider:
+  </p>
+  <ul>
+    <li>Adding harder negative examples or augmented training samples that resemble the corruption</li>
+    <li>Reviewing whether that class is overrepresented or has looser annotation criteria in the training set</li>
+    <li>Checking whether the model is conflating a visually similar class under the corruption with this one</li>
+  </ul>
+
+  <p>
+    If a class shows a strong and sustained <b>decrease</b> in predicted population, consider:
+  </p>
+  <ul>
+    <li>Adding more training examples of that class under similar corruptions</li>
+    <li>Reviewing whether the class is underrepresented or visually similar to background under degraded conditions</li>
+    <li>Including augmented versions of that class during training to improve recall under corruption</li>
+  </ul>
+
+  <p>
+    If a class's predicted count drops without any other class absorbing the volume, the model
+    is likely <b>suppressing detections towards background</b> — a form of missed detection
+    distinct from misclassification. This is particularly worth investigating as it may not be
+    captured by standard per-class accuracy metrics.
+  </p>
+
+  <p>
+    If predicted and actual populations remain closely matched across all severities, the model
+    can be considered <b>robust</b> to the given corruption for that class.
+  </p>
+</InfoBox>

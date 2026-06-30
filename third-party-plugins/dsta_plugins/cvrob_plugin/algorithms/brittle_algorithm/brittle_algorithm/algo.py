@@ -579,7 +579,8 @@ class Plugin(IAlgorithm):
                 "plotly_image_path": str(plotly_path.relative_to(self._output_folder)),
                 "html_carousel_path": str(html_path.relative_to(self._output_folder)),
                 "matplotlib_fragment_paths": [str(x.relative_to(self._output_folder)) for x in mpl_frag_paths],
-                "dataset_size": len(image_paths)
+                "dataset_size": len(image_paths),
+                "class_names": class_names
             }
         )
 

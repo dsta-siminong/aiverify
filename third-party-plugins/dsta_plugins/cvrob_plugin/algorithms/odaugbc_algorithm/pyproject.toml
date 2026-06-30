@@ -4,8 +4,25 @@ version = "0.1.0"
 description = "Object Detection Augmentation by Class Algorithm"
 authors = [{ name = "Example Author" }]
 readme = "README.md"
-dependencies = ["aiverify-test-engine[all]"]
-requires-python = ">=3.10,<3.12"
+dependencies = [
+    "aiverify-test-engine[all]",
+    "albumentations==2.0.8",
+    "matplotlib==3.10.8",
+    "numpy==1.26.4",
+    "opencv-python-headless",
+    "pandas==2.2.2",
+    "pillow==10.4.0",
+    "plotly==6.5.0",
+    "pycocotools==2.0.11",
+    "scikit-image==0.25.2",
+    "scikit-learn==1.5.2",
+    "scipy==1.14.1",
+    "torch==2.9.1",
+    "torchmetrics==1.9.0",
+    "torchvision==0.24.1",
+    "tqdm==4.67.1"
+]
+requires-python = ">=3.10"
 license = { file = "LICENSE" }
 [tool.setuptools.packages.find]
 include = ["odaugbc_algorithm"] 

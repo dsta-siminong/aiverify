@@ -1,0 +1,31 @@
+{
+  "cid": "odaugbc_sample_widget",
+  "widgetSize": {
+    "minW": 12,
+    "minH": 1,
+    "maxW": 12,
+    "maxH": 36
+  },
+  "name": "OD Augmentations by class Sample Widget",
+  "description": "OD Augmentations by class widget for sample images",
+  "dynamicHeight": true,
+  "dependencies": [
+    {
+      "cid": "odaugbc_algorithm"
+    }
+  ],
+  "mockdata": [
+    {
+      "type": "Algorithm",
+      "cid": "odaugbc_algorithm",
+      "datapath": "odaugbc_algorithm.sample.json"
+    }
+  ],
+  "properties": [
+    {
+      "key": "title",
+      "helper": "Set the widget title (default \"OD Augmentations by class Widget Title [Sample]\")",
+      "default": "OD Augmentations by class Widget Title [Sample]"
+    }
+  ]
+}

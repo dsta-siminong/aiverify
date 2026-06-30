@@ -1,0 +1,81 @@
+import InfoBox from "./InfoBox";
+
+<InfoBox>
+  <h3>Corruption Progression Visualization (Object Detections)</h3>
+
+  <span>
+    This widget displays a sample image as it progresses through each specified
+    corruption algorithm and its full range of severity levels. It provides a
+    visual understanding of how different corruptions affect image data, and how
+    well the object detection model holds up as corruption increases.
+  </span>
+
+  <br /><br />
+
+  <span>
+    For each severity level, two versions of the image are shown side by side:
+    a <b>clean view</b> with no overlaid predictions, and an <b>annotated view</b> with
+    bounding boxes drawn for both the ground truth and the model's predictions.
+  </span>
+</InfoBox>
+
+<InfoBox>
+  <h4><b>How to read?</b></h4>
+
+  <p>
+    Each sequence of images corresponds to a specific corruption algorithm and is
+    grouped by image. Within each sequence, the image is shown across the full
+    range of severity levels for that corruption, from no corruption to maximum severity.
+  </p>
+
+  <p><b>The two images per severity level</b></p>
+  <ul>
+    <li>
+      <b>Without Predictions</b> — the corrupted image as-is, with no overlays.
+      Its border is always grey. Use this to gauge the raw visual effect of the corruption.
+    </li>
+    <li>
+      <b>With Predictions</b> — the same image annotated with bounding boxes.
+      The border colour reflects overall detection quality:
+      a <span style={{ color: "green", fontWeight: "bold" }}>green</span> border
+      means the number of predicted boxes matches the number of ground truth boxes,
+      while a <span style={{ color: "red", fontWeight: "bold" }}>red</span> border
+      means there is a mismatch (the model over- or under-detected objects).
+    </li>
+  </ul>
+
+  <p><b>Bounding boxes in the annotated image</b></p>
+  <ul>
+    <li>
+      <span style={{ color: "green", fontWeight: "bold" }}>Green boxes</span> — ground
+      truth annotations, showing the actual location and class label of each object.
+    </li>
+    <li>
+      <span style={{ color: "red", fontWeight: "bold" }}>Red boxes</span> — model
+      predictions, labelled with the predicted class and its IoU (Intersection over Union)
+      with the closest matching ground truth box. Higher IoU means better spatial alignment.
+    </li>
+  </ul>
+
+  <p><b>The information panel below the images</b></p>
+  <p>Three columns summarise the detection results for that severity level:</p>
+  <ul>
+    <li>
+      <b>Ground Truth</b> — the total number of annotated objects in the image,
+      broken down by class label.
+    </li>
+    <li>
+      <b>Predictions</b> — the total number of boxes predicted by the model,
+      also broken down by class label. The box count is shown in{" "}
+      <span style={{ color: "green", fontWeight: "bold" }}>green</span> when it
+      matches the ground truth count, and{" "}
+      <span style={{ color: "red", fontWeight: "bold" }}>red</span> when it does not.
+    </li>
+    <li>
+      <b>Confidence</b> — the minimum, average, and maximum confidence scores
+      across all predicted boxes for that image, expressed as percentages.
+      Lower confidence at higher severities indicates the model is less certain
+      under corruption.
+    </li>
+  </ul>
+</InfoBox>

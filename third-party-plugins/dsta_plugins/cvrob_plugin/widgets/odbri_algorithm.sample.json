@@ -1,0 +1,30 @@
+{
+    "results": 
+    [{
+        "index": 0,
+        "label": [{"bbox": [67,67,67,67], "label": 67}],
+        "predA": {"boxes": [[67,67,67,67]], "labels": [1], "scores": [0.67]},
+        "predB": {"boxes": [[67,67,67,67]], "labels": [1], "scores": [0.67]},
+        "pA": 0,
+        "pB": 0,
+        "brittleness": 0
+    }],
+    "imgsA": [[[1.0]]],
+    "imgsB": [[[1.0]]],
+    "probs_A": [[[1.0]]],
+    "probs_B": [[[1.0]]],
+    "labels": [0],
+    "display_info": [{
+        "severity0": ["test", 1, 1]
+    },
+    {
+        "severity1": ["test", 1, 2]
+    }
+    ],
+    "matplotlib_image_path": "lol",
+    "plotly_image_path": "lol",
+    "html_carousel_path": "lol",
+    "ALGORITHM_ARGUMENTS": {
+        "algo argument": 5
+    }
+}

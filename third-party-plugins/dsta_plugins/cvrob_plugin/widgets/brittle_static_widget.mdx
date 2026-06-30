@@ -23,9 +23,11 @@ import { ALL_AUGMENTATIONS_LONG } from "./augmentationInfo.jsx";
 
   const augMethod = data?.ALGORITHM_ARGUMENTS?.aug_method;
 
-  const row = ALL_AUGMENTATIONS_LONG.find(a =>
-    a.keys.includes(augMethod)
-  );
+  const row =
+    ALL_AUGMENTATIONS_LONG.find(a => a.keys.includes(augMethod)) ?? {
+      longDescription: [`No description found for "${augMethod}".`],
+    };
+
 
   return (
     <div

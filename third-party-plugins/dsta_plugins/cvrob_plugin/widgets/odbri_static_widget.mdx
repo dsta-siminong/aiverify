@@ -1,0 +1,354 @@
+export const cid = "odbri_algorithm"
+//export const gid = "cvrob_plugin"
+//export const ib_cid = "brittle_inputblock"
+
+<div style={{ marginBottom: "1rem" }}>
+  <div
+    style={{
+      textAlign: "center",
+      fontWeight: "bold",
+      fontSize: "2.2rem",
+      color: "#b91c1c",
+      textDecoration: "underline"
+    }}
+  >
+    {props.properties.title}
+  </div>
+</div>
+
+import { ALL_AUGMENTATIONS_LONG } from "./augmentationInfo.jsx";
+
+{(() => {
+  const data = props.getResults ? props.getResults(cid) : null;
+
+  const augMethod = data?.ALGORITHM_ARGUMENTS?.aug_method;
+
+  const row =
+    ALL_AUGMENTATIONS_LONG.find(a => a.keys.includes(augMethod)) ?? {
+      longDescription: [`No description found for "${augMethod}".`],
+    };
+
+  return (
+    <div
+      style={{
+        border: "1px solid #ddd",
+        borderRadius: "8px",
+        padding: "1.5rem",
+        marginBottom: "3rem",
+        textAlign: "center",
+      }}
+    >
+      {/* 🔴 Title */}
+      <h2
+        style={{
+          fontWeight: "bold",
+          textDecoration: "underline",
+          marginBottom: "1rem",
+        }}
+      >
+        Augmentation Name: {augMethod}
+      </h2>
+
+
+      <h3
+        style={{
+          fontWeight: "bold",
+          textDecoration: "underline",
+          marginTop: "1rem",
+          marginBottom: "1rem",
+        }}
+      >
+        &gt;&gt; Augmentation Description: &lt;&lt;
+      </h3>
+
+      {/* Description */}
+      <div style={{ textAlign: "left" }}>
+        {row.longDescription.map((p, i) =>
+          p.split("\n").map((line, j) =>
+            line.trim() === "" ? (
+              <br key={`${i}-${j}`} />
+            ) : (
+              <p key={`${i}-${j}`} style={{ margin: "0.5em 0" }}>
+                {line}
+              </p>
+            )
+          )
+        )}
+      </div>
+    </div>
+  );
+})()}
+
+export const BrittleDisplay = ({ props }) => {
+  const key = Object.keys(props.artifacts || {})[0];
+  const artifactList = key ? props.artifacts[key] : [];
+
+  const data = props.getResults ? props.getResults(cid) : null;
+  const displayInfoArray = data?.display_info || [];
+
+  // Build a flat lookup: "severity_0_number_1" -> { imagePath, originalPred, corruptedPred }
+  const displayInfoLookup = {};
+  displayInfoArray.forEach((entry) => {
+    const entryKey = Object.keys(entry)[0];
+    const [imagePath, originalPred, corruptedPred] = entry[entryKey];
+    displayInfoLookup[entryKey] = { imagePath, originalPred, corruptedPred };
+  });
+
+  // Fragments sorted numerically
+  const fragments = artifactList
+    .filter((url) =>
+      /\/matplotlib\/fragments\/brittleness_top_(\d+)\.png$/.test(url)
+    )
+    .sort((a, b) => {
+      const numA = parseInt(a.match(/brittleness_top_(\d+)\.png$/)?.[1]);
+      const numB = parseInt(b.match(/brittleness_top_(\d+)\.png$/)?.[1]);
+      return numA - numB;
+    });
+
+
+  const topkHtml = artifactList.find(
+    (url) => url.includes("/plotly/") && (
+      url.endsWith("brittleness_topk.html") || url.endsWith("brittleness_top_k.html")
+    )
+  );
+
+  if (!fragments.length && !topkHtml) {
+    return (
+      <div style={{ color: "#777", textAlign: "center" }}>
+        No plot artifacts available
+      </div>
+    );
+  }
+
+  const sectionTitleStyle = {
+    textAlign: "center",
+    fontSize: "1.5rem",
+    fontWeight: "bold",
+    marginBottom: "1rem",
+    marginTop: "2rem",
+  };
+
+  const itemTitleStyle = {
+    textAlign: "center",
+    fontSize: "1rem",
+    fontWeight: "bold",
+    marginBottom: "0.4rem",
+  };
+
+  const metaStyle = {
+    textAlign: "center",
+    fontSize: "0.85rem",
+    color: "#555",
+    marginBottom: "0.25rem",
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "2rem", marginTop: "3rem" }}>
+
+      {/* ── Section title ── */}
+      <h2 style={sectionTitleStyle}>Brittle Top Images (Static Display)</h2>
+
+      {/* ── Fragment image pairs ── */}
+      {fragments.map((url, i) => {
+        const rank = i + 1;
+        const meta = displayInfoLookup[`severity_0_number_${rank}`];
+        const fileName = meta?.imagePath?.split("/").pop() ?? null;
+
+        return (
+          <div
+            key={i}
+            style={{
+              breakInside: "avoid",
+              pageBreakInside: "avoid",
+              paddingTop: "1rem",
+            }}
+          >
+            <h4 style={itemTitleStyle}>#{rank} Most Brittle Image</h4>
+
+            {meta && (
+              <p style={metaStyle}>
+                <u>Image file name:</u> {fileName} {" | "}
+                <u>Original class:</u> {meta.originalPred} {" | "}
+                <u>Corrupted class:</u> {meta.corruptedPred}
+              </p>
+            )}
+
+            <div
+              style={{
+                padding: "1.5rem",
+                background: "#fff",
+                borderRadius: "12px",
+                boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
+              }}
+            >
+              <img src={url} style={{ width: "100%", borderRadius: "8px", display: "block" }} />
+            </div>
+          </div>
+        );
+      })}
+
+      {/* ── Plotly topk HTML ── */}
+      {topkHtml && (
+        <div>
+          <h2 style={sectionTitleStyle}>Brittle Top Images (Plotly HTML)</h2>
+          <div
+            style={{
+              padding: "1.5rem",
+              background: "#fff",
+              borderRadius: "12px",
+              boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
+            }}
+          >
+            <iframe
+              src={topkHtml}
+              style={{ width: "100%", height: "800px", border: "none" }}
+            />
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+};
+
+<BrittleDisplay props={props} />
+
+
+
+export const BrittleDisplayWithDet = ({ props }) => {
+  const key = Object.keys(props.artifacts || {})[0];
+  const artifactList = key ? props.artifacts[key] : [];
+
+  const data = props.getResults ? props.getResults(cid) : null;
+  const displayInfoArray = data?.display_info || [];
+
+  // Build a flat lookup: "severity_0_number_1" -> { imagePath, originalPred, corruptedPred }
+  const displayInfoLookup = {};
+  displayInfoArray.forEach((entry) => {
+    const entryKey = Object.keys(entry)[0];
+    const [imagePath, originalPred, corruptedPred] = entry[entryKey];
+    displayInfoLookup[entryKey] = { imagePath, originalPred, corruptedPred };
+  });
+
+  // Fragments sorted numerically
+  const fragments = artifactList
+    .filter((url) =>
+      /\/matplotlib\/fragments\/brittleness_top_(\d+)_with_predictions\.png$/.test(url)
+    )
+    .sort((a, b) => {
+      const numA = parseInt(
+        a.match(/brittleness_top_(\d+)_with_predictions\.png$/)?.[1]
+      );
+      const numB = parseInt(
+        b.match(/brittleness_top_(\d+)_with_predictions\.png$/)?.[1]
+      );
+      return numA - numB;
+    });
+
+
+  const topkHtml = artifactList.find(
+    (url) => url.includes("/plotly/") && (
+      url.endsWith("brittleness_topk_with_predictions.html") || url.endsWith("brittleness_top_k_with_predictions.html")
+    )
+  );
+
+  if (!fragments.length && !topkHtml) {
+    return (
+      <div style={{ color: "#777", textAlign: "center" }}>
+        No plot artifacts available
+      </div>
+    );
+  }
+
+  const sectionTitleStyle = {
+    textAlign: "center",
+    fontSize: "1.5rem",
+    fontWeight: "bold",
+    marginBottom: "1rem",
+    marginTop: "2rem",
+  };
+
+  const itemTitleStyle = {
+    textAlign: "center",
+    fontSize: "1rem",
+    fontWeight: "bold",
+    marginBottom: "0.4rem",
+  };
+
+  const metaStyle = {
+    textAlign: "center",
+    fontSize: "0.85rem",
+    color: "#555",
+    marginBottom: "0.25rem",
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "2rem", marginTop: "3rem" }}>
+
+      {/* ── Section title ── */}
+      <h2 style={sectionTitleStyle}>Brittle Top Images (Static Display)</h2>
+
+      {/* ── Fragment image pairs ── */}
+      {fragments.map((url, i) => {
+        const rank = i + 1;
+        const meta = displayInfoLookup[`severity_0_number_${rank}`];
+        const fileName = meta?.imagePath?.split("/").pop() ?? null;
+
+        return (
+          <div
+            key={i}
+            style={{
+              breakInside: "avoid",
+              pageBreakInside: "avoid",
+              paddingTop: "1rem",
+            }}
+          >
+            <h4 style={itemTitleStyle}>#{rank} Most Brittle Image</h4>
+
+            {meta && (
+              <p style={metaStyle}>
+                <u>Image file name:</u> {fileName} {" | "}
+                <u>Original class:</u> {meta.originalPred} {" | "}
+                <u>Corrupted class:</u> {meta.corruptedPred}
+              </p>
+            )}
+
+            <div
+              style={{
+                padding: "1.5rem",
+                background: "#fff",
+                borderRadius: "12px",
+                boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
+              }}
+            >
+              <img src={url} style={{ width: "100%", borderRadius: "8px", display: "block" }} />
+            </div>
+          </div>
+        );
+      })}
+
+      {/* ── Plotly topk HTML ── */}
+      {topkHtml && (
+        <div>
+          <h2 style={sectionTitleStyle}>Brittle Top Images (Plotly HTML)</h2>
+          <div
+            style={{
+              padding: "1.5rem",
+              background: "#fff",
+              borderRadius: "12px",
+              boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
+            }}
+          >
+            <iframe
+              src={topkHtml}
+              style={{ width: "100%", height: "800px", border: "none" }}
+            />
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+};
+
+<BrittleDisplayWithDet props={props} />

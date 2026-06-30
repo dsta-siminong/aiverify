@@ -426,9 +426,10 @@ class Plugin(IAlgorithm):
             for severity_idx, severity in enumerate(severities):
 
                 corrupted_dir = Path(aug_name) / f"severity{severity}"
-                display_image = self._get_one_corrupted_image(
-                    test_loader, aug_class, severity, display_idx
-                )
+                # display_image = self._get_one_corrupted_image(
+                #     test_loader, aug_class, severity, display_idx
+                # )
+                display_image = self._get_one_corrupted_image_direct(image_paths, ground_truths, aug_class, severity, display_idx)
 
                 image_path = self._save_one_image(display_image, str(corrupted_dir), display_idx)
                 image = torch.tensor(display_image).unsqueeze(0).float()
@@ -483,7 +484,8 @@ class Plugin(IAlgorithm):
             "gradients": gradients,
             "first_drops": first_drops,
             "augmentation_names": [x["Augmentation"] for x in combined_results],
-            "dataset_size": len(image_paths)
+            "dataset_size": len(image_paths),
+            "class_names": class_names
         })
 
         self._results = output_results
@@ -660,3 +662,19 @@ class Plugin(IAlgorithm):
                     return corrupted_image
 
                 current_idx += 1
+
+    def _get_one_corrupted_image_direct(self, image_paths, ground_truths, aug_class, severity, target_idx):
+        print("~~~ Fetching image directly! ~~~")
+        image = Image.open(image_paths[target_idx]).convert("RGB")
+        image_np = np.array(image).astype(np.uint8)  # HWC uint8, no full loader needed
+
+        if aug_class.name == "None" or severity == "None":
+            return image_np.transpose(2, 0, 1).astype(np.float32) / 255.0
+
+        corrupted_image, _ = aug_class.corr_func_sample(
+            image_np, ground_truths[target_idx], severity
+        )
+        corrupted_image = corrupted_image.astype(np.float32)
+        if corrupted_image.max() > 1.5:
+            corrupted_image /= 255.0
+        return np.clip(corrupted_image, 0, 1).transpose(2, 0, 1)

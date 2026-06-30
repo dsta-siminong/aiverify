@@ -1,16 +1,16 @@
 <div style={{ display:"flex", flexDirection:"column" }}>
 
   <style>{`
-    .avm-field-wrapper {
+    .odaugvm-field-wrapper {
       margin-bottom: 10px;
     }
-    .avm-label-row {
+    .odaugvm-label-row {
       display: flex;
       align-items: center;
       gap: 6px;
       margin-bottom: 3px;
     }
-    .avm-tooltip-icon {
+    .odaugvm-tooltip-icon {
       display: inline-flex;
       align-items: center;
       justify-content: center;
@@ -25,7 +25,7 @@
       user-select: none;
       flex-shrink: 0;
     }
-    .avm-tooltip-popup {
+    .odaugvm-tooltip-popup {
       position: fixed;
       z-index: 99999;
       background: #1f2937;
@@ -38,104 +38,104 @@
       box-shadow: 0 4px 12px rgba(0,0,0,0.3);
       pointer-events: none;
     }
-    .avm-tooltip-example {
+    .odaugvm-tooltip-example {
       margin-top: 5px;
       color: #9ca3af;
       font-style: italic;
     }
   `}</style>
 
-  <div id="avm-global-tooltip" className="avm-tooltip-popup" style={{ display: 'none' }}>
-    <span id="avm-tt-desc"></span>
-    <div id="avm-tt-example" className="avm-tooltip-example"></div>
+  <div id="odaugvm-global-tooltip" className="odaugvm-tooltip-popup" style={{ display: 'none' }}>
+    <span id="odaugvm-tt-desc"></span>
+    <div id="odaugvm-tt-example" className="odaugvm-tooltip-example"></div>
   </div>
 
-  <div className="avm-field-wrapper">
-    <div className="avm-label-row">
+  <div className="odaugvm-field-wrapper">
+    <div className="odaugvm-label-row">
       <label htmlFor="modelname">Model name:</label>
-      <span className="avm-tooltip-icon"
+      <span className="odaugvm-tooltip-icon"
         onMouseEnter={(e) => {
           const r = e.currentTarget.getBoundingClientRect();
-          const p = document.getElementById('avm-global-tooltip');
-          document.getElementById('avm-tt-desc').textContent = 'The name of the AI model being tested or evaluated.';
-          document.getElementById('avm-tt-example').textContent = 'e.g. "ResNet-50", "GPT-4 Fine-tuned v2", "LoanApproval-Classifier"';
+          const p = document.getElementById('odaugvm-global-tooltip');
+          document.getElementById('odaugvm-tt-desc').textContent = 'The name of the AI model being tested or evaluated.';
+          document.getElementById('odaugvm-tt-example').textContent = 'e.g. "ResNet-50", "GPT-4 Fine-tuned v2", "LoanApproval-Classifier"';
           p.style.display = 'block';
           let left = r.left - 228; if (left < 8) left = r.right + 8;
           p.style.left = left + 'px'; p.style.top = (r.top + r.height / 2 - 20) + 'px';
         }}
-        onMouseLeave={() => { document.getElementById('avm-global-tooltip').style.display = 'none'; }}>i</span>
+        onMouseLeave={() => { document.getElementById('odaugvm-global-tooltip').style.display = 'none'; }}>i</span>
     </div>
     <input style={{ color:'black' }} type="text" id="modelname" value={props.data["modelname"]} onChange={(e)=>props.onChangeData("modelname",e.target.value)} />
   </div>
 
-  <div className="avm-field-wrapper">
-    <div className="avm-label-row">
+  <div className="odaugvm-field-wrapper">
+    <div className="odaugvm-label-row">
       <label htmlFor="testdatadetails">Test Data Details:</label>
-      <span className="avm-tooltip-icon"
+      <span className="odaugvm-tooltip-icon"
         onMouseEnter={(e) => {
           const r = e.currentTarget.getBoundingClientRect();
-          const p = document.getElementById('avm-global-tooltip');
-          document.getElementById('avm-tt-desc').textContent = 'Describe the dataset used for testing — its source, size, format, and any relevant characteristics.';
-          document.getElementById('avm-tt-example').textContent = 'e.g. "10,000 rows of anonymised loan applications from 2022, CSV format, sourced from internal CRM"';
+          const p = document.getElementById('odaugvm-global-tooltip');
+          document.getElementById('odaugvm-tt-desc').textContent = 'Describe the dataset used for testing — its source, size, format, and any relevant characteristics.';
+          document.getElementById('odaugvm-tt-example').textContent = 'e.g. "10,000 rows of anonymised loan applications from 2022, CSV format, sourced from internal CRM"';
           p.style.display = 'block';
           let left = r.left - 228; if (left < 8) left = r.right + 8;
           p.style.left = left + 'px'; p.style.top = (r.top + r.height / 2 - 20) + 'px';
         }}
-        onMouseLeave={() => { document.getElementById('avm-global-tooltip').style.display = 'none'; }}>i</span>
+        onMouseLeave={() => { document.getElementById('odaugvm-global-tooltip').style.display = 'none'; }}>i</span>
     </div>
     <input style={{ color:'black' }} type="text" id="testdatadetails" value={props.data["testdatadetails"]} onChange={(e)=>props.onChangeData("testdatadetails",e.target.value)} />
   </div>
 
-  <div className="avm-field-wrapper">
-    <div className="avm-label-row">
+  <div className="odaugvm-field-wrapper">
+    <div className="odaugvm-label-row">
       <label htmlFor="modeldetails">Model Details:</label>
-      <span className="avm-tooltip-icon"
+      <span className="odaugvm-tooltip-icon"
         onMouseEnter={(e) => {
           const r = e.currentTarget.getBoundingClientRect();
-          const p = document.getElementById('avm-global-tooltip');
-          document.getElementById('avm-tt-desc').textContent = 'Technical details about the model — its type, architecture, training approach, and version.';
-          document.getElementById('avm-tt-example').textContent = 'e.g. "XGBoost classifier, trained on 2021–2022 data, v3.1, predicts binary loan approval outcome"';
+          const p = document.getElementById('odaugvm-global-tooltip');
+          document.getElementById('odaugvm-tt-desc').textContent = 'Technical details about the model — its type, architecture, training approach, and version.';
+          document.getElementById('odaugvm-tt-example').textContent = 'e.g. "XGBoost classifier, trained on 2021–2022 data, v3.1, predicts binary loan approval outcome"';
           p.style.display = 'block';
           let left = r.left - 228; if (left < 8) left = r.right + 8;
           p.style.left = left + 'px'; p.style.top = (r.top + r.height / 2 - 20) + 'px';
         }}
-        onMouseLeave={() => { document.getElementById('avm-global-tooltip').style.display = 'none'; }}>i</span>
+        onMouseLeave={() => { document.getElementById('odaugvm-global-tooltip').style.display = 'none'; }}>i</span>
     </div>
     <input style={{ color:'black' }} type="text" id="modeldetails" value={props.data["modeldetails"]} onChange={(e)=>props.onChangeData("modeldetails",e.target.value)} />
   </div>
 
-  <div className="avm-field-wrapper">
-    <div className="avm-label-row">
+  <div className="odaugvm-field-wrapper">
+    <div className="odaugvm-label-row">
       <label htmlFor="deploycon">Deployment Context:</label>
-      <span className="avm-tooltip-icon"
+      <span className="odaugvm-tooltip-icon"
         onMouseEnter={(e) => {
           const r = e.currentTarget.getBoundingClientRect();
-          const p = document.getElementById('avm-global-tooltip');
-          document.getElementById('avm-tt-desc').textContent = 'The high-level task or process the model is deployed to perform.';
-          document.getElementById('avm-tt-example').textContent = 'e.g. "Automated product quality inspection in a manufacturing line"';
+          const p = document.getElementById('odaugvm-global-tooltip');
+          document.getElementById('odaugvm-tt-desc').textContent = 'The high-level task or process the model is deployed to perform.';
+          document.getElementById('odaugvm-tt-example').textContent = 'e.g. "Automated product quality inspection in a manufacturing line"';
           p.style.display = 'block';
           let left = r.left - 228; if (left < 8) left = r.right + 8;
           p.style.left = left + 'px'; p.style.top = (r.top + r.height / 2 - 20) + 'px';
         }}
-        onMouseLeave={() => { document.getElementById('avm-global-tooltip').style.display = 'none'; }}>i</span>
+        onMouseLeave={() => { document.getElementById('odaugvm-global-tooltip').style.display = 'none'; }}>i</span>
     </div>
     <input style={{ color:'black' }} type="text" id="deploycon" value={props.data["deploycon"]} onChange={(e)=>props.onChangeData("deploycon",e.target.value)} />
   </div>
 
-  <div className="avm-field-wrapper">
-    <div className="avm-label-row">
+  <div className="odaugvm-field-wrapper">
+    <div className="odaugvm-label-row">
       <label htmlFor="operv">Operating Environment:</label>
-      <span className="avm-tooltip-icon"
+      <span className="odaugvm-tooltip-icon"
         onMouseEnter={(e) => {
           const r = e.currentTarget.getBoundingClientRect();
-          const p = document.getElementById('avm-global-tooltip');
-          document.getElementById('avm-tt-desc').textContent = 'The physical and technical conditions under which the model operates.';
-          document.getElementById('avm-tt-example').textContent = 'e.g. "Indoor, controlled lighting, edge device deployment"';
+          const p = document.getElementById('odaugvm-global-tooltip');
+          document.getElementById('odaugvm-tt-desc').textContent = 'The physical and technical conditions under which the model operates.';
+          document.getElementById('odaugvm-tt-example').textContent = 'e.g. "Indoor, controlled lighting, edge device deployment"';
           p.style.display = 'block';
           let left = r.left - 228; if (left < 8) left = r.right + 8;
           p.style.left = left + 'px'; p.style.top = (r.top + r.height / 2 - 20) + 'px';
         }}
-        onMouseLeave={() => { document.getElementById('avm-global-tooltip').style.display = 'none'; }}>i</span>
+        onMouseLeave={() => { document.getElementById('odaugvm-global-tooltip').style.display = 'none'; }}>i</span>
     </div>
     <input style={{ color:'black' }} type="text" id="operv" value={props.data["operv"]} onChange={(e)=>props.onChangeData("operv",e.target.value)} />
   </div>

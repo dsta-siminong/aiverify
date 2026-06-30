@@ -8,7 +8,11 @@ export const ib_cid = "avm_inputblock"
   const results   = data?.results ?? [];
   const augNames  = data?.augmentation_names ?? [];
   const firstDrops = data?.first_drops ?? [];
-  const numClasses  = augNames.length > 0 ? augNames.length : null;
+  const classesDict = data?.class_names ?? {};
+  const numClasses =
+    classesDict && Object.keys(classesDict).length > 0
+      ? Object.keys(classesDict).length
+      : null;
   const datasetSize = data?.dataset_size ?? null;
 
   // Base accuracy

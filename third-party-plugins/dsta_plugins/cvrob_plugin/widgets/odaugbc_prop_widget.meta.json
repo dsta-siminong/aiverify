@@ -1,0 +1,31 @@
+{
+  "cid": "odaugbc_prop_widget",
+  "widgetSize": {
+    "minW": 12,
+    "minH": 1,
+    "maxW": 12,
+    "maxH": 36
+  },
+  "name": "OD Augmentations By Class Proportions Widget",
+  "description": "Object Detections Augmentations By Class widget for proportions and populations of classes",
+  "dynamicHeight": true,
+  "dependencies": [
+    {
+      "cid": "odaugbc_algorithm"
+    }
+  ],
+  "mockdata": [
+    {
+      "type": "Algorithm",
+      "cid": "odaugbc_algorithm",
+      "datapath": "odaugbc_algorithm.sample.json"
+    }
+  ],
+  "properties": [
+    {
+      "key": "title",
+      "helper": "Set the widget title (default \"OD AUGMENTATIONS BY CLASS [proportions and populations]\")",
+      "default": "OD AUGMENTATIONS BY CLASS [proportions and populations]"
+    }
+  ]
+}

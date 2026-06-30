@@ -1,0 +1,98 @@
+export const cid = "odbri_algorithm";
+
+import { ALL_AUGMENTATIONS } from "./augmentationInfo.jsx";
+
+{(() => {
+  const data = props.getResults ? props.getResults(cid) : null;
+
+  const augMethod = data?.ALGORITHM_ARGUMENTS?.aug_method;
+
+  const row = ALL_AUGMENTATIONS.find(a =>
+    a.keys.includes(augMethod)
+  );
+
+  const cellStyle = {
+    border: "1px solid #000",
+    padding: "8px",
+    textAlign: "left",
+  };
+
+  const headCellStyle = {
+    ...cellStyle,
+    textAlign: "center",
+    background: "#f3f4f6",
+    fontWeight: "bold",
+  };
+
+  return (
+    <div
+      style={{
+        width: "100%",
+        padding: "16px",
+        marginBottom: "24px",
+        border: "1px solid #e5e7eb",
+        borderRadius: "8px",
+        backgroundColor: "#fafafa",
+        boxSizing: "border-box",
+      }}
+    >
+      <h3>Algorithm Used</h3>
+
+      <p>
+        This table describes the image corruption algorithm used during this
+        robustness evaluation, including the type of perturbation applied and
+        how a similar effect may occur in real-world scenarios.
+      </p>
+
+      {!row ? (
+        <p
+          style={{
+            color: "#6b7280",
+            fontStyle: "italic",
+          }}
+        >
+          No augmentation information found for "{augMethod}".
+        </p>
+      ) : (
+        <table
+          style={{
+            width: "100%",
+            borderCollapse: "collapse",
+          }}
+        >
+          <thead>
+            <tr>
+              <th style={headCellStyle}>Corruption Category</th>
+              <th style={headCellStyle}>Corruption</th>
+              <th style={headCellStyle}>Description</th>
+              <th style={headCellStyle}>How It May Occur in Real Life</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            <tr>
+              <td style={cellStyle}>{row.category}</td>
+
+              <td
+                style={{
+                  ...cellStyle,
+                  fontWeight: "600",
+                }}
+              >
+                {row.name}
+              </td>
+
+              <td style={cellStyle}>
+                {Array.isArray(row.description)
+                  ? row.description.join(" ")
+                  : row.description}
+              </td>
+
+              <td style={cellStyle}>{row.realLife}</td>
+            </tr>
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+})()}

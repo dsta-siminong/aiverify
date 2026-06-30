@@ -45,15 +45,13 @@ class BrittlenessResult:
 
     Attributes:
         results (list): List of BrittlenessResultIndiv objects for each input.
-        imgsA (list): List or tensor of the initial set of input images (before).
-        imgsB (list): List or tensor of the resultant (of the corruption) set of input images (after).
-        probs_A (list): List or tensor of predicted probabilities for imgsA.
-        probs_B (list): List or tensor of predicted probabilities for imgsB.
+        probs_A (list): List or tensor of predicted probabilities for imgs_A.
+        probs_B (list): List or tensor of predicted probabilities for imgs_B.
         labels (list): List or tensor of true labels for all inputs.
     """
     results: list
-    imgsA: list
-    imgsB: list 
+    # imgs_A: list
+    # imgs_B: list 
     probs_A: list
     probs_B: list 
     labels: list
@@ -101,14 +99,11 @@ def brittle_res_to_dict(br):
 
     d = {
         "results": [brittle_res_indiv_to_dict(r) for r in br.results],
-        "imgsA": None,
-        "imgsB": None,
         "probs_A": serialize_detection(br.probs_A),
         "probs_B": serialize_detection(br.probs_B),
         "labels": safe_convert(br.labels),
     }
     return d
-
 
 # ==== BRITTLENESS HELPERS ====
 
@@ -161,8 +156,6 @@ def _detection_summary(scores_dict) -> tuple:
     n = len(s)
     top = float(s.max().item()) if n > 0 else 0.0
     return n, top
-
-
 
 def _draw_detections_on_image(
     pil_img,
@@ -223,25 +216,60 @@ def _draw_detections_on_image(
             name = class_names.get(str(lbl), str(lbl)) if class_names else str(lbl)
             draw.text((x1, max(0, y1 - 13)), f"{name} {score:.2f}", fill=(220, 30, 30), font=font)
 
+def _load_image_for_viz(image_path: str, aug_class, severity) -> "PIL.Image.Image":
+    """
+    Load a single image from disk and optionally apply a corruption.
 
-def _tensor_to_pil_with_detections(
-    img_tensor,
+    This replaces indexing into the full imgs_A / imgs_B tensors. Only the
+    image actually needed for display is ever decoded into memory.
+
+    Args:
+        image_path (str): Absolute path to the source image file.
+        aug_class: Augmentation class instance. Pass ``None`` for no corruption.
+        severity: Severity value to pass to ``aug_class.corr_func_sample``.
+                  Pass ``"None"`` (string) or ``None`` for no corruption.
+
+    Returns:
+        PIL.Image.Image: RGB image, ready for display or base64 encoding.
+    """
+    pil_img = Image.open(image_path).convert("RGB")
+
+    if aug_class is None or severity is None or severity == "None":
+        return pil_img
+
+    img_np = np.array(pil_img).astype(np.uint8)          # HWC uint8
+    corrupted_np, _ = aug_class.corr_func_sample(img_np, None, severity)
+    corrupted_np = np.clip(corrupted_np, 0, 255).astype(np.uint8)
+    return Image.fromarray(corrupted_np).convert("RGB")
+
+def _path_to_pil_with_detections(
+    image_path: str,
+    aug_class,
+    severity,
     pred: dict,
     gt_objects: list,
     class_names: dict,
-    transform=None,
     score_threshold: float = 0.5,
 ) -> "PIL.Image.Image":
     """
-    Unnormalise *img_tensor* to a PIL RGB image and optionally overlay detections.
+    Load an image from disk (with optional corruption) and optionally overlay detections.
 
-    When both *pred* and *gt_objects* are ``None`` the image is returned as-is
-    (no drawing step), making this a drop-in replacement for the raw-image path.
+    Replaces ``_tensor_to_pil_with_detections``. No full-dataset tensor required —
+    only the single image at *image_path* is loaded.
+
+    Args:
+        image_path (str): Absolute path to the source image file.
+        aug_class: Augmentation class instance, or ``None`` for no corruption.
+        severity: Severity string/value for the corruption, or ``"None"``/``None``.
+        pred (dict | None): Detection output dict (boxes/labels/scores), or ``None``.
+        gt_objects (list | None): Ground-truth list of ``{"bbox":…, "label":…}`` dicts.
+        class_names (dict): Mapping str(label_id) -> class name.
+        score_threshold (float): Predictions below this confidence are skipped.
+
+    Returns:
+        PIL.Image.Image: RGB image, optionally with detection overlays drawn on it.
     """
-    import numpy as np
-    img_np = unnormalize(img_tensor, transform)
-    img_np = (img_np * 255).astype(np.uint8)
-    pil_img = Image.fromarray(img_np).convert("RGB")
+    pil_img = _load_image_for_viz(image_path, aug_class, severity)
 
     if pred is not None or gt_objects is not None:
         _draw_detections_on_image(
@@ -254,18 +282,63 @@ def _tensor_to_pil_with_detections(
 
     return pil_img
 
+def delta_detections(result, N=0):
+    num_A = len(result.predA["boxes"])
+    num_B = len(result.predB["boxes"])
+
+    decrease = num_A - num_B
+
+    if N < 0:
+        raise ValueError("N must be non-negative")
+
+    # Fractional threshold
+    if isinstance(N, float):
+        if N > 1:
+            raise ValueError("Fractional N must be between 0 and 1")
+
+        if num_A == 0:
+            return False
+
+        return decrease / num_A >= N
+
+    # Integer threshold
+    return decrease > N
+
+def delta_detections_labels(result, N=0):
+    num_A = len(result.predA["boxes"])
+    num_labels = len(result.label)
+
+    decrease = num_labels - num_A
+
+    if N < 0:
+        raise ValueError("N must be non-negative")
+
+    # Fractional threshold
+    if isinstance(N, float):
+        if N > 1:
+            raise ValueError("Fractional N must be between 0 and 1")
+
+        if num_A == 0:
+            return False
+
+        return decrease / num_A <= N
+
+    # Integer threshold
+    return decrease < N
 
 # ==== VISUALISATION FUNCTIONS ====
 
 def visualize_topk_matplotlib(
     results_sorted,
-    imgs_A, imgs_B,
     scores_A, scores_B,
     K=10,
     class_names=None,
     transform=None,
     directory=Path(),
     image_paths=None,
+    aug_class=None,
+    severity_A=None,
+    severity_B=None,
     # ── detection-overlay params (all optional) ──────────────────────────
     # Pass these to draw predicted + ground-truth boxes on each image.
     # When omitted, the plain augmented images are shown (original behaviour).
@@ -285,18 +358,21 @@ def visualize_topk_matplotlib(
     fragment_paths = []
     for row, res in enumerate(topk):
         i = res.index
-        idx = Path(str(image_paths[i])).name if image_paths else i
+        img_path = str(image_paths[i]) if image_paths else None
+        idx = Path(img_path).name if img_path else i
 
         _with_det = gt_labels is not None
-        imgA = _tensor_to_pil_with_detections(
-            imgs_A[i], scores_A[i] if _with_det else None,
+        imgA = _path_to_pil_with_detections(
+            img_path, aug_class, severity_A,
+            scores_A[i] if _with_det else None,
             gt_labels[i] if _with_det else None,
-            class_names, transform, score_threshold,
+            class_names, score_threshold,
         )
-        imgB = _tensor_to_pil_with_detections(
-            imgs_B[i], scores_B[i] if _with_det else None,
+        imgB = _path_to_pil_with_detections(
+            img_path, aug_class, severity_B,
+            scores_B[i] if _with_det else None,
             gt_labels[i] if _with_det else None,
-            class_names, transform, score_threshold,
+            class_names, score_threshold,
         )
 
         n_A, top_A = _detection_summary(scores_A[i])
@@ -365,16 +441,17 @@ def visualize_topk_matplotlib(
 
     return save_path, fragment_paths
 
-
 def visualize_topk_plotly(
     results_sorted,
-    imgs_A, imgs_B,
     scores_A, scores_B,
     K=10,
     class_names=None,
     transform=None,
     directory=Path(),
     image_paths=None,
+    aug_class=None,
+    severity_A=None,
+    severity_B=None,
     # ── detection-overlay params (all optional) ──────────────────────────
     gt_labels=None,        # list[list[dict]]: ground-truth per image
     score_threshold=0.5,
@@ -392,26 +469,28 @@ def visualize_topk_plotly(
 
     for r, res in enumerate(topk, start=1):
         i = res.index
-        idx = Path(str(image_paths[i])).name if image_paths else i
+        img_path = str(image_paths[i]) if image_paths else None
+        idx = Path(img_path).name if img_path else i
 
         # Encode as JPEG (10-30x smaller than raw z= array).
-        # When gt_labels is supplied, render detections onto the PIL image first,
-        # then base64-encode that instead of the raw tensor.
+        # When gt_labels is supplied, render detections onto the PIL image first.
         _with_det = gt_labels is not None
-        if _with_det:
-            imgA_b64 = "data:image/jpeg;base64," + _pil_to_base64(
-                _tensor_to_pil_with_detections(
-                    imgs_A[i], scores_A[i], gt_labels[i], class_names, transform, score_threshold
-                ), jpeg_quality=85
-            )
-            imgB_b64 = "data:image/jpeg;base64," + _pil_to_base64(
-                _tensor_to_pil_with_detections(
-                    imgs_B[i], scores_B[i], gt_labels[i], class_names, transform, score_threshold
-                ), jpeg_quality=85
-            )
-        else:
-            imgA_b64 = "data:image/jpeg;base64," + tensor_to_base64(imgs_A[i], transform, jpeg_quality=85)
-            imgB_b64 = "data:image/jpeg;base64," + tensor_to_base64(imgs_B[i], transform, jpeg_quality=85)
+        imgA_b64 = "data:image/jpeg;base64," + _pil_to_base64(
+            _path_to_pil_with_detections(
+                img_path, aug_class, severity_A,
+                scores_A[i] if _with_det else None,
+                gt_labels[i] if _with_det else None,
+                class_names, score_threshold,
+            ), jpeg_quality=85
+        )
+        imgB_b64 = "data:image/jpeg;base64," + _pil_to_base64(
+            _path_to_pil_with_detections(
+                img_path, aug_class, severity_B,
+                scores_B[i] if _with_det else None,
+                gt_labels[i] if _with_det else None,
+                class_names, score_threshold,
+            ), jpeg_quality=85
+        )
 
         n_A, top_A = _detection_summary(scores_A[i])
         n_B, top_B = _detection_summary(scores_B[i])
@@ -473,13 +552,15 @@ def visualize_topk_plotly(
 
 def visualize_in_html(
     results_sorted,
-    imgsA, imgsB,
     scoresA, scoresB,
     labels,
     class_names=None,
     transform=None,
     directory=Path(),
     image_paths=None,
+    aug_class=None,
+    severity_A=None,
+    severity_B=None,
     max_size: int = 320,
     jpeg_quality: int = 85,
     # ── detection-overlay params (all optional) ──────────────────────────
@@ -504,22 +585,25 @@ def visualize_in_html(
 
     for res in results_sorted:
         i = res.index
-        idx = Path(str(image_paths[i])).name if image_paths else i
+        img_path = str(image_paths[i]) if image_paths else None
+        idx = Path(img_path).name if img_path else i
 
-        if draw_detections:
-            imgA_b64 = mime + _pil_to_base64(
-                _tensor_to_pil_with_detections(
-                    imgsA[i], scoresA[i], labels[i], class_names, transform, score_threshold
-                ), max_size=max_size, jpeg_quality=jpeg_quality
-            )
-            imgB_b64 = mime + _pil_to_base64(
-                _tensor_to_pil_with_detections(
-                    imgsB[i], scoresB[i], labels[i], class_names, transform, score_threshold
-                ), max_size=max_size, jpeg_quality=jpeg_quality
-            )
-        else:
-            imgA_b64 = mime + tensor_to_base64(imgsA[i], transform, max_size=max_size, jpeg_quality=jpeg_quality)
-            imgB_b64 = mime + tensor_to_base64(imgsB[i], transform, max_size=max_size, jpeg_quality=jpeg_quality)
+        imgA_b64 = mime + _pil_to_base64(
+            _path_to_pil_with_detections(
+                img_path, aug_class, severity_A,
+                scoresA[i] if draw_detections else None,
+                labels[i] if draw_detections else None,
+                class_names, score_threshold,
+            ), max_size=max_size, jpeg_quality=jpeg_quality
+        )
+        imgB_b64 = mime + _pil_to_base64(
+            _path_to_pil_with_detections(
+                img_path, aug_class, severity_B,
+                scoresB[i] if draw_detections else None,
+                labels[i] if draw_detections else None,
+                class_names, score_threshold,
+            ), max_size=max_size, jpeg_quality=jpeg_quality
+        )
 
         n_A, top_A = _detection_summary(scoresA[i])
         n_B, top_B = _detection_summary(scoresB[i])
@@ -638,10 +722,8 @@ show();
     save_path = directory / f"brittleness_carousel{_suffix}.html"
     with open(save_path, "w") as f:
         f.write(html)
-
-    print("Saved brittleness_carousel.html")
+    # print("Saved brittleness_carousel.html")
     return save_path
-
 
 # ==== HELPER FUNCTIONS ====
 
@@ -772,3 +854,263 @@ def extract_normalize(transform):
                 return t.mean, t.std
 
     return None
+
+def visualize_topk_without_plotly(
+    results_sorted,
+    scores_A, scores_B,
+    K=10,
+    class_names=None,
+    transform=None,
+    directory=Path(),
+    image_paths=None,
+    aug_class=None,
+    severity_A=None,
+    severity_B=None,
+    gt_labels=None,
+    score_threshold=0.5,
+):
+    """
+    Pure-HTML equivalent of visualize_topk_plotly.
+ 
+    Produces a three-column layout per row (image A | info panel | image B)
+    matching the content of the plotly version but with zero plotly dependency.
+    Images are loaded on demand from disk (via _path_to_pil_with_detections)
+    so no full-dataset tensor is required.
+    """
+    topk = results_sorted[:K]
+    _with_det = gt_labels is not None
+    _suffix = "_with_predictions" if _with_det else ""
+ 
+    rows_html = []
+ 
+    for rank, res in enumerate(topk, start=1):
+        i = res.index
+        img_path = str(image_paths[i]) if image_paths else None
+        idx = Path(img_path).name if img_path else i
+ 
+        imgA_b64 = "data:image/jpeg;base64," + _pil_to_base64(
+            _path_to_pil_with_detections(
+                img_path, aug_class, severity_A,
+                scores_A[i] if _with_det else None,
+                gt_labels[i] if _with_det else None,
+                class_names, score_threshold,
+            ), jpeg_quality=85
+        )
+        imgB_b64 = "data:image/jpeg;base64," + _pil_to_base64(
+            _path_to_pil_with_detections(
+                img_path, aug_class, severity_B,
+                scores_B[i] if _with_det else None,
+                gt_labels[i] if _with_det else None,
+                class_names, score_threshold,
+            ), jpeg_quality=85
+        )
+ 
+        n_A, top_A = _detection_summary(scores_A[i])
+        n_B, top_B = _detection_summary(scores_B[i])
+ 
+        raw_brit = res.brittleness
+        norm_brit = normalise_brittleness(raw_brit, top_A)
+        brit_label = brittleness_label(norm_brit)
+ 
+        det_delta = n_B - n_A
+        det_delta_str = (
+            f"+{det_delta} more" if det_delta > 0
+            else f"{abs(det_delta)} fewer" if det_delta < 0
+            else "no change"
+        )
+ 
+        bar_pct = int(norm_brit * 100)
+        bar_color = (
+            "#2ecc71" if norm_brit < 0.25 else
+            "#f1c40f" if norm_brit < 0.5  else
+            "#e67e22" if norm_brit < 0.75 else
+            "#e74c3c"
+        )
+ 
+        info_panel = f"""
+        <div class="info">
+            <h3>#{rank} Most Brittle</h3>
+            <p class="filename">{idx}</p>
+ 
+            <div class="section">
+                <span class="section-label before-label">Before</span>
+                <p>Detections: <b>{n_A}</b></p>
+                <p>Top conf: <b>{top_A:.2f}</b></p>
+            </div>
+ 
+            <div class="section">
+                <span class="section-label after-label">After</span>
+                <p>Detections: <b>{n_B}</b> <span class="delta">({det_delta_str})</span></p>
+                <p>Top conf: <b>{top_B:.2f}</b></p>
+            </div>
+ 
+            <div class="section brittleness-section">
+                <span class="section-label">Brittleness</span>
+                <div class="brit-bar-bg">
+                    <div class="brit-bar-fill" style="width:{bar_pct}%; background:{bar_color};"></div>
+                </div>
+                <p><b>{norm_brit:.2f}</b> / 1.00 &mdash; <i>{brit_label}</i></p>
+                <p class="raw-brit">raw: {raw_brit:.3f}</p>
+            </div>
+        </div>
+        """
+ 
+        rows_html.append(f"""
+        <div class="row">
+            <div class="image-container">
+                <img src="{imgA_b64}" alt="Before corruption">
+                <div class="caption before-caption">Before</div>
+            </div>
+ 
+            {info_panel}
+ 
+            <div class="image-container">
+                <img src="{imgB_b64}" alt="After corruption">
+                <div class="caption after-caption">After</div>
+            </div>
+        </div>
+        """)
+ 
+    html = f"""<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Top-K Most Brittle Images (Detection)</title>
+<style>
+* {{ box-sizing: border-box; margin: 0; padding: 0; }}
+ 
+body {{
+    font-family: Arial, sans-serif;
+    padding: 24px;
+    background: #f5f5f5;
+    color: #222;
+}}
+ 
+h1 {{
+    text-align: center;
+    margin-bottom: 28px;
+    font-size: 1.4rem;
+    color: #333;
+}}
+ 
+.container {{
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    max-width: 1200px;
+    margin: 0 auto;
+}}
+ 
+.row {{
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(200px, 1fr) minmax(0, 2fr);
+    gap: 20px;
+    background: #fff;
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    align-items: center;
+}}
+ 
+.image-container {{
+    text-align: center;
+}}
+ 
+.image-container img {{
+    width: 100%;
+    height: auto;
+    border-radius: 8px;
+    display: block;
+}}
+ 
+.caption {{
+    margin-top: 8px;
+    font-weight: bold;
+    font-size: 0.9rem;
+}}
+ 
+.before-caption {{ color: #2980b9; }}
+.after-caption  {{ color: #e67e22; }}
+ 
+.info {{
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    text-align: center;
+}}
+ 
+.info h3 {{
+    font-size: 1rem;
+    text-decoration: underline;
+    color: #333;
+}}
+ 
+.filename {{
+    font-size: 0.8rem;
+    color: #666;
+    word-break: break-all;
+}}
+ 
+.section {{
+    background: #f9f9f9;
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 0.85rem;
+    line-height: 1.6;
+}}
+ 
+.section-label {{
+    display: inline-block;
+    font-weight: bold;
+    margin-bottom: 2px;
+}}
+ 
+.before-label {{ color: #2980b9; }}
+.after-label  {{ color: #e67e22; }}
+ 
+.delta {{
+    color: #888;
+    font-size: 0.82rem;
+}}
+ 
+.brittleness-section {{
+    border: 1px solid #e0e0e0;
+}}
+ 
+.brit-bar-bg {{
+    background: #e0e0e0;
+    border-radius: 4px;
+    height: 10px;
+    margin: 6px 0;
+    overflow: hidden;
+}}
+ 
+.brit-bar-fill {{
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.3s;
+}}
+ 
+.raw-brit {{
+    color: #aaa;
+    font-size: 0.78rem;
+}}
+ 
+@media (max-width: 900px) {{
+    .row {{ grid-template-columns: 1fr; }}
+}}
+</style>
+</head>
+<body>
+<h1>Top-K Most Brittle Images (Detection)</h1>
+<div class="container">
+{''.join(rows_html)}
+</div>
+</body>
+</html>"""
+ 
+    save_path = directory / f"brittleness_topk{_suffix}.html"
+    with open(save_path, "w", encoding="utf-8") as f:
+        f.write(html)
+ 
+    return save_path

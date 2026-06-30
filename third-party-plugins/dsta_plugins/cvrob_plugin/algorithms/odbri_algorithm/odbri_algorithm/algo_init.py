@@ -274,12 +274,12 @@ class AlgoInit:
                 results = remove_numpy_formats(plugin.get_results())
 
                 print("Verifying results with output schema...")
-                from pprint import pprint
-                pprint(results)
-                print(results.keys())
-                for k in results:
-                    if "path" in k:
-                        print(results[k])
+                # from pprint import pprint
+                # pprint(results)
+                # print(results.keys())
+                # for k in results:
+                #     if "path" in k:
+                #         print(results[k])
                 is_success, error_messages = self._verify_task_results(results)
                 self._time_taken = time.time() - self._start_time
 
@@ -352,9 +352,15 @@ class AlgoInit:
             # self._logger_instance.debug(f">>> _generate_output_file called, results keys: {list(results.keys())}")
 
             # grab the top-level paths
-            for k in ["matplotlib_image_path", "plotly_image_path", "html_carousel_path"]:
+            for k in ["matplotlib_image_path", "plotly_image_path", "html_carousel_path", "matplotlib_image_path_with_det", "plotly_image_path_with_det", "html_carousel_path_with_det"]:
                 if k in results:
                     artifact_list.append(results[k])
+
+            if "matplotlib_fragment_paths" in results:
+                artifact_list += results["matplotlib_fragment_paths"] 
+
+            if "matplotlib_fragment_paths_with_det" in results:
+                artifact_list += results["matplotlib_fragment_paths_with_det"] 
 
             # Debug print: what artifact_list looks like before creating ITestResult
             print(">>> artifact_list before creating ITestResult:", artifact_list)

@@ -1,0 +1,190 @@
+{
+  "results": [
+    {
+      "Augmentation": "augmentation_name",
+      "display_info": {
+        "None": [
+          "images/Random Rain/None/51wop.png",
+          [{"bbox": [1,2,3,4], "label": 1}],
+          {"boxes": [[1,2,3,4]], "labels": [1], "scores": [1.0]},
+          "images/Random Rain/None/51wp.png"
+        ],
+        "severity1": [
+          "images/Random Rain/severity1/51wop.png",
+          [{"bbox": [1,2,3,4], "label": 1}],
+          {"boxes": [[1,2,3,4]], "labels": [1], "scores": [0.97]},
+          "images/Random Rain/severity1/51wp.png"
+        ],
+        "severity2": [
+          "images/Random Rain/severity2/51wop.png",
+          [{"bbox": [1,2,3,4], "label": 1}],
+          {"boxes": [[1,2,3,4]], "labels": [1], "scores": [0.88]},
+          "images/Random Rain/severity2/51wp.png"
+        ],
+        "severity3": [
+          "images/Random Rain/severity3/51wop.png",
+          [{"bbox": [1,2,3,4], "label": 1}],
+          {"boxes": [[1,2,3,4]], "labels": [1], "scores": [0.74]},
+          "images/Random Rain/severity3/51wp.png"
+        ],
+        "severity4": [
+          "images/Random Rain/severity4/51wop.png",
+          [{"bbox": [1,2,3,4], "label": 1}],
+          {"boxes": [[1,2,3,4]], "labels": [1], "scores": [0.55]},
+          "images/Random Rain/severity4/51wp.png"
+        ],
+        "severity5": [
+          "images/Random Rain/severity5/51wop.png",
+          [{"bbox": [1,2,3,4], "label": 1}],
+          {"boxes": [[1,2,3,4]], "labels": [1], "scores": [0.31]},
+          "images/Random Rain/severity5/51wp.png"
+        ]
+      },
+      "classification_report": [
+        {
+          "map_50": 0.987,
+          "class_0": {"TP": 0.0, "FP": 0.0, "FN": 0.0, "precision": 0.0, "recall": 0.0, "f1_score": 0.0, "support": 0.0},
+          "class_1": {"TP": 4116.0, "FP": 4.0, "FN": 37.0, "precision": 0.999, "recall": 0.991, "f1_score": 0.995, "support": 4153.0},
+          "class_2": {"TP": 372.0, "FP": 0.0, "FN": 0.0, "precision": 1.0, "recall": 1.0, "f1_score": 1.0, "support": 372.0},
+          "class_3": {"TP": 351.0, "FP": 19.0, "FN": 10.0, "precision": 0.949, "recall": 0.972, "f1_score": 0.960, "support": 361.0}
+        },
+        {
+          "map_50": 0.846,
+          "class_0": {"TP": 0.0, "FP": 0.0, "FN": 0.0, "precision": 0.0, "recall": 0.0, "f1_score": 0.0, "support": 0.0},
+          "class_1": {"TP": 3421.0, "FP": 1113.0, "FN": 732.0, "precision": 0.755, "recall": 0.824, "f1_score": 0.788, "support": 4153.0},
+          "class_2": {"TP": 366.0, "FP": 6.0, "FN": 6.0, "precision": 0.984, "recall": 0.984, "f1_score": 0.984, "support": 372.0},
+          "class_3": {"TP": 230.0, "FP": 28.0, "FN": 131.0, "precision": 0.891, "recall": 0.637, "f1_score": 0.743, "support": 361.0}
+        },
+        {
+          "map_50": 0.661,
+          "class_0": {"TP": 0.0, "FP": 0.0, "FN": 0.0, "precision": 0.0, "recall": 0.0, "f1_score": 0.0, "support": 0.0},
+          "class_1": {"TP": 2255.0, "FP": 962.0, "FN": 1898.0, "precision": 0.701, "recall": 0.543, "f1_score": 0.612, "support": 4153.0},
+          "class_2": {"TP": 355.0, "FP": 7.0, "FN": 17.0, "precision": 0.981, "recall": 0.954, "f1_score": 0.967, "support": 372.0},
+          "class_3": {"TP": 143.0, "FP": 37.0, "FN": 218.0, "precision": 0.794, "recall": 0.396, "f1_score": 0.529, "support": 361.0}
+        },
+        {
+          "map_50": 0.464,
+          "class_0": {"TP": 0.0, "FP": 0.0, "FN": 0.0, "precision": 0.0, "recall": 0.0, "f1_score": 0.0, "support": 0.0},
+          "class_1": {"TP": 613.0, "FP": 164.0, "FN": 3540.0, "precision": 0.789, "recall": 0.148, "f1_score": 0.249, "support": 4153.0},
+          "class_2": {"TP": 314.0, "FP": 4.0, "FN": 58.0, "precision": 0.987, "recall": 0.844, "f1_score": 0.910, "support": 372.0},
+          "class_3": {"TP": 75.0, "FP": 21.0, "FN": 286.0, "precision": 0.781, "recall": 0.208, "f1_score": 0.328, "support": 361.0}
+        },
+        {
+          "map_50": 0.312,
+          "class_0": {"TP": 0.0, "FP": 0.0, "FN": 0.0, "precision": 0.0, "recall": 0.0, "f1_score": 0.0, "support": 0.0},
+          "class_1": {"TP": 389.0, "FP": 201.0, "FN": 3764.0, "precision": 0.659, "recall": 0.094, "f1_score": 0.164, "support": 4153.0},
+          "class_2": {"TP": 278.0, "FP": 11.0, "FN": 94.0, "precision": 0.962, "recall": 0.747, "f1_score": 0.841, "support": 372.0},
+          "class_3": {"TP": 44.0, "FP": 29.0, "FN": 317.0, "precision": 0.603, "recall": 0.122, "f1_score": 0.202, "support": 361.0}
+        },
+        {
+          "map_50": 0.178,
+          "class_0": {"TP": 0.0, "FP": 0.0, "FN": 0.0, "precision": 0.0, "recall": 0.0, "f1_score": 0.0, "support": 0.0},
+          "class_1": {"TP": 201.0, "FP": 318.0, "FN": 3952.0, "precision": 0.387, "recall": 0.048, "f1_score": 0.086, "support": 4153.0},
+          "class_2": {"TP": 219.0, "FP": 18.0, "FN": 153.0, "precision": 0.924, "recall": 0.589, "f1_score": 0.719, "support": 372.0},
+          "class_3": {"TP": 22.0, "FP": 41.0, "FN": 339.0, "precision": 0.349, "recall": 0.061, "f1_score": 0.104, "support": 361.0}
+        }
+      ],
+      "conf_matrix": [
+        [
+          [0.0,  4.0,  0.0, 19.0],
+          [37.0, 4116.0, 0.0, 0.0],
+          [0.0,  0.0, 372.0, 0.0],
+          [10.0, 0.0,   0.0, 351.0]
+        ],
+        [
+          [0.0, 1113.0,  5.0, 28.0],
+          [732.0, 3421.0, 0.0,  0.0],
+          [6.0,    0.0, 366.0,  0.0],
+          [130.0,  0.0,   1.0, 230.0]
+        ],
+        [
+          [0.0,  962.0,  5.0, 37.0],
+          [1898.0, 2255.0, 0.0,  0.0],
+          [15.0,    2.0, 355.0,  0.0],
+          [216.0,   0.0,   2.0, 143.0]
+        ],
+        [
+          [0.0, 163.0,  3.0, 21.0],
+          [3540.0, 613.0, 0.0,  0.0],
+          [57.0,   1.0, 314.0,  0.0],
+          [285.0,  0.0,   1.0,  75.0]
+        ],
+        [
+          [0.0, 198.0,  4.0, 29.0],
+          [3764.0, 389.0, 0.0,  0.0],
+          [83.0,   11.0, 278.0,  0.0],
+          [311.0,   6.0,   0.0,  44.0]
+        ],
+        [
+          [0.0, 312.0,  7.0, 41.0],
+          [3952.0, 201.0, 0.0,  0.0],
+          [141.0,  12.0, 219.0,  0.0],
+          [333.0,   6.0,   0.0,  22.0]
+        ]
+      ],
+      "plot_paths": {
+        "class_plot": {
+          "class_0": [
+            "images/Random Rain/figures/class_0_metrics.png",
+            "images/Random Rain/figures/class_0_metrics.html"
+          ],
+          "class_1": [
+            "images/Random Rain/figures/class_1_metrics.png",
+            "images/Random Rain/figures/class_1_metrics.html"
+          ],
+          "class_2": [
+            "images/Random Rain/figures/class_2_metrics.png",
+            "images/Random Rain/figures/class_2_metrics.html"
+          ],
+          "class_3": [
+            "images/Random Rain/figures/class_3_metrics.png",
+            "images/Random Rain/figures/class_3_metrics.html"
+          ]
+        },
+        "map_plot": [
+          "images/Random Rain/figures/map50.png",
+          "images/Random Rain/figures/map50.html"
+        ]
+      },
+      "confusion_matrix": {
+        "None": [
+          "images/Random Rain/None/detection_matrix.png",
+          "images/Random Rain/None/detection_matrix.html"
+        ],
+        "severity1": [
+          "images/Random Rain/severity1/detection_matrix.png",
+          "images/Random Rain/severity1/detection_matrix.html"
+        ],
+        "severity2": [
+          "images/Random Rain/severity2/detection_matrix.png",
+          "images/Random Rain/severity2/detection_matrix.html"
+        ],
+        "severity3": [
+          "images/Random Rain/severity3/detection_matrix.png",
+          "images/Random Rain/severity3/detection_matrix.html"
+        ],
+        "severity4": [
+          "images/Random Rain/severity4/detection_matrix.png",
+          "images/Random Rain/severity4/detection_matrix.html"
+        ],
+        "severity5": [
+          "images/Random Rain/severity5/detection_matrix.png",
+          "images/Random Rain/severity5/detection_matrix.html"
+        ]
+      }
+    }
+  ],
+  "augmentation_names": [
+    "augmentation_name"
+  ],
+  "class_names": {
+    "0": "class_0",
+    "1": "class_1",
+    "2": "class_2",
+    "3": "class_3"
+  },
+  "dataset_size": 67,
+  "ALGORITHM_ARGUMENTS": {
+    "num_epochs": 5
+  }
+}

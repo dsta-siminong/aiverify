@@ -1,0 +1,334 @@
+export const cid = "odaugbc_algorithm"
+//export const ib_cid = "augmentations_inputblock"
+
+
+<div style={{ marginBottom: "1rem" }}>
+  <div
+    style={{
+      textAlign: "center",
+      fontWeight: "bold",
+      fontSize: "2.2rem",
+      color: "#b91c1c",
+      textDecoration: "underline"
+    }}
+  >
+    {props.properties.title}
+  </div>
+</div>
+
+
+import {
+  transformData,
+  ClassLineChart,
+  PopulationChart,
+  StackedBarChart,
+  ClassMetricsTable
+} from './augbyclass-chart.jsx';
+
+export const LABEL_COLORS = ["#fde68a", "#a7f3d0", "#bfdbfe", "#fca5a5", "#ddd6fe", "#fed7aa"];
+
+export const AugmentationSeverityPanel = ({ props }) => {
+
+  // ── Helpers (defined inside component to satisfy MDX/acorn) ──────────────
+
+  const summariseGT = (gtBoxes) => {
+    const perLabel = {};
+    const boxes = Array.isArray(gtBoxes) ? gtBoxes : [];
+    boxes.forEach(({ label }) => {
+      perLabel[label] = (perLabel[label] || 0) + 1;
+    });
+    return { total: boxes.length, perLabel };
+  };
+
+  const summarisePred = (predObj) => {
+    const empty = { total: 0, perLabel: {}, scoreMin: null, scoreMax: null, scoreAvg: null };
+    if (!predObj || !Array.isArray(predObj.labels)) return empty;
+    const { labels, scores = [] } = predObj;
+    const perLabel = {};
+    labels.forEach((l) => { perLabel[l] = (perLabel[l] || 0) + 1; });
+    const scoreMin = scores.length ? Math.min(...scores) : null;
+    const scoreMax = scores.length ? Math.max(...scores) : null;
+    const scoreAvg = scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : null;
+    return { total: labels.length, perLabel, scoreMin, scoreMax, scoreAvg };
+  };
+
+  const fmt = (n) => (n !== null && n !== undefined ? (n * 100).toFixed(1) + "%" : "—");
+
+  const labelColor = (label) => LABEL_COLORS[Number(label) % LABEL_COLORS.length] || "#e5e7eb";
+
+  // ── Sub-components ────────────────────────────────────────────────────────
+
+  const LabelPills = ({ perLabel, colorFn }) => (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", justifyContent: "center", marginTop: "4px" }}>
+      {Object.entries(perLabel).map(([label, count]) => (
+        <span
+          key={label}
+          style={{
+            background: colorFn ? colorFn(label) : "#e5e7eb",
+            color: "#111",
+            borderRadius: "999px",
+            padding: "1px 8px",
+            fontSize: "0.72rem",
+            fontWeight: 600,
+            whiteSpace: "nowrap",
+          }}
+        >
+          label {label} × {count}
+        </span>
+      ))}
+    </div>
+  );
+
+  const SectionLabel = ({ children }) => (
+    <div
+      style={{
+        fontSize: "0.65rem",
+        fontWeight: 700,
+        letterSpacing: "0.08em",
+        textTransform: "uppercase",
+        color: "#6b7280",
+        marginBottom: "3px",
+      }}
+    >
+      {children}
+    </div>
+  );
+
+  const StatRow = ({ label, value, highlight }) => (
+    <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem", fontSize: "0.78rem" }}>
+      <span style={{ color: "#6b7280" }}>{label}</span>
+      <span style={{ fontWeight: 600, color: highlight || "#111" }}>{value}</span>
+    </div>
+  );
+
+  const ImageCard = ({ title, imageUrl, borderColor, children }) => (
+    <div style={{ textAlign: "center", flex: "1 1 0", minWidth: 0 }}>
+      <div
+        style={{
+          fontSize: "0.75rem",
+          fontWeight: 700,
+          letterSpacing: "0.06em",
+          textTransform: "uppercase",
+          color: borderColor,
+          marginBottom: "6px",
+        }}
+      >
+        {title}
+      </div>
+      <img
+        src={imageUrl}
+        alt={title}
+        style={{
+          maxWidth: "300px",
+          width: "100%",
+          height: "auto",
+          borderRadius: "6px",
+          border: `3px solid ${borderColor}`,
+          display: "block",
+          margin: "0 auto",
+        }}
+      />
+      {children}
+    </div>
+  );
+
+  // Stats panel now spans full width below the images, laid out in three columns
+  const DetectionStatsPanel = ({ gt, pred, countMatch }) => (
+    <div
+      style={{
+        background: "#f9fafb",
+        border: "1px solid #e5e7eb",
+        borderRadius: "8px",
+        padding: "0.85rem 1.25rem",
+        fontSize: "0.8rem",
+        display: "flex",
+        flexDirection: "row",
+        gap: "0",
+        marginTop: "1rem",
+      }}
+    >
+      {/* Ground Truth column */}
+      <div style={{ flex: 1, paddingRight: "1.25rem" }}>
+        <SectionLabel>Ground Truth</SectionLabel>
+        <StatRow label="Boxes" value={gt.total} />
+        <LabelPills perLabel={gt.perLabel} colorFn={labelColor} />
+      </div>
+
+      <div style={{ width: "1px", background: "#e5e7eb", margin: "0 1.25rem" }} />
+
+      {/* Predictions column */}
+      <div style={{ flex: 1, paddingRight: "1.25rem" }}>
+        <SectionLabel>Predictions</SectionLabel>
+        <StatRow label="Boxes" value={pred.total} highlight={countMatch ? "#16a34a" : "#dc2626"} />
+        <LabelPills perLabel={pred.perLabel} colorFn={labelColor} />
+      </div>
+
+      <div style={{ width: "1px", background: "#e5e7eb", margin: "0 1.25rem" }} />
+
+      {/* Confidence column */}
+      <div style={{ flex: 1 }}>
+        <SectionLabel>Confidence</SectionLabel>
+        <StatRow label="Min" value={fmt(pred.scoreMin)} />
+        <StatRow label="Avg" value={fmt(pred.scoreAvg)} />
+        <StatRow label="Max" value={fmt(pred.scoreMax)} />
+      </div>
+    </div>
+  );
+
+  // ── Data ──────────────────────────────────────────────────────────────────
+
+  const resultsData = props.getResults ? props.getResults(cid).results : null;
+
+  if (!resultsData || resultsData.length === 0) {
+    return <div>No results data available</div>;
+  }
+
+  const augmentationPanels = resultsData.map((augmentationItem, index) => {
+    const { Augmentation, display_info } = augmentationItem;
+
+    if (!display_info) return null;
+
+    const severityKeys = Object.keys(display_info).sort((a, b) => {
+      const isNoneA = a === "None" || a === "severityNone";
+      const isNoneB = b === "None" || b === "severityNone";
+      if (isNoneA) return -1;
+      if (isNoneB) return 1;
+      const numA = parseFloat(a.match(/[\d.]+/)?.[0] || 0);
+      const numB = parseFloat(b.match(/[\d.]+/)?.[0] || 0);
+      return numA - numB;
+    });
+
+    const severityEntries = severityKeys.map((severityKey) => {
+      // display_info[severityKey] = [withoutPredPath, gtBoxes[], predObj{boxes,labels,scores}, withPredPath]
+      const [withoutPredPath, gtBoxes, predObj, withPredPath] =
+        display_info[severityKey] || [];
+
+      if (!withoutPredPath) return null;
+
+      let withoutPredUrl = null;
+      let withPredUrl = null;
+
+      try { withoutPredUrl = props.getArtifactURL(cid, withoutPredPath); }
+      catch (e) { console.error(`Error getting URL for ${withoutPredPath}`, e); }
+
+      try { if (withPredPath) withPredUrl = props.getArtifactURL(cid, withPredPath); }
+      catch (e) { console.error(`Error getting URL for ${withPredPath}`, e); }
+
+      const fileName = withoutPredPath.split("/").pop();
+      const gt = summariseGT(gtBoxes);
+      const pred = summarisePred(predObj);
+      const countMatch = gt.total === pred.total;
+
+      return { severityKey, withoutPredUrl, withPredUrl, fileName, gt, pred, countMatch };
+    });
+
+    const baseFileName = (severityEntries.find(Boolean) || {}).fileName || "";
+
+    return (
+      <div
+        key={index}
+        style={{
+          border: "1px solid #ddd",
+          borderRadius: "8px",
+          padding: "1.5rem",
+          marginBottom: "3rem",
+        }}
+      >
+        <h2
+          style={{
+            textAlign: "center",
+            fontWeight: "bold",
+            textDecoration: "underline",
+            color: "red",
+            marginBottom: "0.5rem",
+          }}
+        >
+          {Augmentation}
+        </h2>
+
+        {baseFileName && (
+          <div
+            style={{
+              textAlign: "center",
+              marginBottom: "1.5rem",
+              fontStyle: "italic",
+              color: "#666",
+            }}
+          >
+            Image File Name: {baseFileName}
+          </div>
+        )}
+
+        {severityEntries.map((entry, i) => {
+          if (!entry) return null;
+          const { severityKey, withoutPredUrl, withPredUrl, gt, pred, countMatch } = entry;
+          const borderColor = countMatch ? "#16a34a" : "#dc2626";
+
+          return (
+            // The outer wrapper must contain everything for this severity level —
+            // title, images, and stats — so that page breaks can only occur
+            // after the stats panel, never in the middle of a severity block.
+            <div
+              key={i}
+              style={{
+                marginBottom: "2.5rem",
+                breakInside: "avoid",
+                pageBreakInside: "avoid",
+                WebkitColumnBreakInside: "avoid",
+              }}
+            >
+              <h4
+                style={{
+                  textDecoration: "underline",
+                  textAlign: "center",
+                  marginBottom: "1rem",
+                  marginTop: "1rem",
+                }}
+              >
+                {severityKey}
+              </h4>
+
+              {/* ── Row 1: images side by side, equal width ── */}
+              <div
+                style={{
+                  display: "flex",
+                  gap: "1.5rem",
+                  justifyContent: "center",
+                  alignItems: "flex-start",
+                }}
+              >
+                <ImageCard title="Without Predictions" imageUrl={withoutPredUrl} borderColor="#9ca3af" />
+
+                {withPredUrl ? (
+                  <ImageCard title="With Predictions" imageUrl={withPredUrl} borderColor={borderColor} />
+                ) : (
+                  <div
+                    style={{
+                      flex: "1 1 0",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      color: "#9ca3af",
+                      fontSize: "0.8rem",
+                    }}
+                  >
+                    No prediction image available
+                  </div>
+                )}
+              </div>
+
+              {/* ── Row 2: stats panel, full width, three columns ── */}
+              <DetectionStatsPanel gt={gt} pred={pred} countMatch={countMatch} />
+            </div>
+          );
+        })}
+
+        <div style={{ pageBreakAfter: "always" }} />
+      </div>
+    );
+  });
+
+  return <div>{augmentationPanels}</div>;
+};
+
+<AugmentationSeverityPanel props={props} />

@@ -1,0 +1,99 @@
+import InfoBox from "./InfoBox";
+
+<InfoBox>
+  <h3>Confusion Matrix Statistics (Object Detection)</h3>
+
+  <p>
+    This widget shows how a model's detections across all foreground classes change
+    as image perturbations increase.
+  </p>
+
+  <p>
+    For each specified corruption algorithm and severity level, a confusion matrix is
+    displayed summarising how the model's predicted bounding boxes align with ground
+    truth bounding boxes across every class.
+  </p>
+
+  <p style={{ margin: "4px 0 0 0", padding: "10px 14px", backgroundColor: "#f0f4ff", borderLeft: "4px solid #6366f1", borderRadius: "4px" }}>
+    <b>Note on the background class:</b> Class 0 (background / "no detection") is
+    included in the confusion matrix and carries a specific meaning in object detection.
+    A ground truth box of class 0 means there is no object of interest at that location.
+    A prediction of class 0 means the model chose not to detect anything. Transitions
+    to and from class 0 therefore represent missed detections and false alarms respectively,
+    rather than misclassifications between foreground objects.
+  </p>
+</InfoBox>
+
+<InfoBox>
+  <h4><b>How to read?</b></h4>
+
+  <p>
+    For each corruption algorithm and severity level, a full N × N confusion matrix is
+    shown, where N is the total number of classes including background (class 0).
+  </p>
+
+  <p>In the matrix:</p>
+  <ul>
+    <li>Each <b>row</b> represents the <b>true class</b> of a bounding box (from ground truth annotations)</li>
+    <li>Each <b>column</b> represents the <b>predicted class</b> assigned by the model</li>
+    <li>Values along the <b>main diagonal</b> correspond to correct detections — the model predicted the right class for that box</li>
+    <li>Values <b>off the diagonal</b> correspond to errors, whose type depends on which classes are involved</li>
+  </ul>
+
+  <p>Because class 0 represents background, off-diagonal entries involving it have specific meanings:</p>
+  <ul>
+    <li><b>True class = foreground, predicted class = background (class 0)</b> — the model missed a real object; this is a <b>false negative</b></li>
+    <li><b>True class = background (class 0), predicted class = foreground</b> — the model detected an object where there was none; this is a <b>false positive</b></li>
+    <li><b>True class = foreground A, predicted class = foreground B</b> — the model detected something but assigned the wrong class; this is a <b>misclassification</b></li>
+  </ul>
+
+  <p>
+    Tracking how these patterns shift across severities helps identify whether corruption
+    causes the model to miss objects, hallucinate detections, or confuse foreground classes
+    with one another.
+  </p>
+</InfoBox>
+
+<InfoBox>
+  <h4><b>Interpretation</b></h4>
+
+  <p>
+    The confusion matrix helps identify how corruption affects the model's detection
+    behaviour — whether it causes missed detections, false alarms, or foreground
+    misclassifications, and which classes are most affected.
+  </p>
+
+  <p>
+    Ideally, most counts should lie along the main diagonal. As corruption severity
+    increases, predictions may shift off the diagonal. The direction of that shift matters:
+  </p>
+
+  <ul>
+    <li><b>Increasing flow into class 0 (background)</b> — the model is suppressing detections and missing more objects as corruption worsens</li>
+    <li><b>Increasing flow out of class 0 (background)</b> — the model is generating more spurious detections, raising the false positive rate</li>
+    <li><b>Increasing flow between two foreground classes</b> — the model is confusing those classes with each other under the given corruption</li>
+  </ul>
+
+  <p>
+    If the same off-diagonal patterns repeatedly appear across severities, this may indicate:
+  </p>
+  <ul>
+    <li>Visual similarity between the affected classes that is exaggerated by the corruption</li>
+    <li>Model reliance on features (e.g. texture, colour, fine edge detail) that are sensitive to the applied perturbation</li>
+    <li>Insufficient or unrepresentative training samples for the affected classes under similar conditions</li>
+  </ul>
+
+  <p>In such cases, consider:</p>
+  <ul>
+    <li>Adding more diverse training samples for the affected foreground classes</li>
+    <li>Including augmented examples that resemble the observed corruption during training</li>
+    <li>Reviewing confidence thresholds — a rising false negative rate may be recoverable by tuning the detection threshold</li>
+    <li>Reviewing class balance and annotation consistency within the training dataset</li>
+    <li>Improving class separation through feature engineering or model architecture changes</li>
+  </ul>
+
+  <p>
+    If the confusion matrix remains largely unchanged across corruption severities,
+    the model can be considered robust to the given perturbation.
+  </p>
+</InfoBox>
