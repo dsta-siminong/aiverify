@@ -1,12 +1,6 @@
-<div style={{
-  width: "100%",
-  padding: "16px",
-  marginBottom: "24px",
-  border: "1px solid #e5e7eb",
-  borderRadius: "8px",
-  backgroundColor: "#fafafa",
-  boxSizing: "border-box"
-}}>
+import InfoBox from "./InfoBox";
+
+<InfoBox>
   <h3>Top 10 Most Brittle Images (Object Detection)</h3>
 
   <span>
@@ -19,17 +13,9 @@
     It helps you identify which inputs are least stable under perturbation and most
     likely to cause inconsistent model predictions.
   </span>
-</div>
+</InfoBox>
 
-<div style={{
-  width: "100%",
-  padding: "16px",
-  marginBottom: "24px",
-  border: "1px solid #e5e7eb",
-  borderRadius: "8px",
-  backgroundColor: "#fafafa",
-  boxSizing: "border-box"
-}}>
+<InfoBox>
   <h4>
     <b>How to read?</b>
   </h4>
@@ -53,17 +39,9 @@
     <li>pred_proba: model confidence (probability) for the predicted class</li>
     <li>Δ: brittleness score, i.e. difference between before and after prediction probabilities for the originally predicted class</li>
   </ul>
-</div>
+</InfoBox>
 
-<div style={{
-  width: "100%",
-  padding: "16px",
-  marginBottom: "24px",
-  border: "1px solid #e5e7eb",
-  borderRadius: "8px",
-  backgroundColor: "#fafafa",
-  boxSizing: "border-box"
-}}>
+<InfoBox>
   <span>
     <b>Interpretation</b>
   </span>
@@ -79,4 +57,4 @@
       <li>Consider removing or relabeling problematic samples if they are noisy or inconsistent</li>
     </ul>
   </span>
-</div>
+</InfoBox>

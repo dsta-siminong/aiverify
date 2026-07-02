@@ -12,8 +12,8 @@ export default function InfoBox({ children }) {
         display: "flex",
         flexDirection: "column",
         gap: "16px",
-	breakInside: "avoid",
-	pageBreakInside: "avoid",
+        breakInside: "avoid",
+        pageBreakInside: "avoid",
       }}
     >
       {children}

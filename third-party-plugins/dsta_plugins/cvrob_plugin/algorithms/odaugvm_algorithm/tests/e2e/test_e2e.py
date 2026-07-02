@@ -32,6 +32,8 @@ binary_classification_pipeline = {
         'aug_methods': 'Rain',
         'custom_parameters': None,
         "num_epochs": 1,
+        "iou_thres": 0.65,
+        "score_thres": 0.65
     }
 }
 

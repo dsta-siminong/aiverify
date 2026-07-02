@@ -13,74 +13,6 @@ from sklearn.metrics import precision_score, recall_score  , f1_score  , roc_auc
 from sklearn.preprocessing import label_binarize
 from torchvision.ops import box_iou
 
-def compute_detection_brittleness(predA_list, predB_list, gt_list, iou_thresh=0.5):
-
-    results = []
-
-    for i in range(len(gt_list)):
-
-        predA = predA_list[i]
-        predB = predB_list[i]
-        gt = gt_list[i]
-
-        matched_A = match_with_gt(predA, gt, iou_thresh)
-        matched_B = match_with_gt(predB, gt, iou_thresh)
-
-        brittleness_vals = []
-
-        for gt_idx in gt["boxes"].shape[0]:
-
-            score_A = matched_A.get(gt_idx, 0.0)
-            score_B = matched_B.get(gt_idx, 0.0)
-
-            brittleness_vals.append(score_A - score_B)
-
-        brittleness = max(brittleness_vals) if brittleness_vals else 0.0
-
-        results.append({
-            "index": i,
-            "brittleness": brittleness,
-            "predA": predA,
-            "predB": predB,
-            "gt": gt
-        })
-
-    return results
-
-# def collect_detection_scores(model, loader, device, score_mode="max"):
-#     model.eval()
-
-#     all_scores = []
-#     all_imgs = []
-
-#     with torch.no_grad():
-#         for images, _ in loader:
-#             images = [img.to(device) for img in images]
-#             outputs = model(images)
-
-#             outputs = [
-#                 {k: v.cpu() for k, v in o.items()}
-#                 for o in outputs
-#             ]
-
-#             for img, out in zip(images, outputs):
-#                 scores = out["scores"]
-
-#                 if len(scores) == 0:
-#                     image_score = 0.0
-#                 else:
-#                     if score_mode == "max":
-#                         image_score = scores.max().item()
-#                     elif score_mode == "mean":
-#                         image_score = scores.mean().item()
-#                     else:
-#                         raise ValueError("Unknown score_mode")
-
-#                 all_scores.append(image_score)
-#                 all_imgs.append(img.cpu())
-
-#     return torch.stack(all_imgs), torch.tensor(all_scores)
-
 def triplets(s):
     """
     Split a whitespace-separated string into groups of three items.
@@ -100,51 +32,6 @@ def triplets(s):
     items = s.split()
     assert len(items) % 3 == 0, "Input length must be a multiple of 3"
     return [items[i:i+3] for i in range(0, len(items), 3)]
-
-# def collect_probs(model, dataloader, device):
-#     """
-#     Collect model predictions, labels, and input images from a DataLoader.
-
-#     The function runs the model in evaluation mode over all batches in the dataloader,
-#     computes softmax probabilities for each batch, and accumulates the input images,
-#     predicted probabilities, and ground truth labels.
-
-#     Args:
-#         model (nn.Module): A PyTorch model for which predictions are collected.
-#         dataloader (DataLoader): PyTorch DataLoader providing input batches (images and labels).
-#         device (torch.device): Device to run the model on (e.g., CPU or GPU).
-
-#     Returns:
-#         Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-#             - images: Tensor of all input images concatenated across batches.
-#             - probs: Tensor of predicted probabilities for each input.
-#             - labels: Tensor of ground truth labels for each input.
-#     """
-#     model.eval()
-
-#     probs = []
-#     labels = []
-#     images = []
-
-#     with torch.no_grad():
-#         for x, y in dataloader:
-#             x = x.to(device)
-#             y = y.to(device)
-
-#             logits = model(x)
-#             p = torch.nn.functional.softmax(logits, dim=1)
-
-#             probs.append(p.cpu())
-#             labels.append(y.cpu())
-#             images.append(x.cpu())
-
-#     return (
-#         torch.cat(images),
-#         torch.cat(probs),
-#         torch.cat(labels),
-#     )
-
-#     return torch.cat(probs), torch.cat(labels)
 
 def get_num_classes(model: nn.Module) -> int:
     """
@@ -245,201 +132,6 @@ def handle_class_names_arg(class_names_arg, model):
 
     return class_names
 
-# ==== OTHER FUNCTIONS THAT ARE NOT USED FOR THIS WHOLE ALGO BUT I DON'T WANT TO DELETE THEM YET ====
-
-class SimpleCNN(nn.Module):
-    def __init__(self):
-        super(SimpleCNN, self).__init__()
-        self.conv1 = nn.Conv2d(3, 32, kernel_size=3, padding=1)
-        self.conv2 = nn.Conv2d(32, 64, kernel_size=3, padding=1)
-        self.fc1 = nn.Linear(64*8*8, 128)
-        self.fc2 = nn.Linear(128, 10)
-        self.pool = nn.MaxPool2d(2, 2)
-        self.relu = nn.ReLU()
-
-    def forward(self, x):
-        x = self.pool(self.relu(self.conv1(x)))
-        x = self.pool(self.relu(self.conv2(x)))
-        x = x.view(x.size(0), -1)
-        x = self.relu(self.fc1(x))
-        x = self.fc2(x)
-        return x
-
-def get_image_from_url(image_url):
-    """
-    Downloads an image from a URL and converts it to a NumPy array.
-
-    Args:
-        image_url (str): The URL pointing to the image.
-
-    Returns:
-        np.ndarray: The image as a NumPy array.
-    """
-    response = requests.get(image_url)
-    image = Image.open(BytesIO(response.content))
-    image_array = np.array(image)
-    return image_array
-
-def get_image_from_path(image_path):
-    """
-    Loads an image from a local file path and converts it to a NumPy array.
-
-    Args:
-        image_path (str): The path to the image file.
-
-    Returns:
-        np.ndarray: The image as a NumPy array.
-    """
-    image = Image.open(image_path)
-    image_np = np.array(image)
-    return image_np
-
-def get_logits(model, dataloader, device):
-    """
-    Get the features, or the inputs before the last layer
-
-    Args:
-        test_loader (torch.Dataloader): data loader for test data
-        model (torch.nn.Module): torch model
-        device (torch.device): device model is on
-
-    Returns: 
-        logits (np.array): array of outputs just before they pass through the softmax/max/last layer for prediction
-    """
-    labels = np.empty((0,))
-
-    model.eval()  # Ensure the model is in evaluation mode
-    with torch.no_grad():
-        with tqdm(dataloader) as progress:
-            for batch_idx, (data, label) in enumerate(progress):
-                data, label = data, label.long()  # No need to move to GPU, stay on CPU
-                data = data.to(device)
-                label = label.to(device)
-                feature = model(data)  # Forward pass
-
-                labels = np.concatenate((labels, label.cpu()))  # Ensure labels are on CPU
-                if batch_idx == 0:
-                    features = feature.detach().cpu()  # Ensure features are on CPU
-                else:
-                    features = np.concatenate((features, feature.detach().cpu()), axis=0)
-    
-    return features, labels
-
-def plot_accuracy_vs_severity(accuracies, severities=None, graph_lib='matplotlib'):
-    """Plots the accuracy/performance of model changes against severities (of data augmentation)
-
-    Args:
-        accuracies (list): list of accuracies or performances
-        severities (list, optional): list of integers representing severities. Defaults to None.
-        graph_lib (str, optional): graphing library in python. Defaults to 'matplotlib'.
-
-    Raises:
-        ValueError: For invalid graphing library given
-
-    Returns:
-        figure: resultant graph
-    """
-    if graph_lib == 'matplotlib':
-        return plot_accuracy_vs_severity_mpl(accuracies, severities)
-    elif graph_lib == 'plotly':
-        return plot_accuracy_vs_severity_plotly(accuracies, severities)
-    else:
-        raise ValueError('not valid graphing library')
-
-def plot_accuracy_vs_severity_mpl(accuracies, severities=None):
-    """Plots the accuracy/performance of model changes against severities in matplotlib
-
-    Args:
-        accuracies (list): list of accuracies or performances
-        severities (list, optional): list of integers representing severities. Defaults to None.
-
-    Returns:
-        figure: resultant graph
-    """
-    if severities is None:
-        severities = list(range(len(accuracies)))
-
-    fig, ax = plt.subplots(figsize=(8, 5))
-    ax.plot(severities, accuracies, marker='o', linestyle='-', color='b')
-    ax.set_xlabel("Severity")
-    ax.set_ylabel("Accuracy")
-    ax.set_title("Model Accuracy vs Severity")
-    ax.set_xticks(severities)
-    ax.grid(True)
-    
-    plt.show()
-    return fig
-
-def plot_accuracy_vs_severity_plotly(accuracies, severities=None):
-    """Plots the accuracy/performance of model changes against severities in plotly
-
-    Args:
-        accuracies (list): list of accuracies or performances
-        severities (list, optional): list of integers representing severities. Defaults to None.
-
-    Returns:
-        figure: resultant graph
-    """
-    if severities is None:
-        severities = list(range(len(accuracies)))
-
-    fig = go.Figure()
-
-    # Add line plot with markers
-    fig.add_trace(go.Scatter(
-        x=severities,
-        y=accuracies,
-        mode='lines+markers',
-        line=dict(color='blue'),
-        marker=dict(size=8),
-        name='Accuracy'
-    ))
-
-    # Update layout
-    fig.update_layout(
-        title='Model Accuracy vs Severity',
-        xaxis_title='Severity',
-        yaxis_title='Accuracy',
-        xaxis=dict(tickmode='array', tickvals=severities),
-        yaxis=dict(range=[0, 1] if max(accuracies) <= 1 else None),
-        width=800,
-        height=500,
-        template='simple_white'
-    )
-
-    fig.show()
-    return fig
-
-# def collect_detection_scores(model, loader, device, score_mode="max"):
-#     model.eval()
-
-#     all_scores = []
-#     all_imgs = []
-
-#     with torch.no_grad():
-#         for images, _ in loader:
-#             images = [img.to(device) for img in images]
-#             outputs = model(images)
-
-#             for img, out in zip(images, outputs):
-
-#                 scores = out["scores"]
-
-#                 if len(scores) == 0:
-#                     image_score = 0.0
-#                 else:
-#                     if score_mode == "max":
-#                         image_score = scores.max().item()
-#                     elif score_mode == "mean":
-#                         image_score = scores.mean().item()
-#                     elif score_mode == "sum":
-#                         image_score = scores.sum().item()
-
-#                 all_scores.append(image_score)
-#                 all_imgs.append(img.cpu())
-
-#     return torch.stack(all_imgs), torch.tensor(all_scores)
-
 def collect_detection_predictions(model, loader, device):
     model.eval()
     # all_imgs = []
@@ -456,49 +148,116 @@ def collect_detection_predictions(model, loader, device):
 
     return all_preds #torch.stack(all_imgs), 
 
-
-def image_brittleness(predA, predB, iou_thresh=0.5):
+def image_brittleness(predA, predB, iou_thresh=0.5, alpha=0.5):
     boxesA, labelsA, scoresA = predA["boxes"], predA["labels"], predA["scores"]
     boxesB, labelsB, scoresB = predB["boxes"], predB["labels"], predB["scores"]
 
     if len(boxesA) == 0:
         return 0.0
 
+    # Use Hungarian matching for stable global assignment
+    from scipy.optimize import linear_sum_assignment
+
     usedB = set()
     drops = []
 
-    orderA = torch.argsort(scoresA, descending=True)
+    # Build cost matrix: only valid matches (same label, IoU >= thresh) get a real cost
+    nA, nB = len(boxesA), len(boxesB)
+    cost = torch.full((nA, nB), fill_value=float('inf'))
 
-    for ai in orderA.tolist():
-        boxA = boxesA[ai]
-        labelA = int(labelsA[ai].item())
-        scoreA = float(scoresA[ai].item())
-
-        best_j = None
-        best_iou = 0.0
-        best_scoreB = 0.0
-
-        for bj in range(len(boxesB)):
-            if bj in usedB:
+    for i in range(nA):
+        for j in range(nB):
+            if int(labelsA[i]) != int(labelsB[j]):
                 continue
-            if int(labelsB[bj].item()) != labelA:
-                continue
+            iou = box_iou(boxesA[i].unsqueeze(0), boxesB[j].unsqueeze(0))[0, 0].item()
+            if iou >= iou_thresh:
+                cost[i, j] = -iou  # we want max IoU, so negate for min-cost solver
 
-            iou = box_iou(boxA.unsqueeze(0), boxesB[bj].unsqueeze(0))[0, 0].item()
-            if iou > best_iou:
-                best_iou = iou
-                best_j = bj
-                best_scoreB = float(scoresB[bj].item())
+    cost_np = cost.numpy()
+    # Replace inf with a large finite number for the solver
+    cost_np[cost_np == float('inf')] = 1e9
+    row_ind, col_ind = linear_sum_assignment(cost_np)
 
-        if best_j is None or best_iou < iou_thresh:
-            drop = scoreA
+    matched_B = {col_ind[k]: row_ind[k] for k in range(len(row_ind))
+                 if cost[row_ind[k], col_ind[k]].item() < 1e9}
+    matched_A = {v: k for k, v in matched_B.items()}
+
+    for i in range(nA):
+        scoreA = float(scoresA[i].item())
+
+        if i not in matched_A:
+            # Detection in A has no counterpart in B: full confidence lost
+            # Check if it's a label flip (same box, wrong label) vs pure miss
+            best_iou = 0.0
+            for j in range(nB):
+                iou = box_iou(boxesA[i].unsqueeze(0), boxesB[j].unsqueeze(0))[0, 0].item()
+                best_iou = max(best_iou, iou)
+            if best_iou >= iou_thresh:
+                # Box is there but label flipped — still a full drop, but flagged differently
+                drop = scoreA  # label flip treated as full confidence loss
+            else:
+                drop = scoreA  # clean miss
         else:
-            usedB.add(best_j)
-            drop = max(0.0, scoreA - best_scoreB) + scoreA * (1.0 - best_iou)
+            j = matched_A[i]
+            scoreB = float(scoresB[j].item())
+            iou = box_iou(boxesA[i].unsqueeze(0), boxesB[j].unsqueeze(0))[0, 0].item()
 
-        drops.append(drop)
+            score_drop = max(0.0, scoreA - scoreB)                     # range in [0,1]
+            loc_drop = 1.0 - iou                                       # already in [0,1]
+            drop = alpha * score_drop + (1 - alpha) * loc_drop                   # equal weighting; tunable
 
-    return max(drops) if drops else 0.0
+        drops.append((scoreA, drop))
+
+    if not drops:
+        return 0.0
+
+    # Confidence-weighted mean drop, normalized to [0,1]
+    total_weight = sum(s for s, _ in drops)
+    brittleness = sum(s * d for s, d in drops) / total_weight
+    return brittleness  # guaranteed in [0,1]
+
+# def image_brittleness0(predA, predB, iou_thresh=0.5):
+#     boxesA, labelsA, scoresA = predA["boxes"], predA["labels"], predA["scores"]
+#     boxesB, labelsB, scoresB = predB["boxes"], predB["labels"], predB["scores"]
+
+#     if len(boxesA) == 0:
+#         return 0.0
+
+#     usedB = set()
+#     drops = []
+
+#     orderA = torch.argsort(scoresA, descending=True)
+
+#     for ai in orderA.tolist():
+#         boxA = boxesA[ai]
+#         labelA = int(labelsA[ai].item())
+#         scoreA = float(scoresA[ai].item())
+
+#         best_j = None
+#         best_iou = 0.0
+#         best_scoreB = 0.0
+
+#         for bj in range(len(boxesB)):
+#             if bj in usedB:
+#                 continue
+#             if int(labelsB[bj].item()) != labelA:
+#                 continue
+
+#             iou = box_iou(boxA.unsqueeze(0), boxesB[bj].unsqueeze(0))[0, 0].item()
+#             if iou > best_iou:
+#                 best_iou = iou
+#                 best_j = bj
+#                 best_scoreB = float(scoresB[bj].item())
+
+#         if best_j is None or best_iou < iou_thresh:
+#             drop = scoreA
+#         else:
+#             usedB.add(best_j)
+#             drop = max(0.0, scoreA - best_scoreB) + scoreA * (1.0 - best_iou)
+
+#         drops.append(drop)
+
+#     return max(drops) if drops else 0.0
 
 # def serialize_detection(pred):
 #     return {
@@ -537,3 +296,47 @@ class DetectionDataset(torch.utils.data.Dataset):
             image = self.transform(image)
 
         return image, target_dict
+
+def delta_detections(result, N=0):
+    num_A = len(result.predA["boxes"])
+    num_B = len(result.predB["boxes"])
+
+    decrease = num_A - num_B
+
+    if N < 0:
+        raise ValueError("N must be non-negative")
+
+    # Fractional threshold
+    if isinstance(N, float):
+        if N > 1:
+            raise ValueError("Fractional N must be between 0 and 1")
+
+        if num_A == 0:
+            return False
+
+        return decrease / num_A >= N
+
+    # Integer threshold
+    return decrease > N
+
+def delta_detections_labels(result, N=0):
+    num_A = len(result.predA["boxes"])
+    num_labels = len(result.label)
+
+    decrease = num_labels - num_A
+
+    if N < 0:
+        raise ValueError("N must be non-negative")
+
+    # Fractional threshold
+    if isinstance(N, float):
+        if N > 1:
+            raise ValueError("Fractional N must be between 0 and 1")
+
+        if num_A == 0:
+            return False
+
+        return decrease / num_A <= N
+
+    # Integer threshold
+    return decrease < N

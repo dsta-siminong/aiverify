@@ -251,127 +251,127 @@ def visualize_topk_matplotlib(
 
     return save_path, fragment_paths
 
-def visualize_topk_plotly(
-    results_sorted, 
-    imgs_A, imgs_B, 
-    probs_A, probs_B, 
-    K=10, 
-    class_names=None, 
-    transform=None,
-    directory=Path(),
-    image_paths=None
-):
-    def tensor_to_plotly_img(x, transform=None):
-        """
-        Convert C,H,W tensor in 0..1 -> H,W,C uint8 0..255
-        """
-        x = unnormalize(x, transform) #x.permute(1,2,0).numpy()  # H,W,C
-        x = (x * 255).astype("uint8")
-        return x
-    print(f"TRANSFORM: {transform}")
-    topk = results_sorted[:K]
+# def visualize_topk_plotly(
+#     results_sorted, 
+#     imgs_A, imgs_B, 
+#     probs_A, probs_B, 
+#     K=10, 
+#     class_names=None, 
+#     transform=None,
+#     directory=Path(),
+#     image_paths=None
+# ):
+#     def tensor_to_plotly_img(x, transform=None):
+#         """
+#         Convert C,H,W tensor in 0..1 -> H,W,C uint8 0..255
+#         """
+#         x = unnormalize(x, transform) #x.permute(1,2,0).numpy()  # H,W,C
+#         x = (x * 255).astype("uint8")
+#         return x
+#     print(f"TRANSFORM: {transform}")
+#     topk = results_sorted[:K]
 
-    fig = make_subplots(
-        rows=K,
-        cols=3,
-        column_widths=[0.35, 0.3, 0.35],  # third column narrower
-        horizontal_spacing=0.05,
-        vertical_spacing=0.05,
-        specs=[[{"type": "image"}, {"type": "xy"}, {"type": "image"}] for _ in range(K)],
-    )
+#     fig = make_subplots(
+#         rows=K,
+#         cols=3,
+#         column_widths=[0.35, 0.3, 0.35],  # third column narrower
+#         horizontal_spacing=0.05,
+#         vertical_spacing=0.05,
+#         specs=[[{"type": "image"}, {"type": "xy"}, {"type": "image"}] for _ in range(K)],
+#     )
 
-    for r, res in enumerate(topk, start=1):
-        i = res.index
-        if image_paths is not None:
-            idx = Path(str(image_paths[i])).name
-        else:
-            idx = i
+#     for r, res in enumerate(topk, start=1):
+#         i = res.index
+#         if image_paths is not None:
+#             idx = Path(str(image_paths[i])).name
+#         else:
+#             idx = i
 
-        # predA = get_topk_predictions(probs_A[i], k=1)[0]
-        # predB = get_topk_predictions(probs_B[i], k=1)[0]
-        # predA_int = predA[0]; initial_class_prob_A = predA[1]
-        # predB_int = predB[0]; resultant_class_prob_B = predB[1]
-        # classA = predA[0]
-        # classB = predB[0]
-        # if class_names is not None:
-        #     classA = class_names[predA[0]]
-        #     classB = class_names[predB[0]]
-        # print('&'*16)
-        # print(predA_int , res.predA)
-        # print(predB_int , res.predB)
-        # print(initial_class_prob_A , probs_A[i][predA_int].item())
-        # print(resultant_class_prob_B, probs_B[i][predB_int].item())
-        # print('&'*16)
+#         # predA = get_topk_predictions(probs_A[i], k=1)[0]
+#         # predB = get_topk_predictions(probs_B[i], k=1)[0]
+#         # predA_int = predA[0]; initial_class_prob_A = predA[1]
+#         # predB_int = predB[0]; resultant_class_prob_B = predB[1]
+#         # classA = predA[0]
+#         # classB = predB[0]
+#         # if class_names is not None:
+#         #     classA = class_names[predA[0]]
+#         #     classB = class_names[predB[0]]
+#         # print('&'*16)
+#         # print(predA_int , res.predA)
+#         # print(predB_int , res.predB)
+#         # print(initial_class_prob_A , probs_A[i][predA_int].item())
+#         # print(resultant_class_prob_B, probs_B[i][predB_int].item())
+#         # print('&'*16)
 
-        predA_int = res.predA
-        predB_int = res.predB
-        classA = predA_int
-        classB = predB_int
-        if class_names is not None:
-            classA = class_names[predA_int]
-            classB = class_names[predB_int]
+#         predA_int = res.predA
+#         predB_int = res.predB
+#         classA = predA_int
+#         classB = predB_int
+#         if class_names is not None:
+#             classA = class_names[predA_int]
+#             classB = class_names[predB_int]
 
-        initial_class_prob_A = probs_A[i][predA_int].item()
-        resultant_initial_class_prob_B = probs_B[i][predA_int].item()
-        resultant_class_prob_B = probs_B[i][predB_int].item()
-        # resultant_initial_class_prob_B = predA[1]-res.brittleness
-        # resultant_initial_class_prob_B_0 = probs_B[i][predA_int].item()
-        # print(resultant_initial_class_prob_B_0 , resultant_initial_class_prob_B)
-        # assert resultant_initial_class_prob_B_0 == resultant_initial_class_prob_B
+#         initial_class_prob_A = probs_A[i][predA_int].item()
+#         resultant_initial_class_prob_B = probs_B[i][predA_int].item()
+#         resultant_class_prob_B = probs_B[i][predB_int].item()
+#         # resultant_initial_class_prob_B = predA[1]-res.brittleness
+#         # resultant_initial_class_prob_B_0 = probs_B[i][predA_int].item()
+#         # print(resultant_initial_class_prob_B_0 , resultant_initial_class_prob_B)
+#         # assert resultant_initial_class_prob_B_0 == resultant_initial_class_prob_B
 
-        fig.add_trace(
-            go.Image(z=imgA),
-            row=r, col=1
-        )
-        fig.add_trace(
-            go.Scatter(
-                x=[0.5],
-                y=[0.5],
-                mode="text",
-                text=[(
-                    f"<b>File path:</b> {idx} <br><br>"
-                    f"<b>Prediction</b><br>"
-                    f"A: ŷ={classA} | B: ŷ={classB} <br><br>"
-                    f"<b>Before Corruption:</b><br>"
-                    f"Predict Proba for Class {classA}: {initial_class_prob_A:.3f}<br><br>"
-                    f"<b>After Corruption:</b><br>"
-                    f"Predict Proba for Class {classA}:  {resultant_initial_class_prob_B:.3f}<br>"
-                    f"Δ={res.brittleness:.3f}<br>"
-                    f"Predict_Proba for Class {classB}: {resultant_class_prob_B:.3f}"
-                )],
-                textposition="middle center",
-                textfont=dict(size=12),
-                showlegend=False
-            ),
-            row=r,
-            col=2
-        )
-        fig.update_xaxes(range=[0, 1], visible=False, row=r, col=2)
-        fig.update_yaxes(range=[0, 1], visible=False, row=r, col=2)
-        fig.add_trace(
-            go.Image(z=imgB),
-            row=r, col=3
-        )
+#         fig.add_trace(
+#             go.Image(z=imgA),
+#             row=r, col=1
+#         )
+#         fig.add_trace(
+#             go.Scatter(
+#                 x=[0.5],
+#                 y=[0.5],
+#                 mode="text",
+#                 text=[(
+#                     f"<b>File path:</b> {idx} <br><br>"
+#                     f"<b>Prediction</b><br>"
+#                     f"A: ŷ={classA} | B: ŷ={classB} <br><br>"
+#                     f"<b>Before Corruption:</b><br>"
+#                     f"Predict Proba for Class {classA}: {initial_class_prob_A:.3f}<br><br>"
+#                     f"<b>After Corruption:</b><br>"
+#                     f"Predict Proba for Class {classA}:  {resultant_initial_class_prob_B:.3f}<br>"
+#                     f"Δ={res.brittleness:.3f}<br>"
+#                     f"Predict_Proba for Class {classB}: {resultant_class_prob_B:.3f}"
+#                 )],
+#                 textposition="middle center",
+#                 textfont=dict(size=12),
+#                 showlegend=False
+#             ),
+#             row=r,
+#             col=2
+#         )
+#         fig.update_xaxes(range=[0, 1], visible=False, row=r, col=2)
+#         fig.update_yaxes(range=[0, 1], visible=False, row=r, col=2)
+#         fig.add_trace(
+#             go.Image(z=imgB),
+#             row=r, col=3
+#         )
 
-    fig.update_xaxes(showticklabels=False, visible=False)
-    fig.update_yaxes(showticklabels=False, visible=False)
-    fig.update_layout(
-        height=360 * K,
-        showlegend=False,
-        title_text="Top-K Most Brittle Images (A → B)",
-        margin=dict(l=0, r=0, t=60, b=0),
-        autosize=True,
-        template="plotly_white"
-    )
-    save_path = directory / "brittleness_top_k.html"
+#     fig.update_xaxes(showticklabels=False, visible=False)
+#     fig.update_yaxes(showticklabels=False, visible=False)
+#     fig.update_layout(
+#         height=360 * K,
+#         showlegend=False,
+#         title_text="Top-K Most Brittle Images (A → B)",
+#         margin=dict(l=0, r=0, t=60, b=0),
+#         autosize=True,
+#         template="plotly_white"
+#     )
+#     save_path = directory / "brittleness_top_k.html"
 
-    fig.write_html(
-        save_path,
-        full_html=True,
-        include_plotlyjs="inline",
-        config={"responsive": True}
-    )
-    return save_path
+#     fig.write_html(
+#         save_path,
+#         full_html=True,
+#         include_plotlyjs="inline",
+#         config={"responsive": True}
+#     )
+#     return save_path
 
 def visualize_in_html(
     results_sorted, 

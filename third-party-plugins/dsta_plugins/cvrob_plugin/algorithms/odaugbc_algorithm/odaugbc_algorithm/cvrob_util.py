@@ -107,169 +107,6 @@ def _match_predictions_to_gt(
             matrix[int(glabel), 0] += 1        # GT=class x, PRED=background
             stats[class_name]["FN"] += 1
 
-def _compute_per_class_metrics(stats: dict) -> dict:
-    """Convert raw TP/FP/FN/support accumulators into precision/recall/f1.
- 
-    Args:
-        stats: {class_name: {"TP": int, "FP": int, "FN": int, "support": int}}
- 
-    Returns:
-        {class_name: {"TP", "FP", "FN", "precision", "recall", "f1_score", "support"}}
-    """
-    per_class = {}
-    for class_name, s in stats.items():
-        TP = s["TP"]
-        FP = s["FP"]
-        FN = s["FN"]
- 
-        precision = TP / (TP + FP) if (TP + FP) > 0 else 0.0
-        recall    = TP / (TP + FN) if (TP + FN) > 0 else 0.0
-        f1        = (
-            2 * precision * recall / (precision + recall)
-            if (precision + recall) > 0 else 0.0
-        )
- 
-        per_class[class_name] = {
-            "TP":        TP,
-            "FP":        FP,
-            "FN":        FN,
-            "precision": precision,
-            "recall":    recall,
-            "f1_score":  f1,
-            "support":   s["support"],
-        }
-    return per_class
-
-def evaluate_detection_detailed(
-    model,
-    loader,
-    device,
-    class_names,
-    iou_thresh=0.5,
-    score_thresh=0.5
-):
-    """Evaluate an object detection model with detailed per-class metrics.
- 
-    Performs object detection evaluation using mean Average Precision (mAP),
-    confusion matrix analysis, and per-class classification statistics.
-    Predictions are matched to ground-truth boxes using IoU-based greedy
-    matching, with optional confidence score filtering.
- 
-    In addition to the overall mAP@IoU metric, this function computes:
-        - True positives (TP), false positives (FP), and false negatives (FN)
-          for each class.
-        - Per-class precision, recall, and F1-score.
-        - A confusion matrix including background errors.
- 
-    Args:
-        model (torch.nn.Module):
-            Object detection model to evaluate. The model should accept a list
-            of image tensors and return a list of prediction dictionaries
-            containing ``boxes``, ``labels``, and ``scores``.
- 
-        loader (torch.utils.data.DataLoader):
-            DataLoader yielding batches of ``(images, targets)``, where:
- 
-            - ``images`` is a list of image tensors.
-            - ``targets`` is a list of dictionaries containing ground-truth
-              annotations, including ``boxes`` and ``labels``.
- 
-        device (torch.device):
-            Device used for model inference (e.g., CPU or CUDA device).
- 
-        class_names (dict):
-            Mapping from class IDs (as strings) to human-readable class names.
-            The class mapping should include all classes present in the dataset,
-            including the background class if used.
- 
-        iou_thresh (float, optional):
-            IoU threshold used to determine whether a predicted bounding box
-            matches a ground-truth box. Defaults to ``0.5``.
- 
-        score_thresh (float, optional):
-            Minimum confidence score required for a prediction to be considered
-            during detailed per-class evaluation. Predictions below this
-            threshold are discarded. Defaults to ``0.5``.
- 
-    Returns:
-        dict:
-            Dictionary containing detailed evaluation results:
- 
-            - ``map_50`` (float):
-                Mean Average Precision at the specified IoU threshold.
- 
-            - ``per_class`` (dict):
-                Per-class evaluation statistics. Each class contains:
-                    - ``TP`` (int): Number of true positive detections.
-                    - ``FP`` (int): Number of false positive detections.
-                    - ``FN`` (int): Number of missed ground-truth objects.
-                    - ``precision`` (float): Detection precision.
-                    - ``recall`` (float): Detection recall.
-                    - ``f1_score`` (float): Harmonic mean of precision and recall.
-                    - ``support`` (int): Number of ground-truth instances.
- 
-            - ``matrix`` (numpy.ndarray):
-                Confusion matrix of shape ``(num_classes, num_classes)``.
-                Rows represent ground-truth classes and columns represent
-                predicted classes. Background entries represent missed
-                detections and false positive predictions.
-    """
-    num_classes = len(class_names)
-    matrix = np.zeros((num_classes, num_classes), dtype=np.float32)
-    metric = MeanAveragePrecision(iou_thresholds=[iou_thresh], class_metrics=True)
- 
-    stats = {
-        class_name: {"TP": 0, "FP": 0, "FN": 0, "support": 0}
-        for class_name in class_names.values()
-    }
- 
-    model.eval()
-    with torch.no_grad():
-        for images, targets in loader:
-            images = [img.to(device) for img in images]
-            targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
-            outputs = model(images)
- 
-            preds = [{k: v.cpu() for k, v in o.items()} for o in outputs]
-            gts   = [{k: v.cpu() for k, v in t.items()} for t in targets]
- 
-            metric.update(preds, gts)
- 
-            for pred, gt in zip(preds, gts):
-                pred_boxes, pred_labels, pred_scores = _filter_and_sort_preds(pred, score_thresh)
-                _match_predictions_to_gt(
-                    pred_boxes, pred_labels,
-                    gt["boxes"], gt["labels"],
-                    iou_thresh, class_names, stats, matrix,
-                )
- 
-    per_class = _compute_per_class_metrics(stats)
-    map_result = metric.compute()
-
-    classes = map_result["classes"]
-    aps = map_result["map_per_class"]
-
-    # TorchMetrics returns scalars when there's only one class
-    if classes.ndim == 0:
-        classes = classes.unsqueeze(0)
-        aps = aps.unsqueeze(0)
-
-    per_class_ap = {
-        class_names[str(cls_idx.item())]: float(ap)
-        for cls_idx, ap in zip(classes, aps)
-    }
-
-    for class_name, metrics in per_class.items():
-        metrics["map_50"] = per_class_ap.get(class_name, float("nan"))
-
-    metric.reset()
-
-    return {
-        "map_50": map_result["map_50"].item(),
-        "per_class": per_class,
-        "matrix": matrix,
-    }
-
 def triplets(s):
     """
     Split a whitespace-separated string into groups of three items.
@@ -454,254 +291,257 @@ class DetectionDataset(torch.utils.data.Dataset):
 
 # ======= COCO STUFF =========
 
-# def create_coco_gt(
-#     image_paths,
-#     df,
-#     class_names,
-#     output_json,
-# ):
-#     """
-#     Create a COCO-format ground-truth json.
+def create_coco_gt(
+    image_paths,
+    df,
+    class_names,
+    output_json,
+):
+    """
+    Create a COCO-format ground-truth json.
 
-#     Parameters
-#     ----------
-#     image_paths : list[str] or list[Path]
-#         List of image paths (same images as used in the dataset).
+    Parameters
+    ----------
+    image_paths : list[str] or list[Path]
+        List of image paths (same images as used in the dataset).
 
-#     df : pandas dataframe containing:
-#         file_name
-#         x_min
-#         x_max
-#         y_min
-#         y_max
-#         class_id
+    df : pandas dataframe containing:
+        file_name
+        x_min
+        x_max
+        y_min
+        y_max
+        class_id
 
-#     class_names : dict
-#         Example:
-#             {"0": "cat",
-#              "1": "dog"}
+    class_names : dict
+        Example:
+            {"0": "cat",
+             "1": "dog"}
 
-#     output_json : str
-#         Output json filename.
-#     """
-#     images = []
-#     annotations = []
-#     ann_id = 1
+    output_json : str
+        Output json filename.
+    """
+    images = []
+    annotations = []
+    ann_id = 1
 
-#     # map filename -> image_id
-#     image_id_map = {}
+    # map filename -> image_id
+    image_id_map = {}
 
-#     for image_id, img_path in enumerate(image_paths, start=1):
+    for image_id, img_path in enumerate(image_paths, start=1):
 
-#         img_path = Path(img_path)
-#         filename = img_path.name
+        img_path = Path(img_path)
+        filename = img_path.name
 
-#         with Image.open(img_path) as img:
-#             width, height = img.size
+        with Image.open(img_path) as img:
+            width, height = img.size
 
-#         images.append({
-#             "id": image_id,
-#             "file_name": filename,
-#             "width": width,
-#             "height": height,
-#         })
+        images.append({
+            "id": image_id,
+            "file_name": filename,
+            "width": width,
+            "height": height,
+        })
 
-#         image_id_map[filename] = image_id
+        image_id_map[filename] = image_id
 
-#     # annotations
-#     for _, row in df.iterrows():
+    # annotations
+    for _, row in df.iterrows():
 
-#         filename = row["file_name"]
+        filename = row["file_name"]
 
-#         if filename not in image_id_map:
-#             continue
+        if filename not in image_id_map:
+            continue
 
-#         x_min = float(row["x_min"])
-#         x_max = float(row["x_max"])
-#         y_min = float(row["y_min"])
-#         y_max = float(row["y_max"])
+        x_min = float(row["x_min"])
+        x_max = float(row["x_max"])
+        y_min = float(row["y_min"])
+        y_max = float(row["y_max"])
 
-#         w = x_max - x_min
-#         h = y_max - y_min
+        w = x_max - x_min
+        h = y_max - y_min
 
-#         annotations.append({
-#             "id": ann_id,
-#             "image_id": image_id_map[filename],
-#             "category_id": int(row["class_id"]),
-#             "bbox": [x_min, y_min, w, h],
-#             "area": w * h,
-#             "iscrowd": 0,
-#         })
+        annotations.append({
+            "id": ann_id,
+            "image_id": image_id_map[filename],
+            "category_id": int(row["class_id"]),
+            "bbox": [x_min, y_min, w, h],
+            "area": w * h,
+            "iscrowd": 0,
+        })
 
-#         ann_id += 1
+        ann_id += 1
 
-#     # categories
-#     categories = [
-#         {
-#             "id": int(cid),
-#             "name": name,
-#             "supercategory": "none",
-#         }
-#         for cid, name in sorted(class_names.items(), key=lambda x: int(x[0]))
-#     ]
+    # categories
+    categories = [
+        {
+            "id": int(cid),
+            "name": name,
+            "supercategory": "none",
+        }
+        for cid, name in sorted(class_names.items(), key=lambda x: int(x[0]))
+    ]
 
-#     coco = {
-#         "images": images,
-#         "annotations": annotations,
-#         "categories": categories,
-#     }
+    coco = {
+        "images": images,
+        "annotations": annotations,
+        "categories": categories,
+    }
 
-#     with open(output_json, "w") as f:
-#         json.dump(coco, f, indent=2)
+    with open(output_json, "w") as f:
+        json.dump(coco, f, indent=2)
 
-#     print(f"Saved COCO annotations to {output_json}")
+    print(f"Saved COCO annotations to {output_json}")
 
-# def create_coco_predictions(
-#     model,
-#     loader,
-#     device,
-#     image_paths,
-#     output_json,
-#     score_threshold=0.0,
-# ):
-#     """
-#     Creates a COCO detection json.
+def evaluate_detection_and_create_coco_predictions(
+    model,
+    loader,
+    device,
+    class_names,
+    image_paths,
+    output_json,
+    iou_thresh=0.5,
+    score_thresh=0.5,
+    coco_score_threshold=0.0,
+):
+    """
+    Combined version of evaluate_detection_detailed + create_coco_predictions.
+    Runs model inference exactly once per batch and feeds the outputs into
+    both the TP/FP/FN/confusion-matrix/mAP bookkeeping AND the COCO predictions
+    JSON, instead of running two full passes over the loader.
 
-#     Assumes image_paths are in the same order as loader.dataset.
-#     """
+    Args mirror the two original functions:
+        - iou_thresh / score_thresh: used for the detailed per-class stats path
+          (same as evaluate_detection_detailed).
+        - coco_score_threshold: minimum score for a box to be written into the
+          COCO predictions JSON (same as create_coco_predictions's
+          score_threshold). Kept separate since the two thresholds were
+          allowed to differ before merging (score_thresh vs score_threshold).
 
-#     # Same mapping used when creating the GT json
-#     filename_to_image_id = {
-#         Path(p).name: idx + 1
-#         for idx, p in enumerate(image_paths)
-#     }
+    Returns same dict as evaluate_detection_detailed:
+        {"map": float, "per_class": dict, "matrix": ndarray}
+    Also writes output_json, same as create_coco_predictions did.
+    """
+    num_classes = len(class_names)
+    matrix = np.zeros((num_classes, num_classes), dtype=np.float32)
+    metric = MeanAveragePrecision(iou_thresholds=[iou_thresh], class_metrics=True)
 
-#     predictions = []
+    per_class = {
+        class_name: {"TP": 0, "FP": 0, "FN": 0, "support": 0}
+        for class_name in class_names.values()
+    }#stats
 
-#     model.eval()
+    filename_to_image_id = {
+        Path(p).name: idx + 1
+        for idx, p in enumerate(image_paths)
+    }
+    predictions = []
+    dataset_idx = 0
 
-#     dataset_idx = 0
+    model.eval()
+    with torch.no_grad():
+        for images, targets in loader:
+            images = [img.to(device) for img in images]
+            targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
 
-#     with torch.no_grad():
+            outputs = model(images)  # <-- single forward pass, shared by both paths
 
-#         for images, targets in loader:
+            preds = [{k: v.cpu() for k, v in o.items()} for o in outputs]
+            gts   = [{k: v.cpu() for k, v in t.items()} for t in targets]
 
-#             images = [img.to(device) for img in images]
+            metric.update(preds, gts)
 
-#             outputs = model(images)
+            for pred, gt in zip(preds, gts):
+                pred_boxes, pred_labels, pred_scores = _filter_and_sort_preds(pred, score_thresh)
+                _match_predictions_to_gt(
+                    pred_boxes, pred_labels,
+                    gt["boxes"], gt["labels"],
+                    iou_thresh, class_names, per_class, matrix,
+                )
 
-#             for output in outputs:
+            # --- COCO predictions, built from the same `preds` we just computed ---
+            for pred in preds:
+                filename = Path(image_paths[dataset_idx]).name
+                image_id = filename_to_image_id[filename]
 
-#                 filename = Path(image_paths[dataset_idx]).name
-#                 image_id = filename_to_image_id[filename]
+                boxes = pred["boxes"].numpy()
+                labels = pred["labels"].numpy()
+                scores = pred["scores"].numpy()
 
-#                 boxes = output["boxes"].cpu().numpy()
-#                 labels = output["labels"].cpu().numpy()
-#                 scores = output["scores"].cpu().numpy()
+                for box, label, score in zip(boxes, labels, scores):
+                    if score < coco_score_threshold:
+                        continue
+                    x1, y1, x2, y2 = box
+                    predictions.append({
+                        "image_id": image_id,
+                        "category_id": int(label),
+                        "bbox": [
+                            float(x1),
+                            float(y1),
+                            float(x2 - x1),
+                            float(y2 - y1),
+                        ],
+                        "score": float(score),
+                    })
+                dataset_idx += 1
 
-#                 for box, label, score in zip(boxes, labels, scores):
+    with open(output_json, "w") as f:
+        json.dump(predictions, f, indent=2)
+    print(f"Saved predictions to {output_json}")
 
-#                     if score < score_threshold:
-#                         continue
+    # per_class = stats #_compute_per_class_metrics(stats)
+    map_result = metric.compute()
 
-#                     x1, y1, x2, y2 = box
+    classes = map_result["classes"]
+    aps = map_result["map_per_class"]
+    if classes.ndim == 0:
+        classes = classes.unsqueeze(0)
+        aps = aps.unsqueeze(0)
 
-#                     predictions.append({
-#                         "image_id": image_id,
-#                         "category_id": int(label),
-#                         "bbox": [
-#                             float(x1),
-#                             float(y1),
-#                             float(x2 - x1),
-#                             float(y2 - y1),
-#                         ],
-#                         "score": float(score),
-#                     })
+    per_class_ap = {
+        class_names[str(cls_idx.item())]: float(ap)
+        for cls_idx, ap in zip(classes, aps)
+    }
+    for class_name, metrics in per_class.items():
+        metrics["map"] = per_class_ap.get(class_name, float("nan"))
 
-#                 dataset_idx += 1
+    metric.reset()
 
-#     with open(output_json, "w") as f:
-#         json.dump(predictions, f, indent=2)
+    return {
+        "map": map_result["map"].item(),
+        "per_class": per_class,
+        "matrix": matrix,
+    }
 
-#     print(f"Saved predictions to {output_json}")
+def average_summaries(all_summaries):
+    '''
+    Average a list of summary dicts produced by collectSummaryResults()
+    across multiple epochs into a single dict of the same structure.
 
-    # def _run_severity_epochs_coco(
-    #     self,
-    #     model,
-    #     test_loader,
-    #     aug_class,
-    #     severity_name: str,
-    #     severity_idx: int,
-    #     num_epochs: int,
-    #     class_names: dict,
-    #     gt_json: str,
-    #     image_paths: list,
-    # ):
-    #     """
-    #     Run ``num_epochs`` evaluation passes for one (aug, severity) combination
-    #     and return averaged detection statistics.
+    :param all_summaries: list of dicts, each from collectSummaryResults()
+    :return: dict with same structure, leaf values averaged across epochs
+    '''
+    if not all_summaries:
+        raise ValueError("all_summaries is empty")
 
-    #     Returns:
-    #         avg_stats  - per-class metrics averaged over epochs
-    #         avg_matrix - detection-matching matrix averaged over epochs
-    #         avg_map50  - scalar mAP@50 averaged over valid epochs (None if none valid)
-    #     """
-    #     pr_json = 'predictions.json'
-    #     all_stats = []; all_matrices = []; all_map50s = []
+    avg = {
+        'coco_summary': {},
+        'fbeta_summary': {},
+        'best_fbeta': {},
+        'average_method': all_summaries[0]['average_method'],  # same for all epochs
+    }
 
-    #     for i in range(num_epochs):
-    #         print("NUMEPOCHS", num_epochs)
-    #         seed = 1000 * severity_idx + i
-    #         aug_class.set_seed(seed)
+    # flat dicts: just average each key across summaries
+    for section in ('coco_summary', 'fbeta_summary'):
+        for key in all_summaries[0][section]:
+            values = [s[section][key] for s in all_summaries]
+            avg[section][key] = float(np.nanmean(values))
 
-    #         if severity_name == "None":
-    #             corrupted_loader = test_loader
-    #         else:
-    #             corrupted_loader = aug_class.corr_func_dataloader(test_loader, severity_name)
+    # best_fbeta is one level deeper: {key: {score, confThr, precision, recall}}
+    for key in all_summaries[0]['best_fbeta']:
+        avg['best_fbeta'][key] = {
+            field: float(np.nanmean([s['best_fbeta'][key][field] for s in all_summaries]))
+            for field in all_summaries[0]['best_fbeta'][key]
+        }
 
-    #         det_stats = evaluate_detection_detailed(
-    #             model,
-    #             corrupted_loader,
-    #             None,
-    #             class_names,
-    #             iou_thresh=0.5,
-    #             score_thresh=0.5,
-    #         )
-    #         create_coco_predictions(
-    #             model,
-    #             corrupted_loader,
-    #             None,
-    #             image_paths,
-    #             pr_json,
-    #             score_threshold=0.5,
-    #         )
-    #         cocoGt = COCO(gt_json)
-    #         cocoDt = cocoGt.loadRes(pr_json)  # initialize COCO prediction api
-    #         cocoEval = COCOeval(cocoGt, cocoDt, 'bbox')  # initialize COCO evaluation api
-    #         cocoEval.evaluate()
-    #         cocoEval.accumulateFBeta()
-    #         per_class_report = cocoEval.generateReport()
-
-    #         cocoEval.accumulate()
-    #         cocoEval.summarize()
-    #         map50 = cocoEval.stats[1]
-    #         print('MAP50', map50)
-
-    #         for k,v in det_stats['per_class'].items():
-    #             assert k in per_class_report
-    #             class_report = per_class_report[k]
-    #             for k1,v1 in class_report.items():
-    #                 det_stats['per_class'][k][k1] = v1
-
-    #         all_stats.append(det_stats["per_class"])
-    #         all_matrices.append(det_stats["matrix"])
-    #         all_map50s.append(det_stats["map_50"])
-
-    #     avg_stats = average_detection_stats(all_stats)
-    #     avg_matrix = np.mean(all_matrices, axis=0)
-    #     avg_map50 = (
-    #         float(np.mean([x for x in all_map50s if x >= 0]))
-    #         if any(x >= 0 for x in all_map50s)
-    #         else None
-    #     )
-    #     return avg_stats, avg_matrix, avg_map50
+    return avg

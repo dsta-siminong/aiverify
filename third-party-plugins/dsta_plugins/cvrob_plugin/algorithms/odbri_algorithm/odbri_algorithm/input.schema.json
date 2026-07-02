@@ -49,6 +49,18 @@
             "description": "Custom parameters for the augmentation_method(s) (default for no custom params: None)",
             "type": ["string", "null"],
             "default": null
+        },
+        "iou_thres": {
+            "title": "IOU threshold",
+            "description": "IOU threshold for COCO",
+            "type": "number",
+            "default": 0.5
+        },
+        "score_thres": {
+            "title": "Score threshold",
+            "description": "Score threshold for COCO",
+            "type": "number",
+            "default": 0.5
         }
     }
 }

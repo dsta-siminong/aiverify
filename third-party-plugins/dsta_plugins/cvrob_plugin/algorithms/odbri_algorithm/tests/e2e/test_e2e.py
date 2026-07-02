@@ -25,6 +25,8 @@ binary_classification_pipeline = {
         "severity_after": None,
         "severity_before_idx": 0,
         "severity_after_idx": 5,
+        "iou_thres": 0.6,
+        "score_thres": 0.6
     }
 }
 

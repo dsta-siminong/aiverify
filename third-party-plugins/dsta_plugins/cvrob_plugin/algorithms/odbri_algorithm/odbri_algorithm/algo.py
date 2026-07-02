@@ -360,7 +360,11 @@ class Plugin(IAlgorithm):
         self._save_folder.mkdir(parents=True, exist_ok=True)
 
         # Apply user defined parameters to default parameters
-        aug_dict = make_augmentation_dict(self._input_arguments['aug_library'])
+        aug_library = self._input_arguments.get('aug_library') or "albumentations"
+        aug_dict = make_augmentation_dict(aug_library)
+        self._iou_thres = self._input_arguments.get('iou_thres') or 0.5
+        self._score_thres = self._input_arguments.get('score_thres') or 0.5
+
         custom_parameters = None
         try:
             custom_parameters = self._input_arguments['custom_parameters']
@@ -456,7 +460,7 @@ class Plugin(IAlgorithm):
         print("### Collected detection scores~ ###")
 
         brittleness = torch.tensor([
-            image_brittleness(a, b, iou_thresh=0.5)
+            image_brittleness(a, b, iou_thresh=self._iou_thres)
             for a, b in zip(scores_A, scores_B)
         ])
         # brittleness = scores_A - scores_B
@@ -507,7 +511,6 @@ class Plugin(IAlgorithm):
                 s = aug_class.determine_severity(s_idx)
                 corrupted_images = [
                     self._get_one_corrupted_image_direct(image_paths, ground_truths, aug_class, s, idx)
-                    # self._get_one_corrupted_image(test_loader, aug_class, s, idx)
                     for idx in top_k_indices
                 ]
 
@@ -519,9 +522,9 @@ class Plugin(IAlgorithm):
 
                 corrupted_dir = Path(aug_name) / f"severity_{s}"
 
-                for i,idx in enumerate(top_k_indices):
+                for i,display_idx in enumerate(top_k_indices):
 
-                    image_path = self._save_one_image(corrupted_images[i], str(corrupted_dir), idx)
+                    image_path = self._save_one_image(corrupted_images[i], str(corrupted_dir), display_idx)
 
                     output = outputs[i]
                     prediction = {
@@ -529,14 +532,8 @@ class Plugin(IAlgorithm):
                         "labels": output["labels"].cpu().numpy().tolist(),
                         "scores": output["scores"].cpu().numpy().tolist(),
                     }
-                    # ground_truth_raw = ground_truths[idx]
 
-                    # ground_truth = {
-                    #     "boxes": [x["bbox"] for x in ground_truth_raw],
-                    #     "labels": [x["label"] for x in ground_truth_raw],
-                    # }
-
-                    ground_truth = ground_truths[idx]
+                    ground_truth = ground_truths[display_idx]
 
                     image_path2 = self._save_image_with_predictions(
                         image=corrupted_images[i],
@@ -547,7 +544,8 @@ class Plugin(IAlgorithm):
                         gt_labels=[obj["label"] for obj in ground_truth],
                         class_names=class_names,
                         subfolder_name=str(corrupted_dir),
-                        idx=idx,
+                        idx=display_idx,
+                        score_threshold=self._score_thres
                     )
 
                     random_display = [
@@ -562,18 +560,7 @@ class Plugin(IAlgorithm):
         output_results.update(
             {"display_info": display_info}
         )
-        # results = [
-        #     r for r in b_result.results
-        #     #if r.brittleness > 0.1
-        # ]
-        # all_brit = [r.brittleness for r in results]
-        # print(f"results brit stats min {min(all_brit)}, max {max(all_brit)}, mean {sum(all_brit)/len(all_brit)}")
-        # results = [
-        #     r for r in b_result.results if delta_detections(r, 0.5)
-        # ]
-        # results = [
-        #     r for r in b_result.results if delta_detections(r, 0.5)
-        # ]
+
         results_correctb4 = [
             r for r in b_result.results
             if delta_detections_labels(r, 0.25)
@@ -606,7 +593,8 @@ class Plugin(IAlgorithm):
             aug_class=aug_class,
             severity_A=sev_A,
             severity_B=sev_B,
-            gt_labels=None
+            gt_labels=None,
+            score_threshold=self._score_thres
         )
         mpl_path_with_det, mpl_frag_paths_with_det = visualize_topk_matplotlib(
             results_correctb4, #TODO: use logic of correctb4 from imageclass version
@@ -620,10 +608,11 @@ class Plugin(IAlgorithm):
             aug_class=aug_class,
             severity_A=sev_A,
             severity_B=sev_B,
-            gt_labels=ground_truths
+            gt_labels=ground_truths,
+            score_threshold=self._score_thres
         )
 
-        plotly_path = visualize_topk_without_plotly( #TODO: USE WITHOUT PLOTLY
+        plotly_path = visualize_topk_without_plotly(
             results_correctb4, #TODO: use logic of correctb4 from imageclass version
             b_result.probs_A, 
             b_result.probs_B, 
@@ -635,9 +624,10 @@ class Plugin(IAlgorithm):
             aug_class=aug_class,
             severity_A=sev_A,
             severity_B=sev_B,
-            gt_labels=None
+            gt_labels=None,
+            score_threshold=self._score_thres
         )
-        plotly_path_with_det = visualize_topk_without_plotly( #TODO: USE WITHOUT PLOTLY
+        plotly_path_with_det = visualize_topk_without_plotly(
             results_correctb4, #TODO: use logic of correctb4 from imageclass version
             b_result.probs_A, 
             b_result.probs_B, 
@@ -649,7 +639,8 @@ class Plugin(IAlgorithm):
             aug_class=aug_class,
             severity_A=sev_A,
             severity_B=sev_B,
-            gt_labels=ground_truths
+            gt_labels=ground_truths,
+            score_threshold=self._score_thres
         )
 
         html_path = visualize_in_html(
@@ -664,7 +655,8 @@ class Plugin(IAlgorithm):
             aug_class=aug_class,
             severity_A=sev_A,
             severity_B=sev_B,
-            draw_detections=False
+            draw_detections=False,
+            score_threshold=self._score_thres
         )
         html_path_with_det = visualize_in_html(
             results_correctb4_incorrectaft, 
@@ -678,7 +670,8 @@ class Plugin(IAlgorithm):
             aug_class=aug_class,
             severity_A=sev_A,
             severity_B=sev_B,
-            draw_detections=True
+            draw_detections=True,
+            score_threshold=self._score_thres
         )
 
         print("### Finished visualization for display info!!! ###")
@@ -699,52 +692,59 @@ class Plugin(IAlgorithm):
 
         self._results = output_results
 
-    def _load_images(self, image_paths: list[str], labels) -> list[np.ndarray]:
-        """
-        Load a list of numpy images from file paths.
+    # def _load_images(self, image_paths: list[str], labels) -> list[np.ndarray]:
+    #     """
+    #     Load a list of numpy images from file paths.
 
-        Args:
-            image_paths (list[str]): A list of image file paths
+    #     Args:
+    #         image_paths (list[str]): A list of image file paths
 
-        Returns:
-            np.ndarray: A list of numpy images
-        """
-        transform = transforms.Compose([
-            transforms.Resize((240, 320)),  # H, W
-            transforms.ToTensor()
-        ])
+    #     Returns:
+    #         np.ndarray: A list of numpy images
+    #     """
+    #     transform = transforms.Compose([
+    #         transforms.Resize((240, 320)),  # H, W
+    #         transforms.ToTensor()
+    #     ])
 
-        # Load all images into a tensor
-        image_tensors = torch.stack([transform(Image.open(p).convert("RGB")) for p in image_paths])
+    #     # Load all images into a tensor
+    #     image_tensors = torch.stack([transform(Image.open(p).convert("RGB")) for p in image_paths])
 
-        # Convert labels to tensor
-        label_tensors = torch.tensor(labels, dtype=torch.long)
+    #     # Convert labels to tensor
+    #     label_tensors = torch.tensor(labels, dtype=torch.long)
 
-        # Create TensorDataset
-        dataset = TensorDataset(image_tensors, label_tensors)
+    #     # Create TensorDataset
+    #     dataset = TensorDataset(image_tensors, label_tensors)
 
-        # Create DataLoader
-        loader = DataLoader(dataset, batch_size=16, shuffle=False)
+    #     # Create DataLoader
+    #     loader = DataLoader(dataset, batch_size=16, shuffle=False)
 
-        return dataset, loader
+    #     return dataset, loader
 
     def _save_one_image(self, image: np.ndarray, subfolder_name: str, idx: int) -> str:
+
         save_dir = self._save_folder / subfolder_name
         save_dir.mkdir(parents=True, exist_ok=True)
+        image_path = save_dir / f"{idx}_without_prediction.png"
 
-        image_path = save_dir / f"{idx}.png"
-        image = np.transpose(image, (1, 2, 0))
-        Image.fromarray((image * 255.0).astype(np.uint8)).save(image_path)
+        # CHW -> HWC
+        image = image.transpose(1, 2, 0)
+        image = image.astype(np.float32)
+        # normalize safely
+        if image.max() <= 1.5:
+            image *= 255.0
 
+        image = np.clip(image, 0, 255).astype(np.uint8)
+        Image.fromarray(image).save(image_path)
         return str(image_path)
 
-    def _get_one_corrupted_image(
-        self,
-        testloader,
-        aug_class,
-        severity,#s_idx,
-        target_idx
-    ):
+    # def _get_one_corrupted_image(
+    #     self,
+    #     testloader,
+    #     aug_class,
+    #     severity,#s_idx,
+    #     target_idx
+    # ):
         current_idx = 0
         #severity = aug_class.determine_severity(s_idx)
         for images, targets in testloader:
@@ -897,8 +897,6 @@ class Plugin(IAlgorithm):
         return str(image_path)
 
     def _get_one_corrupted_image_direct(self, image_paths, ground_truths, aug_class, severity, target_idx):#s_idx,
-
-        print("~~~ Fetching image directly! ~~~")
         image = Image.open(image_paths[target_idx]).convert("RGB")
         image_np = np.array(image).astype(np.uint8)  # HWC uint8, no full loader needed
 

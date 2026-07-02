@@ -11,7 +11,7 @@ from pathlib import Path
 from torchmetrics.detection.mean_ap import MeanAveragePrecision
 import gc
 
-def evaluate_detection(model, loader, device, iou_thresh=0.5):
+def evaluate_detection(model, loader, device, iou_threshold=0.5):
     """Evaluate an object detection model using mean Average Precision (mAP).
 
     Computes the mAP score at a specified IoU threshold over all samples in
@@ -34,16 +34,15 @@ def evaluate_detection(model, loader, device, iou_thresh=0.5):
         device (torch.device):
             Device on which inference is performed (e.g., CPU or CUDA device).
 
-        iou_thresh (float, optional):
+        iou_threshold (float, optional):
             Intersection over Union (IoU) threshold used for mAP computation.
             Defaults to ``0.5``.
 
     Returns:
         float:
-            The mAP value at the specified IoU threshold (``map_50`` when
-            ``iou_thresh=0.5``).
+            The mAP value at the specified IoU threshold.
     """
-    metric = MeanAveragePrecision(iou_thresholds=[iou_thresh])
+    metric = MeanAveragePrecision(iou_thresholds=[iou_threshold])
 
     model.eval()
     with torch.no_grad():
@@ -60,7 +59,7 @@ def evaluate_detection(model, loader, device, iou_thresh=0.5):
 
     result = metric.compute()
     metric.reset()
-    return result["map_50"].item() #generalize in future
+    return result["map"].item() #generalize in future
 
 def triplets(s):
     """
@@ -82,7 +81,16 @@ def triplets(s):
     assert len(items) % 3 == 0, "Input length must be a multiple of 3"
     return [items[i:i+3] for i in range(0, len(items), 3)]
 
-def augmentation_gradient_det(model, test_loader, device, aug_class, plot_graphs=False, directory=Path(), num_epochs=1):
+def augmentation_gradient_det(
+    model, 
+    test_loader, 
+    device, 
+    aug_class, 
+    plot_graphs=False, 
+    directory=Path(), 
+    num_epochs=1,
+    iou_threshold=0.5,
+):
     num_epochs = 1 if num_epochs is None else num_epochs
     num_epochs = 1 if aug_class.deterministic else num_epochs
     print("===")
@@ -99,7 +107,7 @@ def augmentation_gradient_det(model, test_loader, device, aug_class, plot_graphs
             seed = 1000*i + severity_idx 
             aug_class.set_seed(seed)
             corrupted_loader = aug_class.corr_func_dataloader(test_loader, severity_idx=severity) #TO BE FIXED
-            corr_map = evaluate_detection(model, corrupted_loader, device)
+            corr_map = evaluate_detection(model, corrupted_loader, device, iou_threshold)
             all_map.append(corr_map)
             print(f"epoch {i+1}: {corr_map}")
 

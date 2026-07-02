@@ -89,6 +89,8 @@ class ObjectTest:
             'aug_methods': 'Rain',
             'custom_parameters': None,
             "num_epochs": 1,
+            "iou_thres": 0.65,
+            "score_thres": 0.65
         }
         expected_exception = RuntimeError
         expected_exception_msg = "The algorithm has failed data validation"

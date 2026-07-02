@@ -422,7 +422,7 @@ class Plugin(IAlgorithm):
                     test_loader, aug_class, severity, display_idx
                 )
 
-                image_path = self._save_one_image(display_image, str(corrupted_dir), Path(str(image_paths[idx])).name)
+                image_path = self._save_one_image(display_image, str(corrupted_dir), Path(str(image_paths[display_idx])).name)
                 image = torch.tensor(display_image).unsqueeze(0).float()
                 model = model.float()
 

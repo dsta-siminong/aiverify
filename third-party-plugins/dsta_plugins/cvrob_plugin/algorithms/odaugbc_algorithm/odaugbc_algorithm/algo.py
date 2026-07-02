@@ -33,8 +33,8 @@ import plotly.express as px
 import plotly.graph_objects as go
 from pprint import pprint
 
-# from .pycocotools_fdet.coco import COCO
-# from .pycocotools_fdet.cocoeval import COCOeval
+from .pycocotools_fdet.coco import COCO
+from .pycocotools_fdet.cocoeval import COCOeval
 # =====================================================================================
 # NOTE:
 # 1. Check that you have installed the aiverify_test_engine latest package.
@@ -353,7 +353,7 @@ class Plugin(IAlgorithm):
         #make ground truth
         file_names = [Path(i).name for i in self._data_instance.get_data()["image_directory"]]
         df: pd.DataFrame = self._ground_truth_instance.get_data()
-        # self._df = df
+        self._df = df
         self._gt_dict = self._build_detection_gt(df)
 
         self._ordered_ground_truth = [
@@ -368,6 +368,8 @@ class Plugin(IAlgorithm):
         # Apply user defined parameters to default parameters
         aug_library = self._input_arguments.get('aug_library') or "albumentations"
         aug_dict = make_augmentation_dict(aug_library)
+        self._iou_thres = self._input_arguments.get('iou_thres') or 0.5
+        self._score_thres = self._input_arguments.get('score_thres') or 0.5
 
         custom_parameters = None
         try:
@@ -405,58 +407,58 @@ class Plugin(IAlgorithm):
         class_names_arg = self._input_arguments.get('class_names') or None
         return handle_class_names_arg(class_names_arg, model)
 
-    def _run_severity_epochs(
-        self,
-        model,
-        test_loader,
-        aug_class,
-        severity_name: str,
-        severity_idx: int,
-        num_epochs: int,
-        class_names: dict,
-    ):
-        """
-        Run ``num_epochs`` evaluation passes for one (aug, severity) combination
-        and return averaged detection statistics.
+    # def _run_severity_epochs(
+    #     self,
+    #     model,
+    #     test_loader,
+    #     aug_class,
+    #     severity_name: str,
+    #     severity_idx: int,
+    #     num_epochs: int,
+    #     class_names: dict,
+    # ):
+    #     """
+    #     Run ``num_epochs`` evaluation passes for one (aug, severity) combination
+    #     and return averaged detection statistics.
 
-        Returns:
-            avg_stats  - per-class metrics averaged over epochs
-            avg_matrix - detection-matching matrix averaged over epochs
-            avg_map50  - scalar mAP@50 averaged over valid epochs (None if none valid)
-        """
-        all_stats = []; all_matrices = []; all_map50s = []
+    #     Returns:
+    #         avg_stats  - per-class metrics averaged over epochs
+    #         avg_matrix - detection-matching matrix averaged over epochs
+    #         avg_map  - scalar mAP@50 averaged over valid epochs (None if none valid)
+    #     """
+    #     all_stats = []; all_matrices = []; all_maps = []
 
-        for i in range(num_epochs):
-            print("NUMEPOCHS", num_epochs)
-            seed = 1000 * severity_idx + i
-            aug_class.set_seed(seed)
+    #     for i in range(num_epochs):
+    #         print("NUMEPOCHS", num_epochs)
+    #         seed = 1000 * severity_idx + i
+    #         aug_class.set_seed(seed)
 
-            if severity_name == "None":
-                corrupted_loader = test_loader
-            else:
-                corrupted_loader = aug_class.corr_func_dataloader(test_loader, severity_name)
+    #         if severity_name == "None":
+    #             corrupted_loader = test_loader
+    #         else:
+    #             corrupted_loader = aug_class.corr_func_dataloader(test_loader, severity_name)
 
-            det_stats = evaluate_detection_detailed(
-                model,
-                corrupted_loader,
-                None,
-                class_names,
-                iou_thresh=0.5,
-                score_thresh=0.5,
-            )
+    #         det_stats = evaluate_detection_detailed(
+    #             model,
+    #             corrupted_loader,
+    #             None,
+    #             class_names,
+    #             iou_thresh=self._iou_thres,
+    #             score_thresh=self._score_thres,
+    #         )
 
-            all_stats.append(det_stats["per_class"])
-            all_matrices.append(det_stats["matrix"])
-            all_map50s.append(det_stats["map_50"])
+    #         all_stats.append(det_stats["per_class"])
+    #         all_matrices.append(det_stats["matrix"])
+    #         all_maps.append(det_stats["map"])
 
-        avg_stats = average_detection_stats(all_stats)
-        avg_matrix = np.mean(all_matrices, axis=0)
-        avg_map50 = (
-            float(np.mean([x for x in all_map50s if x >= 0]))
-            if any(x >= 0 for x in all_map50s)
-            else None
-        )
-        return avg_stats, avg_matrix, avg_map50
+    #     avg_stats = average_detection_stats(all_stats)
+    #     avg_matrix = np.mean(all_matrices, axis=0)
+    #     avg_map = (
+    #         float(np.mean([x for x in all_maps if x >= 0]))
+    #         if any(x >= 0 for x in all_maps)
+    #         else None
+    #     )
+    #     return avg_stats, avg_matrix, avg_map
 
     def _get_display_info_for_severity(
         self,
@@ -506,6 +508,7 @@ class Plugin(IAlgorithm):
             class_names=class_names,
             subfolder_name=str(corrupted_dir),
             idx=display_idx,
+            score_threshold=self._score_thres
         )
 
         return [
@@ -533,8 +536,8 @@ class Plugin(IAlgorithm):
 
         combined_results = []
 
-        # gt_json = 'ground_truths.json'
-        # create_coco_gt(image_paths, self._df, class_names, gt_json)
+        gt_json = 'ground_truths.json'
+        create_coco_gt(image_paths, self._df, class_names, gt_json)
 
         for aug_name, aug_class in aug_dict.items():
             if aug_name not in aug_methods and aug_methods != ["all"]:
@@ -543,6 +546,8 @@ class Plugin(IAlgorithm):
             individual_results = {"Augmentation": aug_name}
             display_info = {}
             cm_dict = {}
+            coco_dict = {}
+            coco_graph_dict = {}
             crs = []
             cms = []
 
@@ -552,18 +557,20 @@ class Plugin(IAlgorithm):
 
             for severity_idx, severity_name in enumerate(severities):
                 print('severity idx', severity_idx, 'severity_name', severity_name)
+                corrupted_dir = Path(aug_name) / f"severity_{severity_name}"
 
                 num_epochs = self._input_arguments.get('num_epochs') or 1
                 num_epochs = num_epochs if severity_name != "None" else 1
                 num_epochs = 1 if num_epochs is None else num_epochs
                 num_epochs = 1 if aug_class.deterministic else num_epochs
 
-                avg_stats, avg_matrix, avg_map50 = self._run_severity_epochs(
+                save_dir_coco = self._save_folder / corrupted_dir
+                save_dir_coco.mkdir(parents=True, exist_ok=True)
+                avg_stats, avg_matrix, avg_map, avg_summary, coco_imgs = self._run_severity_epochs_coco(
                     model, test_loader, aug_class, severity_name, severity_idx,
-                    num_epochs, class_names#, gt_json, image_paths
+                    num_epochs, class_names, 
+                    gt_json, image_paths, self._iou_thres, self._score_thres, save_dir_coco
                 )
-
-                corrupted_dir = Path(aug_name) / f"severity_{severity_name}"
 
                 display_info[str(severity_name)] = self._get_display_info_for_severity(
                     model, image_paths, ground_truths, aug_class, severity_name,
@@ -578,7 +585,10 @@ class Plugin(IAlgorithm):
                     str(Path(save_path_html).relative_to(self._output_folder)),
                 ]
 
-                crs.append({"map_50": avg_map50, **avg_stats})
+                coco_graph_dict[str(severity_name)] = [str(x.relative_to(self._output_folder)) for x in coco_imgs]
+                coco_dict[str(severity_name)] = avg_summary
+
+                crs.append({"map": avg_map, **avg_stats})
                 cms.append(avg_matrix)
 
             path_dict = self._detection_method(crs, severities, class_names, Path(aug_name), aug_name)
@@ -588,6 +598,8 @@ class Plugin(IAlgorithm):
                 "conf_matrix": cms,
                 "plot_paths": path_dict,
                 "confusion_matrix": cm_dict,
+                "coco_graphs": coco_graph_dict,
+                "coco_summary": coco_dict
             })
 
             combined_results.append(individual_results)
@@ -603,15 +615,15 @@ class Plugin(IAlgorithm):
     def _build_combined_df(self, data: list, severities: list) -> "pd.DataFrame":
         """
         Convert per-severity detection stats into a flat DataFrame with columns:
-        severity, class, precision, recall, f1_score, TP, FP, FN, support, map_50.
+        severity, class, precision, recall, f1_score, TP, FP, FN, support, map.
         """
         rows = []
         for severity, stats in zip(severities, data):
-            map50 = stats.get("map_50", None)
+            map = stats.get("map", None)
             if "per_class" in stats:
                 per_class = stats["per_class"]
             else:
-                per_class = {k: v for k, v in stats.items() if k != "map_50"}
+                per_class = {k: v for k, v in stats.items() if k != "map"}
             per_class = normalize_per_class(per_class)
 
             for class_name, metrics in per_class.items():
@@ -625,7 +637,7 @@ class Plugin(IAlgorithm):
                     "FP":        metrics["FP"],
                     "FN":        metrics["FN"],
                     "support":   metrics["support"],
-                    "map_50":    map50,
+                    "map":    map,
                 })
         df = pd.DataFrame(rows)
         df['pred_population']   = df['TP'] + df['FP']
@@ -647,7 +659,7 @@ class Plugin(IAlgorithm):
         Returns:
             (png_path, html_path)
         """
-        metric_cols = ['precision', 'recall', 'f1_score', 'map_50']
+        metric_cols = ['precision', 'recall', 'f1_score', 'map']
         severity_order = plot_df['severity'].tolist()
         pos_map = {v: i for i, v in enumerate(severity_order)}
 
@@ -820,7 +832,7 @@ class Plugin(IAlgorithm):
 
         return png_path_pop, html_path_pop
 
-    def _plot_map50(
+    def _plot_map(
         self,
         combined_df: "pd.DataFrame",
         save_dir: Path,
@@ -832,23 +844,23 @@ class Plugin(IAlgorithm):
         Returns:
             (map_png, map_html)
         """
-        map_df = combined_df[["severity", "map_50"]].drop_duplicates().reset_index(drop=True)
-        map_nan_mask = map_df['map_50'].isna()
+        map_df = combined_df[["severity", "map"]].drop_duplicates().reset_index(drop=True)
+        map_nan_mask = map_df['map'].isna()
         plot_map_df = map_df.copy()
-        plot_map_df['map_50'] = plot_map_df['map_50'].fillna(0)
+        plot_map_df['map'] = plot_map_df['map'].fillna(0)
 
         map_severity_order = plot_map_df['severity'].tolist()
         map_pos_map = {v: i for i, v in enumerate(map_severity_order)}
 
         # --- matplotlib ---
         fig, ax = plt.subplots(figsize=(10, 6))
-        map_line, = ax.plot(plot_map_df['severity'], plot_map_df['map_50'])
+        map_line, = ax.plot(plot_map_df['severity'], plot_map_df['map'])
         map_color = map_line.get_color()
 
         if map_nan_mask.any():
             x_pos = [map_pos_map[s] for s in plot_map_df.loc[map_nan_mask, 'severity']]
             ax.scatter(x_pos, [0] * len(x_pos), marker='x', color=map_color,
-                       alpha=0.8, zorder=5, label='mAP50 (NaN\u21920)')
+                       alpha=0.8, zorder=5, label='map (NaN\u21920)')
 
         ax.set_title(f"{aug_name} mAP@50")
         ax.set_xlabel("severity")
@@ -857,12 +869,12 @@ class Plugin(IAlgorithm):
         ax.legend()
         plt.xticks(rotation=45)
 
-        map_png = save_dir / "map50.png"
+        map_png = save_dir / "map.png"
         plt.savefig(map_png, bbox_inches="tight")
         plt.close()
 
         # --- plotly ---
-        fig_html = px.line(plot_map_df, x='severity', y='map_50',
+        fig_html = px.line(plot_map_df, x='severity', y='map',
                            title=f"{aug_name} mAP@50")
         if map_nan_mask.any():
             nan_severities = plot_map_df.loc[map_nan_mask, 'severity'].tolist()
@@ -872,14 +884,14 @@ class Plugin(IAlgorithm):
                 marker=dict(symbol='x', size=12,
                             color=px.colors.qualitative.Plotly[0],
                             line=dict(width=2)),
-                name='mAP50 (NaN\u21920)', showlegend=True
+                name='map (NaN\u21920)', showlegend=True
             ))
 
         fig_html.update_layout(
-            width=1600, height=900, xaxis_title="severity", yaxis_title="mAP50",
+            width=1600, height=900, xaxis_title="severity", yaxis_title="map",
             font=dict(size=20), title_font_size=24
         )
-        map_html = save_dir / "map50.html"
+        map_html = save_dir / "map.html"
         fig_html.write_html(str(map_html))
 
         return map_png, map_html
@@ -905,7 +917,7 @@ class Plugin(IAlgorithm):
         foreground_names = [v for k, v in class_names.items() if str(k) != '0']
 
         # pred_population is already in combined_df (TP + FP computed upstream).
-        # We need one row per (severity, class), so drop any map_50 duplicates first.
+        # We need one row per (severity, class), so drop any map duplicates first.
         pop_df = (
             combined_df[combined_df['class'].isin(foreground_names)]
             [['severity', 'class', 'pred_population']]
@@ -986,7 +998,7 @@ class Plugin(IAlgorithm):
         combined_df = self._build_combined_df(data, severities)
         print(combined_df.head())
 
-        metric_cols = ['precision', 'recall', 'f1_score', 'map_50']
+        metric_cols = ['precision', 'recall', 'f1_score', 'map']
         path_dict = {}
         temp = {}
 
@@ -1026,7 +1038,7 @@ class Plugin(IAlgorithm):
         path_dict['matplotlib_image_path'] = str(plt_path.relative_to(self._output_folder))
         path_dict['plotly_image_path']     = str(fx_path.relative_to(self._output_folder))
 
-        map_png, map_html = self._plot_map50(combined_df, save_dir, aug_name)
+        map_png, map_html = self._plot_map(combined_df, save_dir, aug_name)
         path_dict["map_plot"] = [
             str(map_png.relative_to(self._output_folder)),
             str(map_html.relative_to(self._output_folder)),
@@ -1035,59 +1047,66 @@ class Plugin(IAlgorithm):
         return path_dict
 
     def _save_one_image(self, image: np.ndarray, subfolder_name: str, idx: int) -> str:
+
         save_dir = self._save_folder / subfolder_name
         save_dir.mkdir(parents=True, exist_ok=True)
-
         image_path = save_dir / f"{idx}_without_prediction.png"
-        image = np.transpose(image, (1, 2, 0))
-        Image.fromarray((image * 255.0).astype(np.uint8)).save(image_path)
 
+        # CHW -> HWC
+        image = image.transpose(1, 2, 0)
+        image = image.astype(np.float32)
+        # normalize safely
+        if image.max() <= 1.5:
+            image *= 255.0
+
+        image = np.clip(image, 0, 255).astype(np.uint8)
+        Image.fromarray(image).save(image_path)
         return str(image_path)
 
-    def _get_one_corrupted_image(
-        self,
-        testloader,
-        aug_class,
-        severity,
-        target_idx
-    ):
-        current_idx = 0
+    # def _get_one_corrupted_image(
+    #     self,
+    #     testloader,
+    #     aug_class,
+    #     severity,
+    #     target_idx
+    # ):
+    #     current_idx = 0
 
-        for images, targets in testloader:
-            batch_size = len(images)
-            # target image inside this batch
-            if current_idx + batch_size > target_idx:
-                local_idx = target_idx - current_idx
-                image = images[local_idx]
-                target = targets[local_idx]
+    #     for images, targets in testloader:
+    #         batch_size = len(images)
+    #         # target image inside this batch
+    #         if current_idx + batch_size > target_idx:
+    #             local_idx = target_idx - current_idx
+    #             image = images[local_idx]
+    #             target = targets[local_idx]
 
-                image_np = (
-                    image.mul(255)
-                    .byte()
-                    .cpu()
-                    .numpy()
-                    .transpose(1, 2, 0)
-                )
+    #             image_np = (
+    #                 image.mul(255)
+    #                 .byte()
+    #                 .cpu()
+    #                 .numpy()
+    #                 .transpose(1, 2, 0)
+    #             )
 
-                if aug_class.name == "None" or severity == "None":
-                    corrupted_image = image_np
-                else:
-                    corrupted_image, _ = aug_class.corr_func_sample(
-                        image_np,
-                        target,
-                        severity
-                    )
+    #             if aug_class.name == "None" or severity == "None":
+    #                 corrupted_image = image_np
+    #             else:
+    #                 corrupted_image, _ = aug_class.corr_func_sample(
+    #                     image_np,
+    #                     target,
+    #                     severity
+    #                 )
 
-                corrupted_image = (
-                    corrupted_image
-                    .transpose(2, 0, 1)
-                    .astype(np.float32)
-                    / 255.0
-                )
+    #             corrupted_image = (
+    #                 corrupted_image
+    #                 .transpose(2, 0, 1)
+    #                 .astype(np.float32)
+    #                 / 255.0
+    #             )
 
-                return corrupted_image
+    #             return corrupted_image
 
-            current_idx += batch_size
+    #         current_idx += batch_size
 
     def _save_detection_matrix_path(
         self,
@@ -1096,9 +1115,7 @@ class Plugin(IAlgorithm):
         corrupted_dir
     ):
         class_names = list(class_names_dir.values())
-
         n_classes = len(class_names)
-
         fig_size = max(8, n_classes * 1.5)
 
         # =========================
@@ -1106,12 +1123,9 @@ class Plugin(IAlgorithm):
         # =========================
 
         fig, ax = plt.subplots(figsize=(fig_size, fig_size))
-
         im = ax.imshow(det_matrix, cmap="Blues")
-
         ax.set_xticks(np.arange(n_classes))
         ax.set_yticks(np.arange(n_classes))
-
         ax.set_xticklabels(class_names)
         ax.set_yticklabels(class_names)
 
@@ -1120,7 +1134,6 @@ class Plugin(IAlgorithm):
             rotation=45,
             ha="right"
         )
-
         # text values
         for i in range(n_classes):
             for j in range(n_classes):
@@ -1137,26 +1150,18 @@ class Plugin(IAlgorithm):
 
         ax.set_xlabel("Predicted class")
         ax.set_ylabel("Ground truth class")
-
         ax.set_title("Detection Matching Matrix")
-
         fig.colorbar(im)
-
         plt.tight_layout()
-
         save_dir = self._save_folder / corrupted_dir
         save_dir.mkdir(parents=True, exist_ok=True)
-
         save_path = save_dir / "detection_matrix.png"
-
         plt.savefig(
             save_path,
             dpi=300,
             bbox_inches="tight"
         )
-
         plt.close(fig)
-
         print(f"Saved to {save_path} [matplotlib]")
 
         # =========================
@@ -1175,7 +1180,6 @@ class Plugin(IAlgorithm):
                 textfont={"size": 12}
             )
         )
-
         fig.update_layout(
             title="Detection Matching Matrix",
             width=max(600, n_classes * 80),
@@ -1183,17 +1187,11 @@ class Plugin(IAlgorithm):
             xaxis_title="Predicted class",
             yaxis_title="Ground truth class",
         )
-
         fig.update_xaxes(tickangle=45)
-
         save_path_html = save_dir / "detection_matrix.html"
-
         fig.write_html(str(save_path_html))
-
         print(f"Saved to {save_path_html} [plotly]")
-
         return save_path, save_path_html
-
 
     def _build_detection_gt(self, df):
         gt_dict = {}
@@ -1312,7 +1310,6 @@ class Plugin(IAlgorithm):
         return str(image_path)
 
     def _get_one_corrupted_image_direct(self, image_paths, ground_truths, aug_class, severity, target_idx):
-        print("~~~ Fetching image directly! ~~~")
         image = Image.open(image_paths[target_idx]).convert("RGB")
         image_np = np.array(image).astype(np.uint8)  # HWC uint8, no full loader needed
 
@@ -1326,3 +1323,83 @@ class Plugin(IAlgorithm):
         if corrupted_image.max() > 1.5:
             corrupted_image /= 255.0
         return np.clip(corrupted_image, 0, 1).transpose(2, 0, 1)
+
+    def _run_severity_epochs_coco(
+        self,
+        model,
+        test_loader,
+        aug_class,
+        severity_name: str,
+        severity_idx: int,
+        num_epochs: int,
+        class_names: dict,
+        gt_json: str,
+        image_paths: list,
+        iou_threshold: float,
+        score_threshold: float,
+        save_dir_coco: Path,
+    ):
+        """
+        Run ``num_epochs`` evaluation passes for one (aug, severity) combination
+        and return averaged detection statistics.
+
+        Returns:
+            avg_stats  - per-class metrics averaged over epochs
+            avg_matrix - detection-matching matrix averaged over epochs
+            avg_map  - scalar mAP@50 averaged over valid epochs (None if none valid)
+        """
+        pr_json = 'predictions.json'
+        all_stats = []; all_matrices = []; all_maps = []; all_summaries = []
+
+        for i in range(num_epochs):
+            print("NUMEPOCHS", num_epochs)
+            seed = 1000 * severity_idx + i
+            aug_class.set_seed(seed)
+
+            if severity_name == "None":
+                corrupted_loader = test_loader
+            else:
+                corrupted_loader = aug_class.corr_func_dataloader(test_loader, severity_name)
+
+            det_stats = evaluate_detection_and_create_coco_predictions(
+                model, corrupted_loader, None, class_names, image_paths, pr_json,
+                iou_thresh=iou_threshold, score_thresh=score_threshold,
+                coco_score_threshold=0.0,  # match original create_coco_predictions default
+            )
+            
+            cocoGt = COCO(gt_json)
+            cocoDt = cocoGt.loadRes(pr_json)  # initialize COCO prediction api
+            cocoEval = COCOeval(cocoGt, cocoDt, 'bbox')  # initialize COCO evaluation api
+            cocoEval.evaluate()
+            cocoEval.accumulateFBeta()
+            cocoEval.accumulate()
+            summary = cocoEval.collectSummaryResults(fbeta_betas=(1, 2), fbeta_iou_thrs=(iou_threshold,))
+
+            fbeta_filename = save_dir_coco / "fbeta_curve.png"
+            cocoEval.plotFBetaCurve(fbeta_filename, betas=[1,2], iouThr=iou_threshold, average='macro')
+            pr_filename = save_dir_coco / "pr_curve.png"
+            cocoEval.plotPRCurve(pr_filename, average='macro')
+            cocopr_filename = save_dir_coco / "cocopr_curve.png" #TODO: KIV doing this by class
+            cocoEval.plotCocoPRCurve(cocopr_filename)
+            per_class_report = cocoEval.generateReport()
+
+            for k,v in det_stats['per_class'].items():
+                assert k in per_class_report
+                class_report = per_class_report[k]
+                for k1,v1 in class_report.items():
+                    det_stats['per_class'][k][k1] = v1
+
+            all_stats.append(det_stats["per_class"])
+            all_matrices.append(det_stats["matrix"])
+            all_maps.append(det_stats["map"])
+            all_summaries.append(summary)
+
+        avg_stats = average_detection_stats(all_stats)
+        avg_matrix = np.mean(all_matrices, axis=0)
+        avg_map = (
+            float(np.mean([x for x in all_maps if x >= 0]))
+            if any(x >= 0 for x in all_maps)
+            else None
+        )
+        avg_summary = average_summaries(all_summaries)
+        return avg_stats, avg_matrix, avg_map, avg_summary, [fbeta_filename, pr_filename, cocopr_filename]

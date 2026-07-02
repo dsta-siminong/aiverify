@@ -1,0 +1,31 @@
+{
+  "cid": "odaugbc_cocores_widget",
+  "widgetSize": {
+    "minW": 12,
+    "minH": 1,
+    "maxW": 12,
+    "maxH": 36
+  },
+  "name": "OD Augmentations By Class Widget for Summary Results for COCO visualization Plots",
+  "description": "OD Augmentations By Class Widget for Summary Results for COCO visualization Plots",
+  "dynamicHeight": true,
+  "dependencies": [
+    {
+      "cid": "odaugbc_algorithm"
+    }
+  ],
+  "mockdata": [
+    {
+      "type": "Algorithm",
+      "cid": "odaugbc_algorithm",
+      "datapath": "odaugbc_algorithm.sample.json"
+    }
+  ],
+  "properties": [
+    {
+      "key": "title",
+      "helper": "Set the widget title (default \"OD Augmentations BY CLASS - Summary Results for COCO visualization\")",
+      "default": "OD Augmentations BY CLASS - Summary Results for COCO visualization"
+    }
+  ]
+}

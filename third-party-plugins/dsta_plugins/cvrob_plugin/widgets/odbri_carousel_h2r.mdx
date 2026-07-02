@@ -1,12 +1,6 @@
-<div style={{
-  width: "100%",
-  padding: "16px",
-  marginBottom: "24px",
-  border: "1px solid #e5e7eb",
-  borderRadius: "8px",
-  backgroundColor: "#fafafa",
-  boxSizing: "border-box"
-}}>
+import InfoBox from "./InfoBox";
+
+<InfoBox>
   <h3>Brittle Misclassified Images (Object Detection)</h3>
 
   <span>
@@ -21,17 +15,9 @@
     of individual images, making it easier to examine how and why each sample fails
     under perturbation.
   </span>
-</div>
+</InfoBox>
 
-<div style={{
-  width: "100%",
-  padding: "16px",
-  marginBottom: "24px",
-  border: "1px solid #e5e7eb",
-  borderRadius: "8px",
-  backgroundColor: "#fafafa",
-  boxSizing: "border-box"
-}}>
+<InfoBox>
   <h4>
     <b>How to read?</b>
   </h4>
@@ -55,17 +41,9 @@
     <li>pred_proba: model confidence (probability) for the predicted class</li>
     <li>brittleness: brittleness score, a consolidated averaged measure of the drop in confidence of the detections within the image</li>
   </ul>
-</div>
+</InfoBox>
 
-<div style={{
-  width: "100%",
-  padding: "16px",
-  marginBottom: "24px",
-  border: "1px solid #e5e7eb",
-  borderRadius: "8px",
-  backgroundColor: "#fafafa",
-  boxSizing: "border-box"
-}}>
+<InfoBox>
   <span>
     <b>Interpretation</b>
   </span>
@@ -81,4 +59,4 @@
       <li>Consider removing or relabeling problematic samples if they are noisy or inconsistent</li>
     </ul>
   </span>
-</div>
+</InfoBox>

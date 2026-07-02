@@ -1,0 +1,202 @@
+export const cid = "odaugbc_algorithm"
+//export const ib_cid = "augbyclass_inputblock"
+
+
+<div style={{ marginBottom: "1rem" }}>
+  <div
+    style={{
+      textAlign: "center",
+      fontWeight: "bold",
+      fontSize: "2.2rem",
+      color: "#b91c1c",
+      textDecoration: "underline"
+    }}
+  >
+    {props.properties.title}
+  </div>
+</div>
+
+import {
+  transformData,
+  ClassLineChart,
+  PopulationChart,
+  StackedBarChart,
+  ClassMetricsTable
+} from './augbyclass-chart.jsx';
+
+export const COCOGraphsSection = ({ props }) => {
+  const resultsData = props.getResults ? props.getResults(cid).results : null;
+
+  if (!resultsData || resultsData.length === 0) {
+    return <div>No results data available</div>;
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "3rem" }}>
+      <h2
+        style={{
+          textAlign: "center",
+          fontWeight: "bold",
+          textDecoration: "underline",
+          color: "red",
+          marginBottom: "2rem",
+        }}
+      >
+        COCO Evaluation Curves
+      </h2>
+
+      {resultsData.map((augmentationItem, index) => {
+        const { Augmentation, coco_graphs } = augmentationItem;
+
+        if (!coco_graphs) {
+          return (
+            <div
+              key={index}
+              style={{
+                padding: "1em",
+                border: "1px dashed #ccc",
+                borderRadius: "8px",
+                textAlign: "center",
+                color: "#777",
+              }}
+            >
+              <h3>{Augmentation}</h3>
+              <div>No COCO graphs available.</div>
+            </div>
+          );
+        }
+
+        return (
+          <div
+            key={index}
+            style={{
+              border: "1px solid #ccc",
+              borderRadius: "10px",
+              padding: "2rem",
+            }}
+          >
+            <h3
+              style={{
+                textAlign: "center",
+                fontWeight: "bold",
+                marginBottom: "2rem",
+              }}
+            >
+              {Augmentation}
+            </h3>
+
+            {Object.entries(coco_graphs).map(([severity, paths], i) => {
+              const [fbetaPath, prPath, cocoprPath] = paths;
+
+              let fbetaUrl = null;
+              let prUrl = null;
+              cocoprUrl = null;
+
+              try {
+                fbetaUrl = props.getArtifactURL(cid, fbetaPath);
+                prUrl = props.getArtifactURL(cid, prPath);
+                cocoprUrl = props.getArtifactURL(cid, cocoprPath);
+              } catch (err) {
+                console.error("Artifact URL error:", err);
+              }
+
+              return (
+                <div
+                  key={i}
+                  style={{
+                    marginBottom: "3rem",
+                    breakInside: "avoid",
+                    pageBreakInside: "avoid",
+                  }}
+                >
+                  {fbetaUrl && (
+                    <>
+                      <h4
+                        style={{
+                          textAlign: "center",
+                          fontWeight: "bold",
+                          textDecoration: "underline",
+                          marginTop: "1rem",
+                          marginBottom: "1rem",
+                        }}
+                      >
+                        FBeta Curve for {severity} - {Augmentation}
+                      </h4>
+
+                      <img
+                        src={fbetaUrl}
+                        alt={`FBeta Curve - ${severity} - ${Augmentation}`}
+                        style={{
+                          maxWidth: "600px",
+                          width: "100%",
+                          display: "block",
+                          margin: "0 auto 2rem auto",
+                        }}
+                      />
+                    </>
+                  )}
+
+                  {prUrl && (
+                    <>
+                      <h4
+                        style={{
+                          textAlign: "center",
+                          fontWeight: "bold",
+                          textDecoration: "underline",
+                          marginTop: "1rem",
+                          marginBottom: "1rem",
+                        }}
+                      >
+                        P-R Curve for {severity} - {Augmentation}
+                      </h4>
+
+                      <img
+                        src={prUrl}
+                        alt={`P-R Curve - ${severity} - ${Augmentation}`}
+                        style={{
+                          maxWidth: "600px",
+                          width: "100%",
+                          display: "block",
+                          margin: "0 auto",
+                        }}
+                      />
+                    </>
+                  )}
+
+                  {cocoprUrl && (
+                    <>
+                      <h4
+                        style={{
+                          textAlign: "center",
+                          fontWeight: "bold",
+                          textDecoration: "underline",
+                          marginTop: "1rem",
+                          marginBottom: "1rem",
+                        }}
+                      >
+                        COCO P-R Curve for {severity} - {Augmentation}
+                      </h4>
+
+                      <img
+                        src={cocoprUrl}
+                        alt={`COCO P-R Curve - ${severity} - ${Augmentation}`}
+                        style={{
+                          maxWidth: "600px",
+                          width: "100%",
+                          display: "block",
+                          margin: "0 auto",
+                        }}
+                      />
+                    </>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+<COCOGraphsSection props={props} />

@@ -1,0 +1,297 @@
+export const cid = "odaugbc_algorithm"
+
+<div style={{ marginBottom: "1rem" }}>
+  <div
+    style={{
+      textAlign: "center",
+      fontWeight: "bold",
+      fontSize: "2.2rem",
+      color: "#b91c1c",
+      textDecoration: "underline"
+    }}
+  >
+    {props.properties.title}
+  </div>
+</div>
+
+export const CocoSummarySection = ({ props }) => {
+  const resultsData = props.getResults ? props.getResults(cid).results : null;
+
+  if (!resultsData || resultsData.length === 0) {
+    return <div>No results data available</div>;
+  }
+
+  // ── Colour helpers ──────────────────────────────────────────────────────────
+  // delta is (severity_value - baseline_value). For all metrics, higher = better,
+  // so a negative delta is bad (red) and a positive delta is good (green).
+  const deltaColor = (delta) => {
+    if (delta === null || isNaN(delta)) return "#888";
+    if (Math.abs(delta) < 0.005) return "#555";   // negligible: neutral
+    return delta > 0 ? "#16a34a" : "#dc2626";
+  };
+
+  const deltaLabel = (delta) => {
+    if (delta === null || isNaN(delta)) return "—";
+    const sign = delta > 0 ? "+" : "";
+    return `${sign}${(delta * 100).toFixed(1)}pp`;
+  };
+
+  const fmt = (v) =>
+    v === undefined || v === null || isNaN(v) ? "—" : (v * 100).toFixed(1);
+
+  // ── Table section definitions ───────────────────────────────────────────────
+  const COCO_ROWS = [
+    { key: "AP_all",      label: "AP  (IoU .10–.95, all)" },
+    { key: "AP_50",       label: "AP  (IoU .50,     all)" },
+    { key: "AP_75",       label: "AP  (IoU .75,     all)" },
+    { key: "AP_small",    label: "AP  (IoU .10–.95, small)" },
+    { key: "AP_medium",   label: "AP  (IoU .10–.95, medium)" },
+    { key: "AP_large",    label: "AP  (IoU .10–.95, large)" },
+    { key: "AR_maxDet1",  label: "AR  (maxDet 1)" },
+    { key: "AR_maxDet10", label: "AR  (maxDet 10)" },
+    { key: "AR_maxDet100",label: "AR  (maxDet 100)" },
+    { key: "AR_small",    label: "AR  (small)" },
+    { key: "AR_medium",   label: "AR  (medium)" },
+    { key: "AR_large",    label: "AR  (large)" },
+  ];
+
+  const FBETA_ROWS = [
+    { key: "F1_iou50_all",    label: "F1  (IoU .50, all)" },
+    { key: "F1_iou75_all",    label: "F1  (IoU .75, all)" },
+    { key: "F1_iou50_small",  label: "F1  (IoU .50, small)" },
+    { key: "F1_iou50_medium", label: "F1  (IoU .50, medium)" },
+    { key: "F1_iou50_large",  label: "F1  (IoU .50, large)" },
+    { key: "F2_iou50_all",    label: "F2  (IoU .50, all)" },
+    { key: "F2_iou75_all",    label: "F2  (IoU .75, all)" },
+    { key: "F2_iou50_small",  label: "F2  (IoU .50, small)" },
+    { key: "F2_iou50_medium", label: "F2  (IoU .50, medium)" },
+    { key: "F2_iou50_large",  label: "F2  (IoU .50, large)" },
+  ];
+
+  const BEST_FBETA_ROWS = [
+    { key: "score",     label: "Best score" },
+    { key: "confThr",   label: "Conf threshold", raw: true },
+    { key: "precision", label: "Precision @ best" },
+    { key: "recall",    label: "Recall @ best" },
+  ];
+
+  // ── Shared table styles ─────────────────────────────────────────────────────
+  const thStyle = {
+    padding: "6px 10px",
+    textAlign: "right",
+    fontWeight: "600",
+    fontSize: "0.78rem",
+    background: "#f3f4f6",
+    borderBottom: "2px solid #d1d5db",
+    whiteSpace: "nowrap",
+  };
+  const thLabelStyle = { ...thStyle, textAlign: "left", minWidth: "200px" };
+  const tdStyle = {
+    padding: "5px 10px",
+    textAlign: "right",
+    fontSize: "0.82rem",
+    borderBottom: "1px solid #e5e7eb",
+    fontVariantNumeric: "tabular-nums",
+  };
+  const tdLabelStyle = {
+    ...tdStyle,
+    textAlign: "left",
+    color: "#374151",
+    fontWeight: "500",
+  };
+
+  // ── MetricsTable: severity columns, metric rows, delta vs baseline ──────────
+  const MetricsTable = ({ rows, dataByKey, severities, baselineSeverity, valueKey }) => {
+    const baseline = dataByKey[baselineSeverity];
+    return (
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ borderCollapse: "collapse", width: "100%", fontSize: "0.82rem" }}>
+          <thead>
+            <tr>
+              <th style={thLabelStyle}>Metric</th>
+              {severities.map((sev) => (
+                <th key={sev} style={thStyle}>
+                  {sev === baselineSeverity ? `${sev} (baseline)` : sev}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(({ key, label, raw }) => (
+              <tr key={key} style={{ background: "white" }}
+                onMouseEnter={e => e.currentTarget.style.background = "#f9fafb"}
+                onMouseLeave={e => e.currentTarget.style.background = "white"}
+              >
+                <td style={tdLabelStyle}>{label}</td>
+                {severities.map((sev) => {
+                  const entry  = dataByKey[sev];
+                  const val    = entry ? (valueKey ? entry[valueKey]?.[key] : entry[key]) : undefined;
+                  const bVal   = baseline ? (valueKey ? baseline[valueKey]?.[key] : baseline[key]) : undefined;
+                  const delta  = (sev !== baselineSeverity && val !== undefined && bVal !== undefined)
+                    ? val - bVal : null;
+                  return (
+                    <td key={sev} style={tdStyle}>
+                      <span style={{ display: "block", fontWeight: "600" }}>
+                        {raw ? (val !== undefined ? val : "—") : `${fmt(val)}%`}
+                      </span>
+                      {delta !== null && (
+                        <span style={{ fontSize: "0.72rem", color: deltaColor(delta) }}>
+                          {raw
+                            ? (delta > 0 ? `+${delta.toFixed(2)}` : delta.toFixed(2))
+                            : deltaLabel(delta)
+                          }
+                        </span>
+                      )}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  };
+
+  // ── BestFBetaTable: one sub-table per F-beta key (e.g. F1_iou65, F2_iou65) ─
+  const BestFBetaTable = ({ bestFBetaByKey, severities, baselineSeverity }) => {
+    // Collect all fbeta keys across all severities
+    const allFBetaKeys = [
+      ...new Set(
+        severities.flatMap((sev) =>
+          bestFBetaByKey[sev] ? Object.keys(bestFBetaByKey[sev]) : []
+        )
+      ),
+    ];
+
+    if (allFBetaKeys.length === 0) return <div style={{ color: "#888" }}>No best F-beta data.</div>;
+
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+        {allFBetaKeys.map((fbKey) => (
+          <div key={fbKey}>
+            <div style={{ fontWeight: "600", fontSize: "0.85rem", marginBottom: "0.4rem", color: "#1d4ed8" }}>
+              {fbKey}
+            </div>
+            <MetricsTable
+              rows={BEST_FBETA_ROWS}
+              dataByKey={Object.fromEntries(
+                severities.map((sev) => [sev, bestFBetaByKey[sev]?.[fbKey]])
+              )}
+              severities={severities}
+              baselineSeverity={baselineSeverity}
+              valueKey={null}
+            />
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  // ── Section header ──────────────────────────────────────────────────────────
+  const SectionHeader = ({ children }) => (
+    <div style={{
+      fontWeight: "700",
+      fontSize: "0.9rem",
+      color: "#1e3a5f",
+      borderBottom: "2px solid #1e3a5f",
+      paddingBottom: "4px",
+      marginBottom: "0.75rem",
+      marginTop: "1.5rem",
+      textTransform: "uppercase",
+      letterSpacing: "0.04em",
+    }}>
+      {children}
+    </div>
+  );
+
+  // ── Main render ─────────────────────────────────────────────────────────────
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "3rem" }}>
+      <h2 style={{
+        textAlign: "center",
+        fontWeight: "bold",
+        textDecoration: "underline",
+        color: "red",
+        marginBottom: "2rem",
+      }}>
+        COCO Detection Summary
+      </h2>
+
+      {resultsData.map((augmentationItem, index) => {
+        const { Augmentation, coco_summary } = augmentationItem;
+
+        if (!coco_summary) {
+          return (
+            <div key={index} style={{
+              padding: "1em", border: "1px dashed #ccc",
+              borderRadius: "8px", textAlign: "center", color: "#777",
+            }}>
+              <h3>{Augmentation}</h3>
+              <div>No COCO summary data available.</div>
+            </div>
+          );
+        }
+
+        const severities    = Object.keys(coco_summary);
+        // First key is assumed baseline (typically "None")
+        const baselineSeverity = severities[0];
+
+        // Flatten per-severity into lookup maps for each sub-section
+        const cocoByKey   = Object.fromEntries(
+          severities.map((sev) => [sev, coco_summary[sev]?.coco_summary])
+        );
+        const fbetaByKey  = Object.fromEntries(
+          severities.map((sev) => [sev, coco_summary[sev]?.fbeta_summary])
+        );
+        const bestByKey   = Object.fromEntries(
+          severities.map((sev) => [sev, coco_summary[sev]?.best_fbeta])
+        );
+        const avgMethod   = coco_summary[baselineSeverity]?.average_method ?? "macro";
+
+        return (
+          <div key={index} style={{
+            border: "1px solid #ccc",
+            borderRadius: "10px",
+            padding: "2rem",
+          }}>
+            <h3 style={{ textAlign: "center", fontWeight: "bold", marginBottom: "0.25rem" }}>
+              {Augmentation}
+            </h3>
+            <div style={{ textAlign: "center", fontSize: "0.78rem", color: "#6b7280", marginBottom: "1.5rem" }}>
+              Averaging method: <strong>{avgMethod}</strong> · Baseline severity: <strong>{baselineSeverity}</strong>
+              · Δ values show change from baseline (green = improvement, red = degradation)
+            </div>
+
+            <SectionHeader>COCO AP / AR</SectionHeader>
+            <MetricsTable
+              rows={COCO_ROWS}
+              dataByKey={cocoByKey}
+              severities={severities}
+              baselineSeverity={baselineSeverity}
+              valueKey={null}
+            />
+
+            <SectionHeader>F-Beta Summary</SectionHeader>
+            <MetricsTable
+              rows={FBETA_ROWS}
+              dataByKey={fbetaByKey}
+              severities={severities}
+              baselineSeverity={baselineSeverity}
+              valueKey={null}
+            />
+
+            <SectionHeader>Best F-Beta Operating Points</SectionHeader>
+            <BestFBetaTable
+              bestFBetaByKey={bestByKey}
+              severities={severities}
+              baselineSeverity={baselineSeverity}
+            />
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+<CocoSummarySection props={props} />

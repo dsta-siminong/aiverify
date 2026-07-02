@@ -541,6 +541,7 @@ class COCOeval:
         plt.grid(True)
         plt.legend(loc='lower left')
         plt.savefig(filename)
+        plt.close()
 
     def accumulateFBeta(self):
         print('Accumulating F-beta evaluation results...')
@@ -655,8 +656,10 @@ class COCOeval:
         precision[edge2] = 1
 
         if average == 'macro':
-            precision = np.mean(precision, axis=0)
-            recall = np.mean(recall, axis=0)
+            # precision = np.mean(precision, axis=0)
+            # recall = np.mean(recall, axis=0)
+            precision = np.nanmean(precision, axis=0)
+            recall = np.nanmean(recall, axis=0)
         elif average == 'weighted':
             precision = np.average(precision, axis=0, weights=numGtCum.squeeze(axis=1))
             recall = np.average(recall, axis=0, weights=numGtCum.squeeze(axis=1))
@@ -878,10 +881,10 @@ class COCOeval:
             numGtCum.flatten()
         ):
             report[cls_name] = {
-                "precision_report": float(precision),
-                "recall_report": float(recall),
-                f"f{beta}-score_report": float(fscore),
-                "support_report": int(support),
+                "precision": float(precision),
+                "recall": float(recall),
+                f"f{beta}_score": float(fscore),
+                "support": int(support),
             }
 
         # total_support = int(sum(numGtCum).item())
@@ -998,6 +1001,7 @@ class COCOeval:
         plt.grid(True)
         plt.legend(loc='lower left')
         plt.savefig(filename)
+        plt.close()
 
     def plotPRCurve(self, filename, areaRng='all', classIdx=None, average='macro'):
         '''
@@ -1041,6 +1045,7 @@ class COCOeval:
         plt.grid(True)
         plt.legend(loc='lower left')
         plt.savefig(filename)
+        plt.close()
 
     def getBestFBeta(self, beta=1, iouThr=0.5, areaRng='all', classIdx=None, average='macro'):
         '''
@@ -1079,6 +1084,73 @@ class COCOeval:
 
     def __str__(self):
         self.summarize()
+
+    def collectSummaryResults(self, fbeta_betas=(1, 2), fbeta_iou_thrs=(0.5,), best_fbeta_average='macro'):
+        '''
+        Run summarize(), summarizeFBetaScores(), and getBestFBeta() and assemble
+        all results into a single labeled dictionary, instead of three separate
+        flat/positional arrays (self.stats, self.fstats) plus loose tuples.
+
+        Requires accumulate() and accumulateFBeta() to have already been run.
+
+        :param fbeta_betas: which beta values to compute "best F-beta" for (default F1, F2)
+        :param fbeta_iou_thrs: which IoU thresholds to compute "best F-beta" for
+        :param best_fbeta_average: averaging method passed to getBestFBeta ('micro'|'macro'|'weighted')
+        :return: dict, see structure below
+        '''
+        if not self.eval:
+            raise Exception('Please run accumulate() first')
+        if not self.evalFBeta:
+            raise Exception('Please run accumulateFBeta() first')
+
+        # --- self.stats: COCO AP/AR, positionally indexed -> named ---
+        self.summarize()
+        coco_stat_names = [
+            'AP_all',        # AP @ IoU=.10:.95 | area=all   | maxDets=100
+            'AP_50',         # AP @ IoU=.50     | area=all   | maxDets=100
+            'AP_75',         # AP @ IoU=.75     | area=all   | maxDets=100
+            'AP_small',      # AP @ IoU=.10:.95 | area=small | maxDets=100
+            'AP_medium',     # AP @ IoU=.10:.95 | area=medium| maxDets=100
+            'AP_large',      # AP @ IoU=.10:.95 | area=large | maxDets=100
+            'AR_maxDet1',    # AR @ IoU=.10:.95 | area=all   | maxDets=1
+            'AR_maxDet10',   # AR @ IoU=.10:.95 | area=all   | maxDets=10
+            'AR_maxDet100',  # AR @ IoU=.10:.95 | area=all   | maxDets=100
+            'AR_small',      # AR @ IoU=.10:.95 | area=small | maxDets=100
+            'AR_medium',     # AR @ IoU=.10:.95 | area=medium| maxDets=100
+            'AR_large',      # AR @ IoU=.10:.95 | area=large | maxDets=100
+        ]
+        coco_summary = {name: float(val) for name, val in zip(coco_stat_names, self.stats)}
+
+        # --- self.fstats: F-beta summary, positionally indexed -> named ---
+        self.summarizeFBetaScores(average=best_fbeta_average)
+        fbeta_stat_names = [
+            'F1_iou50_all', 'F1_iou75_all', 'F1_iou50_small', 'F1_iou50_medium', 'F1_iou50_large',
+            'F2_iou50_all', 'F2_iou75_all', 'F2_iou50_small', 'F2_iou50_medium', 'F2_iou50_large',
+        ]
+        fbeta_summary = {name: float(val) for name, val in zip(fbeta_stat_names, self.fstats)}
+
+        # --- getBestFBeta: best operating point per (beta, iouThr) ---
+        best_fbeta = {}
+        for beta in fbeta_betas:
+            for iou_thr in fbeta_iou_thrs:
+                score, conf_thr, precision, recall = self.getBestFBeta(
+                    beta=beta, iouThr=iou_thr, areaRng='all', classIdx=None,
+                    average=best_fbeta_average,
+                )
+                key = f'F{beta}_iou{int(iou_thr * 100)}'
+                best_fbeta[key] = {
+                    'score': float(score),
+                    'confThr': float(conf_thr),
+                    'precision': float(precision),
+                    'recall': float(recall),
+                }
+
+        return {
+            'coco_summary': coco_summary,      # named AP/AR values, from self.stats
+            'fbeta_summary': fbeta_summary,    # named F1/F2 values, from self.fstats
+            'best_fbeta': best_fbeta,          # best operating point per beta/IoU combo
+            'average_method': best_fbeta_average,
+        }
 
 class Params:
     '''

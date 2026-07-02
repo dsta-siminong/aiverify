@@ -1,97 +1,52 @@
-<div style={{
-  width: "100%",
-  padding: "16px",
-  marginBottom: "24px",
-  border: "1px solid #e5e7eb",
-  borderRadius: "8px",
-  backgroundColor: "#fafafa",
-  boxSizing: "border-box",
-  display: "flex",
-  flexDirection: "column",
-  gap: "16px",
-}}>
+import InfoBox from "./InfoBox";
+
+<InfoBox>
   <h3>mAP Under Corruption</h3>
 
   <span>
     This widget shows how the model's Mean Average Precision (mAP) — its overall
     detection performance — changes for each corruption algorithm as severity increases.
   </span>
-</div>
+</InfoBox>
 
-<div style={{
-  width: "100%",
-  padding: "16px",
-  marginBottom: "24px",
-  border: "1px solid #e5e7eb",
-  borderRadius: "8px",
-  backgroundColor: "#fafafa",
-  boxSizing: "border-box",
-  display: "flex",
-  flexDirection: "column",
-  gap: "16px",
-}}>
+<InfoBox>
   <h4><b>How to read?</b></h4>
 
   <p>
-    Each line graph corresponds to a corruption algorithm, tracking mAP as severity
-    increases from left to right. Higher mAP is better; a drop toward the right means
-    the model is struggling under that corruption.
+    Each line graph shows one corruption algorithm, with mAP tracked across
+    increasing severity from left to right. Higher mAP is better, so a drop
+    toward the right means the model is struggling more under that corruption.
   </p>
 
+  <div
+    style={{
+      margin: "4px 0 0 0",
+      padding: "10px 14px",
+      backgroundColor: "#f0f4ff",
+      borderLeft: "4px solid #6366f1",
+      borderRadius: "4px",
+    }}
+  >
+    <p style={{ margin: 0 }}>
+      <b>What is mAP?</b>
+    </p>
 
-  <p style={{ margin: "4px 0 0 0", padding: "10px 14px", backgroundColor: "#f0f4ff", borderLeft: "4px solid #6366f1", borderRadius: "4px" }}>
-    <b>What is mAP?</b>
-  </p>
+    <p style={{ margin: "8px 0 0 0" }}>
+      In object detection, the model has to do two things at once: find the
+      object and place the box in the right spot. A prediction only counts when
+      the box overlaps the ground truth enough, which is measured by a metric called 
+      Intersection over Union (IoU).
+    </p>
 
-  <p style={{ margin: "4px 0 0 0", padding: "10px 14px", backgroundColor: "#f0f4ff", borderLeft: "4px solid #6366f1", borderRadius: "4px" }}>
-    Unlike image classification — where the model simply picks a class label and is
-    either right or wrong — object detection requires the model to do two things
-    simultaneously: identify <em>what</em> objects are present and <em>where</em> they
-    are. A prediction only counts as correct if both are right. mAP captures this
-    combined requirement in a single score.
-  </p>
+    <p style={{ margin: "8px 0 0 0" }}>
+      Average Precision (AP) summarizes how well the model performs for one class, balancing missed
+      detections and false alarms. Mean Average Precision (mAP) is the average of AP across all classes,
+      so it gives a single overall score for detection quality.
+    </p>
+  </div>
+</InfoBox>
 
-  <p style={{ margin: "4px 0 0 0", padding: "10px 14px", backgroundColor: "#f0f4ff", borderLeft: "4px solid #6366f1", borderRadius: "4px" }}>
-    It builds up from two concepts:
-  </p>
-
-  <ul>
-    <li>
-      <b>IoU (Intersection over Union)</b> — a measure of how well a predicted bounding
-      box overlaps with the ground truth box. It is the area of overlap divided by the
-      total area covered by both boxes, giving a value between 0 and 1. A prediction
-      is only considered a true detection if its IoU exceeds a set threshold
-      (commonly 0.5, meaning at least 50% overlap). Below that threshold, even a
-      correctly labelled box counts as a miss.
-    </li>
-    <li>
-      <b>Average Precision (AP)</b> — for each object class, AP summarises how well
-      the model finds all instances of that class (recall) while avoiding false alarms
-      (precision), across all confidence thresholds. A perfect AP of 1.0 means the
-      model found every object of that class with no false detections.
-    </li>
-  </ul>
-
-  <p style={{ margin: "4px 0 0 0", padding: "10px 14px", backgroundColor: "#f0f4ff", borderLeft: "4px solid #6366f1", borderRadius: "4px" }}>
-    <b>mAP</b> is then the mean of AP scores across all object classes. It can be
-    thought of as the model's overall detection quality: how reliably it finds objects,
-    places boxes around them accurately, and avoids false alarms — all at once.
-    A higher mAP means the model is performing well across all of these dimensions.
-  </p>
-</div>
-
-<div style={{
-  width: "100%",
-  padding: "16px",
-  marginBottom: "24px",
-  border: "1px solid #e5e7eb",
-  borderRadius: "8px",
-  backgroundColor: "#fafafa",
-  boxSizing: "border-box",
-  display: "flex",
-  flexDirection: "column",
-  gap: "16px",
-}}>
+<InfoBox>
   <h4><b>Interpretation</b></h4>
 
   <p>
@@ -110,4 +65,4 @@
     corruption type during training; the model has learned to rely on corruption
     artefacts as cues. Retraining with fewer augmented samples of this type is recommended.
   </p>
-</div>
+</InfoBox>

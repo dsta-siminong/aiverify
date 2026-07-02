@@ -82,6 +82,9 @@ class ObjectTest:
             "severity_after": None,
             "severity_before_idx": 0,
             "severity_after_idx": 5,
+            "iou_thres": 0.6,
+            "score_thres": 0.6
+
         }
         expected_exception = RuntimeError
         expected_exception_msg = "The algorithm has failed data validation"

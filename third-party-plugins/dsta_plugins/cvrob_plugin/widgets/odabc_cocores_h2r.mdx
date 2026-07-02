@@ -1,0 +1,91 @@
+import InfoBox from "./InfoBox";
+
+<InfoBox>
+  <h3>COCO Severity Robustness Curves (Object Detection)</h3>
+
+  <p>
+    This widget shows how a model's detection quality changes across severity levels
+    for each specified corruption algorithm, using three curve plots per severity.
+  </p>
+
+  <p>
+    For each severity level, three plots are displayed: an F-Beta curve, a Precision-Recall
+    curve, and a COCO-style Precision-Recall curve. Each plot summarises detection quality
+    at that severity by sweeping across confidence thresholds, rather than reporting a
+    single fixed score.
+  </p>
+</InfoBox>
+
+<InfoBox>
+  <h4><b>How to read?</b></h4>
+
+  <p>
+    Each set of three plots repeats for every severity level. Compare each plot against
+    the equivalent plot from the previous severity to track how the curve's shape changes
+    as the augmentation is pushed harder.
+  </p>
+
+  <p>Each of the three plots conveys a different aspect of model performance:</p>
+  <ul>
+    <li>
+      <b>F-Beta curve</b> — plots F1 and F2 score against confidence threshold. A curve
+      that stays high and flat across most of the threshold range indicates the model is
+      robust regardless of how conservatively or aggressively predictions are filtered.
+      F2 up-weights recall, so a larger gap between F1 and F2 lines suggests the model
+      is missing more objects than it is generating false alarms
+    </li>
+    <li>
+      <b>Precision-Recall curve</b> — plots precision directly against recall. A curve
+      hugging the top-right corner is desirable; a curve that drops sharply indicates
+      the model must sacrifice one to maintain the other
+    </li>
+    <li>
+      <b>COCO PR curve</b> — the same precision-recall relationship, computed via the
+      standard COCO matching protocol. Useful as a cross-check against the custom PR curve
+    </li>
+  </ul>
+
+  <p>
+    In general, curves shifting downward as severity increases is expected. What matters
+    is the rate and shape of that shift, not just the endpoint.
+  </p>
+</InfoBox>
+
+<InfoBox>
+  <h4><b>Interpretation</b></h4>
+
+  <p>
+    If the curves remain stable across all severity levels, the model can be considered
+    robust to this corruption and no further action is required.
+  </p>
+
+  <p>When degradation is present, the pattern of decline indicates where the problem lies:</p>
+  <ul>
+    <li>
+      <b>Sharp drop at one or two specific severity levels</b> — suggests a threshold
+      effect where the augmentation crosses a perceptual or geometric limit the model was
+      not trained to handle; targeted data augmentation or fine-tuning at that severity
+      range is recommended
+    </li>
+    <li>
+      <b>Gradual, consistent decline across all severities</b> — points to a broader
+      sensitivity to the augmentation type itself; adding this augmentation more broadly
+      into training data is recommended rather than targeting a specific severity level
+    </li>
+    <li>
+      <b>F-Beta curve collapsing at extreme confidence thresholds</b> — the model's
+      useful operating range is narrowing under corruption; consider recalibrating the
+      deployment confidence threshold for this condition
+    </li>
+    <li>
+      <b>PR and COCO PR curves disagreeing noticeably</b> — this discrepancy is itself
+      a signal worth investigating before drawing conclusions from either curve
+    </li>
+  </ul>
+
+  <p>
+    If curves improve as severity increases, this may indicate the model has overfitted
+    to this corruption type during training. In that case, retraining with fewer augmented
+    samples of this type is recommended.
+  </p>
+</InfoBox>

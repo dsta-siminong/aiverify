@@ -418,4 +418,6 @@ class AlgoInit:
                     image_urls += v
                 else:
                     raise ValueError(f"invalid key {k}")
+            for k,v in result['coco_graphs'].items():
+                image_urls += v
         return image_urls

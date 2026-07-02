@@ -107,35 +107,35 @@ def brittle_res_to_dict(br):
 
 # ==== BRITTLENESS HELPERS ====
 
-def normalise_brittleness(raw: float, scoreA: float) -> float:
-    """
-    Normalise a raw image_brittleness value to [0, 1].
+# def normalise_brittleness(raw: float, scoreA: float) -> float:
+#     """
+#     Normalise a raw image_brittleness value to [0, 1].
 
-    image_brittleness returns an unbounded penalty for the worst-degraded detection:
-      - No match found:   drop = scoreA                          → max = scoreA
-      - Match found:      drop = max(0, scoreA-scoreB) + scoreA*(1-IoU)
-                                                                  → max = 2*scoreA
+#     image_brittleness returns an unbounded penalty for the worst-degraded detection:
+#       - No match found:   drop = scoreA                          → max = scoreA
+#       - Match found:      drop = max(0, scoreA-scoreB) + scoreA*(1-IoU)
+#                                                                   → max = 2*scoreA
 
-    Dividing by 2*scoreA maps the range to [0, 1], where:
-      0   = no degradation at all (scoreA==scoreB and IoU==1)
-      0.5 = either full confidence drop with perfect localisation,
-            or perfect confidence with zero overlap
-      1.0 = full confidence drop AND zero overlap (worst possible)
+#     Dividing by 2*scoreA maps the range to [0, 1], where:
+#       0   = no degradation at all (scoreA==scoreB and IoU==1)
+#       0.5 = either full confidence drop with perfect localisation,
+#             or perfect confidence with zero overlap
+#       1.0 = full confidence drop AND zero overlap (worst possible)
 
-    Args:
-        raw (float): Output of image_brittleness().
-        scoreA (float): Top detection confidence score before corruption (scoreA of the
-                        worst-affected detection). Use scores_A[i]["scores"].max().
+#     Args:
+#         raw (float): Output of image_brittleness().
+#         scoreA (float): Top detection confidence score before corruption (scoreA of the
+#                         worst-affected detection). Use scores_A[i]["scores"].max().
 
-    Returns:
-        float: Normalised brittleness in [0, 1]. Returns 0.0 if scoreA == 0.
-    """
-    if scoreA <= 0.0:
-        return 0.0
-    return min(raw / (2.0 * scoreA), 1.0)
+#     Returns:
+#         float: Normalised brittleness in [0, 1]. Returns 0.0 if scoreA == 0.
+#     """
+#     if scoreA <= 0.0:
+#         return 0.0
+#     return min(raw / (2.0 * scoreA), 1.0)
 
 
-def brittleness_label(norm: float) -> str:
+def _brittleness_label(norm: float) -> str:
     """Return a short plain-English severity label for a normalised brittleness value."""
     if norm < 0.25:
         return "Stable"
@@ -282,50 +282,6 @@ def _path_to_pil_with_detections(
 
     return pil_img
 
-def delta_detections(result, N=0):
-    num_A = len(result.predA["boxes"])
-    num_B = len(result.predB["boxes"])
-
-    decrease = num_A - num_B
-
-    if N < 0:
-        raise ValueError("N must be non-negative")
-
-    # Fractional threshold
-    if isinstance(N, float):
-        if N > 1:
-            raise ValueError("Fractional N must be between 0 and 1")
-
-        if num_A == 0:
-            return False
-
-        return decrease / num_A >= N
-
-    # Integer threshold
-    return decrease > N
-
-def delta_detections_labels(result, N=0):
-    num_A = len(result.predA["boxes"])
-    num_labels = len(result.label)
-
-    decrease = num_labels - num_A
-
-    if N < 0:
-        raise ValueError("N must be non-negative")
-
-    # Fractional threshold
-    if isinstance(N, float):
-        if N > 1:
-            raise ValueError("Fractional N must be between 0 and 1")
-
-        if num_A == 0:
-            return False
-
-        return decrease / num_A <= N
-
-    # Integer threshold
-    return decrease < N
-
 # ==== VISUALISATION FUNCTIONS ====
 
 def visualize_topk_matplotlib(
@@ -378,10 +334,8 @@ def visualize_topk_matplotlib(
         n_A, top_A = _detection_summary(scores_A[i])
         n_B, top_B = _detection_summary(scores_B[i])
 
-        raw_brit = res.brittleness
-        norm_brit = normalise_brittleness(raw_brit, top_A)
-        label = brittleness_label(norm_brit)
-
+        brittleness = res.brittleness
+        label = _brittleness_label(brittleness)
         det_delta = n_B - n_A
         det_delta_str = (
             f"+{det_delta}" if det_delta > 0
@@ -422,8 +376,7 @@ def visualize_topk_matplotlib(
                 f"image: {idx}\n"
                 f"AFTER corruption\n"
                 f"Detections: {n_B} ({det_delta_str})  |  Top conf: {top_B:.2f}\n"
-                f"Brittleness: {norm_brit:.2f} / 1.00  →  {label}\n"
-                f"(raw penalty: {raw_brit:.3f})"
+                f"Brittleness: {brittleness:.2f} / 1.00  →  {label}"
             ),
             transform=axes_row[1].transAxes,
             va="top", ha="left", fontsize=9,
@@ -441,114 +394,111 @@ def visualize_topk_matplotlib(
 
     return save_path, fragment_paths
 
-def visualize_topk_plotly(
-    results_sorted,
-    scores_A, scores_B,
-    K=10,
-    class_names=None,
-    transform=None,
-    directory=Path(),
-    image_paths=None,
-    aug_class=None,
-    severity_A=None,
-    severity_B=None,
-    # ── detection-overlay params (all optional) ──────────────────────────
-    gt_labels=None,        # list[list[dict]]: ground-truth per image
-    score_threshold=0.5,
-):
-    topk = results_sorted[:K]
+# def visualize_topk_plotly(
+#     results_sorted,
+#     scores_A, scores_B,
+#     K=10,
+#     class_names=None,
+#     transform=None,
+#     directory=Path(),
+#     image_paths=None,
+#     aug_class=None,
+#     severity_A=None,
+#     severity_B=None,
+#     # ── detection-overlay params (all optional) ──────────────────────────
+#     gt_labels=None,        # list[list[dict]]: ground-truth per image
+#     score_threshold=0.5,
+# ):
+#     topk = results_sorted[:K]
 
-    fig = make_subplots(
-        rows=K,
-        cols=3,
-        column_widths=[0.4, 0.2, 0.4],
-        horizontal_spacing=0.05,
-        vertical_spacing=0.05,
-        specs=[[{"type": "image"}, {"type": "xy"}, {"type": "image"}] for _ in range(K)],
-    )
+#     fig = make_subplots(
+#         rows=K,
+#         cols=3,
+#         column_widths=[0.4, 0.2, 0.4],
+#         horizontal_spacing=0.05,
+#         vertical_spacing=0.05,
+#         specs=[[{"type": "image"}, {"type": "xy"}, {"type": "image"}] for _ in range(K)],
+#     )
 
-    for r, res in enumerate(topk, start=1):
-        i = res.index
-        img_path = str(image_paths[i]) if image_paths else None
-        idx = Path(img_path).name if img_path else i
+#     for r, res in enumerate(topk, start=1):
+#         i = res.index
+#         img_path = str(image_paths[i]) if image_paths else None
+#         idx = Path(img_path).name if img_path else i
 
-        # Encode as JPEG (10-30x smaller than raw z= array).
-        # When gt_labels is supplied, render detections onto the PIL image first.
-        _with_det = gt_labels is not None
-        imgA_b64 = "data:image/jpeg;base64," + _pil_to_base64(
-            _path_to_pil_with_detections(
-                img_path, aug_class, severity_A,
-                scores_A[i] if _with_det else None,
-                gt_labels[i] if _with_det else None,
-                class_names, score_threshold,
-            ), jpeg_quality=85
-        )
-        imgB_b64 = "data:image/jpeg;base64," + _pil_to_base64(
-            _path_to_pil_with_detections(
-                img_path, aug_class, severity_B,
-                scores_B[i] if _with_det else None,
-                gt_labels[i] if _with_det else None,
-                class_names, score_threshold,
-            ), jpeg_quality=85
-        )
+#         # Encode as JPEG (10-30x smaller than raw z= array).
+#         # When gt_labels is supplied, render detections onto the PIL image first.
+#         _with_det = gt_labels is not None
+#         imgA_b64 = "data:image/jpeg;base64," + _pil_to_base64(
+#             _path_to_pil_with_detections(
+#                 img_path, aug_class, severity_A,
+#                 scores_A[i] if _with_det else None,
+#                 gt_labels[i] if _with_det else None,
+#                 class_names, score_threshold,
+#             ), jpeg_quality=85
+#         )
+#         imgB_b64 = "data:image/jpeg;base64," + _pil_to_base64(
+#             _path_to_pil_with_detections(
+#                 img_path, aug_class, severity_B,
+#                 scores_B[i] if _with_det else None,
+#                 gt_labels[i] if _with_det else None,
+#                 class_names, score_threshold,
+#             ), jpeg_quality=85
+#         )
 
-        n_A, top_A = _detection_summary(scores_A[i])
-        n_B, top_B = _detection_summary(scores_B[i])
+#         n_A, top_A = _detection_summary(scores_A[i])
+#         n_B, top_B = _detection_summary(scores_B[i])
 
-        raw_brit = res.brittleness
-        norm_brit = normalise_brittleness(raw_brit, top_A)
-        label = brittleness_label(norm_brit)
+#         brittleness = res.brittleness
+#         label = _brittleness_label(brittleness)
+#         det_delta = n_B - n_A
+#         det_delta_str = (
+#             f"+{det_delta} more" if det_delta > 0
+#             else f"{abs(det_delta)} fewer" if det_delta < 0
+#             else "no change"
+#         )
 
-        det_delta = n_B - n_A
-        det_delta_str = (
-            f"+{det_delta} more" if det_delta > 0
-            else f"{abs(det_delta)} fewer" if det_delta < 0
-            else "no change"
-        )
+#         fig.add_trace(go.Image(source=imgA_b64), row=r, col=1)
 
-        fig.add_trace(go.Image(source=imgA_b64), row=r, col=1)
+#         fig.add_trace(
+#             go.Scatter(
+#                 x=[0.5], y=[0.5],
+#                 mode="text",
+#                 text=[(
+#                     f"<b>{idx}</b><br><br>"
+#                     f"<b>Before</b><br>"
+#                     f"Detections: {n_A}<br>"
+#                     f"Top conf: {top_A:.2f}<br><br>"
+#                     f"<b>After</b><br>"
+#                     f"Detections: {n_B} ({det_delta_str})<br>"
+#                     f"Top conf: {top_B:.2f}<br><br>"
+#                     f"<b>Brittleness</b><br>"
+#                     f"{norm_brit:.2f} / 1.00<br>"
+#                     f"<i>{label}</i><br>"
+#                     f"<span style='color:grey;font-size:0.85em'>"
+#                     f"raw: {raw_brit:.3f}</span>"
+#                 )],
+#                 showlegend=False
+#             ),
+#             row=r, col=2
+#         )
 
-        fig.add_trace(
-            go.Scatter(
-                x=[0.5], y=[0.5],
-                mode="text",
-                text=[(
-                    f"<b>{idx}</b><br><br>"
-                    f"<b>Before</b><br>"
-                    f"Detections: {n_A}<br>"
-                    f"Top conf: {top_A:.2f}<br><br>"
-                    f"<b>After</b><br>"
-                    f"Detections: {n_B} ({det_delta_str})<br>"
-                    f"Top conf: {top_B:.2f}<br><br>"
-                    f"<b>Brittleness</b><br>"
-                    f"{norm_brit:.2f} / 1.00<br>"
-                    f"<i>{label}</i><br>"
-                    f"<span style='color:grey;font-size:0.85em'>"
-                    f"raw: {raw_brit:.3f}</span>"
-                )],
-                showlegend=False
-            ),
-            row=r, col=2
-        )
+#         fig.update_xaxes(visible=False, row=r, col=2)
+#         fig.update_yaxes(visible=False, row=r, col=2)
 
-        fig.update_xaxes(visible=False, row=r, col=2)
-        fig.update_yaxes(visible=False, row=r, col=2)
+#         fig.add_trace(go.Image(source=imgB_b64), row=r, col=3)
 
-        fig.add_trace(go.Image(source=imgB_b64), row=r, col=3)
+#     fig.update_layout(
+#         height=360 * K,
+#         showlegend=False,
+#         title="Top-K Most Brittle Images (Detection)",
+#         template="plotly_white"
+#     )
 
-    fig.update_layout(
-        height=360 * K,
-        showlegend=False,
-        title="Top-K Most Brittle Images (Detection)",
-        template="plotly_white"
-    )
+#     _suffix = "_with_predictions" if gt_labels is not None else ""
+#     save_path = directory / f"brittleness_topk{_suffix}.html"
+#     fig.write_html(save_path, include_plotlyjs="inline")
 
-    _suffix = "_with_predictions" if gt_labels is not None else ""
-    save_path = directory / f"brittleness_topk{_suffix}.html"
-    fig.write_html(save_path, include_plotlyjs="inline")
-
-    return save_path
-
+#     return save_path
 
 def visualize_in_html(
     results_sorted,
@@ -611,10 +561,8 @@ def visualize_in_html(
         gt = labels[i]
         n_gt = len(gt)
 
-        raw_brit = res.brittleness
-        norm_brit = normalise_brittleness(raw_brit, top_A)
-        label = brittleness_label(norm_brit)
-
+        brittleness = res.brittleness
+        label = _brittleness_label(brittleness)
         det_delta = n_B - n_A
         det_delta_str = (
             f"+{det_delta} more" if det_delta > 0
@@ -623,11 +571,11 @@ def visualize_in_html(
         )
 
         # Normalised brittleness bar: filled portion as a percentage
-        bar_pct = int(norm_brit * 100)
+        bar_pct = int(brittleness * 100)
         bar_color = (
-            "#2ecc71" if norm_brit < 0.25 else
-            "#f1c40f" if norm_brit < 0.5  else
-            "#e67e22" if norm_brit < 0.75 else
+            "#2ecc71" if brittleness < 0.25 else
+            "#f1c40f" if brittleness < 0.5  else
+            "#e67e22" if brittleness < 0.75 else
             "#e74c3c"
         )
 
@@ -644,13 +592,12 @@ def visualize_in_html(
             f'<span style="color:#c0392b"><b>▶ After corruption</b></span><br>'
             f'&nbsp;&nbsp;Detections: <b>{n_B}</b> ({det_delta_str}) &nbsp;|&nbsp; Top confidence: <b>{top_B:.2f}</b><br><br>'
             # Brittleness score + bar
-            f'<b>Brittleness: {norm_brit:.2f} / 1.00 — {label}</b><br>'
+            f'<b>Brittleness: {brittleness:.2f} / 1.00 — {label}</b><br>'
             f'<div style="background:#ddd;border-radius:4px;height:10px;width:300px;display:inline-block;margin:4px 0">'
             f'<div style="background:{bar_color};width:{bar_pct}%;height:10px;border-radius:4px"></div></div><br>'
             f'<small style="color:#888">'
             f'Measures how much the model\'s best detection degraded after corruption.<br>'
-            f'0 = no change &nbsp;·&nbsp; 1 = detection fully lost or mislocalised<br>'
-            f'(raw penalty: {raw_brit:.3f})'
+            f'0 = no change &nbsp;·&nbsp; 1 = detection fully lost or mislocalised'
             f'</small>'
         )
 
@@ -908,9 +855,8 @@ def visualize_topk_without_plotly(
         n_A, top_A = _detection_summary(scores_A[i])
         n_B, top_B = _detection_summary(scores_B[i])
  
-        raw_brit = res.brittleness
-        norm_brit = normalise_brittleness(raw_brit, top_A)
-        brit_label = brittleness_label(norm_brit)
+        brittleness = res.brittleness
+        brit_label = _brittleness_label(brittleness)
  
         det_delta = n_B - n_A
         det_delta_str = (
@@ -919,11 +865,11 @@ def visualize_topk_without_plotly(
             else "no change"
         )
  
-        bar_pct = int(norm_brit * 100)
+        bar_pct = int(brittleness * 100)
         bar_color = (
-            "#2ecc71" if norm_brit < 0.25 else
-            "#f1c40f" if norm_brit < 0.5  else
-            "#e67e22" if norm_brit < 0.75 else
+            "#2ecc71" if brittleness < 0.25 else
+            "#f1c40f" if brittleness < 0.5  else
+            "#e67e22" if brittleness < 0.75 else
             "#e74c3c"
         )
  
@@ -949,8 +895,7 @@ def visualize_topk_without_plotly(
                 <div class="brit-bar-bg">
                     <div class="brit-bar-fill" style="width:{bar_pct}%; background:{bar_color};"></div>
                 </div>
-                <p><b>{norm_brit:.2f}</b> / 1.00 &mdash; <i>{brit_label}</i></p>
-                <p class="raw-brit">raw: {raw_brit:.3f}</p>
+                <p><b>{brittleness:.2f}</b> / 1.00 &mdash; <i>{brit_label}</i></p>
             </div>
         </div>
         """
