@@ -622,46 +622,6 @@ class Plugin(IAlgorithm):
         Image.fromarray(image).save(image_path)
         return str(image_path)
 
-    # def _get_one_corrupted_image(self, testloader, aug_class, severity, target_idx):
-
-    #     current_idx = 0
-    #     for images, targets in testloader:
-    #         for image, target in zip(images, targets):
-    #             if current_idx == target_idx:
-    #                 # ---- SAFE CONVERT INPUT IMAGE ----
-    #                 image_np = image.detach().cpu().numpy()
-
-    #                 # if tensor CHW float -> convert to HWC uint8
-    #                 if image_np.shape[0] == 3:
-    #                     image_np = image_np.transpose(1, 2, 0)
-    #                 image_np = image_np.astype(np.float32)
-
-    #                 if image_np.max() <= 1.5:
-    #                     image_np *= 255.0
-    #                 image_np = np.clip(image_np, 0, 255).astype(np.uint8)
-
-    #                 # ---- CORRUPTION ----
-    #                 if aug_class.name == "None" or severity == "None":
-    #                     corrupted_image = image_np
-    #                     corrupted_target = target
-    #                 else:
-    #                     corrupted_image, corrupted_target = aug_class.corr_func_sample(
-    #                         image_np,
-    #                         target,
-    #                         severity
-    #                     )
-
-    #                 # ---- SAFE OUTPUT NORMALIZATION ----
-    #                 corrupted_image = corrupted_image.astype(np.float32)
-
-    #                 if corrupted_image.max() > 1.5:
-    #                     corrupted_image /= 255.0
-    #                 corrupted_image = np.clip(corrupted_image, 0, 1)
-    #                 corrupted_image = corrupted_image.transpose(2, 0, 1) # CHW for saving
-    #                 return corrupted_image
-
-    #             current_idx += 1
-
     def _get_one_corrupted_image_direct(self, image_paths, ground_truths, aug_class, severity, target_idx):
         image = Image.open(image_paths[target_idx]).convert("RGB")
         image_np = np.array(image).astype(np.uint8)  # HWC uint8, no full loader needed

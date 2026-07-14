@@ -23,9 +23,10 @@ import numpy as np
 import torchvision.transforms as transforms
 import torch
 from torch.utils.data import DataLoader, TensorDataset
-from .cvrob_util import evaluate, triplets, augmentation_gradient, handle_class_names_arg
-from .augmentations_class import make_augmentation_dict
+from .cvrob_util import evaluate, triplets, augmentation_gradient, handle_class_names_arg, ImageDataset, pad_collate
+from .augmentations_class import make_augmentation_dict, custom_parameter_change
 from pathlib import Path
+import pandas as pd
 # =====================================================================================
 # NOTE:
 # 1. Check that you have installed the aiverify_test_engine latest package.
@@ -418,10 +419,11 @@ class Plugin(IAlgorithm):
             severities = ["None"] + aug_class.severities
             for severity_idx, severity in enumerate(severities):
                 corrupted_dir = Path(aug_name) / f"severity{severity}"
-                display_image = self._get_one_corrupted_image(
-                    test_loader, aug_class, severity, display_idx
+                display_image = self._get_one_corrupted_image_direct(
+                    image_paths[display_idx],
+                    aug_class,
+                    severity,
                 )
-
                 image_path = self._save_one_image(display_image, str(corrupted_dir), Path(str(image_paths[display_idx])).name)
                 image = torch.tensor(display_image).unsqueeze(0).float()
                 model = model.float()
@@ -450,7 +452,6 @@ class Plugin(IAlgorithm):
             combined_results.append(individual_results)
             gradients.append(gradient)
             first_drops.append(first_drop)
-            # self._progress_inst.update(1/LEN)
             print()
 
         output_results.update({
@@ -475,21 +476,21 @@ class Plugin(IAlgorithm):
             np.ndarray: A list of numpy images
         """
         transform = transforms.Compose([
-            transforms.Resize((240, 320)),  # H, W
+            transforms.Resize((500, 700)),  # H, W
             transforms.ToTensor()
         ])
-
-        # Load all images into a tensor
         image_tensors = torch.stack([transform(Image.open(p).convert("RGB")) for p in image_paths])
-
-        # Convert labels to tensor
         label_tensors = torch.tensor(labels, dtype=torch.long)
-
-        # Create TensorDataset
         dataset = TensorDataset(image_tensors, label_tensors)
-
-        # Create DataLoader
         loader = DataLoader(dataset, batch_size=128, shuffle=False)
+
+        # dataset = ImageDataset(image_paths, labels)
+        # loader = DataLoader(
+        #     dataset,
+        #     batch_size=16,
+        #     shuffle=False,
+        #     collate_fn=pad_collate,
+        # )
 
         return dataset, loader
 
@@ -511,27 +512,36 @@ class Plugin(IAlgorithm):
         Image.fromarray(image).save(image_path)
         return str(image_path)
 
-    def _get_one_corrupted_image(self, testloader, aug_class, severity, target_idx):
+    def _get_one_corrupted_image_direct(
+        self,
+        image_path: str,
+        aug_class,         # Augmentation instance
+        severity: str,     # e.g. "severity_1" or "None"
+        resize: tuple[int, int] = (500, 700),  # (H, W) — match _load_images
+    ) -> np.ndarray:
+        """
+        Fetch and corrupt a single image directly from disk.
+        Matches the pipeline of _load_images + _get_one_corrupted_image exactly,
+        but without loading any other images.
 
-        current_idx = 0
+        Returns: CHW float32 numpy array in [0, 1]
+        """
+        # 1. Load and resize — identical to _load_images transform
+        image = Image.open(image_path).convert("RGB")
+        if resize is not None:
+            image = image.resize((resize[1], resize[0]), Image.BILINEAR)  # PIL takes (W, H)
 
-        for images, labels in testloader:
+        # 2. To uint8 HWC numpy — skip the float tensor round-trip entirely
+        image_np = np.array(image, dtype=np.uint8)  # HWC uint8
 
-            batch_size = images.shape[0]
+        # 3. Corrupt
+        if aug_class.name == "None" or severity == "None":
+            corrupted = image_np  # HWC uint8
+        else:
+            corrupted = aug_class.corr_func_arr(
+                image_np[None],   # needs batch dim: (1, H, W, C)
+                severity
+            )[0]                  # back to (H, W, C)
 
-            # Check if target is inside this batch
-            if current_idx + batch_size > target_idx:
-                local_idx = target_idx - current_idx
-
-                images_np = (images * 255).byte().numpy().transpose(0, 2, 3, 1)
-
-                if aug_class.name == "None" or severity == "None":
-                    corrupted = images_np
-                else:
-                    corrupted = aug_class.corr_func_arr(images_np, severity)
-
-                corrupted = corrupted.transpose(0, 3, 1, 2) / 255.0
-
-                return corrupted[local_idx]  # <-- only one image
-
-            current_idx += batch_size
+        # 4. Normalise to CHW float32 [0, 1]
+        return corrupted.transpose(2, 0, 1).astype(np.float32) / 255.0

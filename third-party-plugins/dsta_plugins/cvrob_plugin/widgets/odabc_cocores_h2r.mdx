@@ -1,18 +1,18 @@
 import InfoBox from "./InfoBox";
 
 <InfoBox>
-  <h3>COCO Severity Robustness Curves (Object Detection)</h3>
+  <h3>COCO Detection Summary (Object Detection)</h3>
 
   <p>
     This widget shows how a model's detection quality changes across severity levels
-    for each specified corruption algorithm, using three curve plots per severity.
+    for each specified corruption algorithm, using the standard COCO evaluation protocol.
   </p>
 
   <p>
-    For each severity level, three plots are displayed: an F-Beta curve, a Precision-Recall
-    curve, and a COCO-style Precision-Recall curve. Each plot summarises detection quality
-    at that severity by sweeping across confidence thresholds, rather than reporting a
-    single fixed score.
+    For each corruption algorithm, three tables are displayed side by side across severities:
+    a COCO AP/AR table, an F-Beta Summary table, and a Best F-Beta Operating Points table.
+    The first severity column (typically "None") is the clean-data baseline; all subsequent
+    columns reflect progressively harder corruptions of the same data.
   </p>
 </InfoBox>
 
@@ -20,34 +20,37 @@ import InfoBox from "./InfoBox";
   <h4><b>How to read?</b></h4>
 
   <p>
-    Each set of three plots repeats for every severity level. Compare each plot against
-    the equivalent plot from the previous severity to track how the curve's shape changes
-    as the augmentation is pushed harder.
+    Each row in a table is a single metric; each column is a severity level. Values are
+    shown as percentages, except for confidence threshold, which is a raw decimal between
+    0 and 1. The small coloured delta beneath each non-baseline value shows the change
+    from baseline in percentage points — green indicates improvement, red indicates
+    degradation, and neutral indicates a negligible shift (&lt;0.5pp).
   </p>
 
-  <p>Each of the three plots conveys a different aspect of model performance:</p>
+  <p>The three tables each answer a different question:</p>
   <ul>
     <li>
-      <b>F-Beta curve</b> — plots F1 and F2 score against confidence threshold. A curve
-      that stays high and flat across most of the threshold range indicates the model is
-      robust regardless of how conservatively or aggressively predictions are filtered.
-      F2 up-weights recall, so a larger gap between F1 and F2 lines suggests the model
-      is missing more objects than it is generating false alarms
+      <b>COCO AP/AR</b> — the broadest signal. <b>AP@.50</b> reflects basic localisation
+      quality; <b>AP@.10:.95</b> additionally penalises imprecise boxes; the
+      <b> small / medium / large</b> breakdowns reveal whether degradation is concentrated
+      on a particular object size
     </li>
     <li>
-      <b>Precision-Recall curve</b> — plots precision directly against recall. A curve
-      hugging the top-right corner is desirable; a curve that drops sharply indicates
-      the model must sacrifice one to maintain the other
+      <b>F-Beta Summary</b> — reflects the balance between precision and recall at fixed
+      IoU thresholds. <b>F1</b> weights precision and recall equally; <b>F2</b> up-weights
+      recall, making it more sensitive to missed detections
     </li>
     <li>
-      <b>COCO PR curve</b> — the same precision-recall relationship, computed via the
-      standard COCO matching protocol. Useful as a cross-check against the custom PR curve
+      <b>Best F-Beta Operating Points</b> — shows the best achievable F-score at each
+      severity and the confidence threshold at which it was found, alongside the
+      corresponding precision and recall at that point
     </li>
   </ul>
 
   <p>
-    In general, curves shifting downward as severity increases is expected. What matters
-    is the rate and shape of that shift, not just the endpoint.
+    Scan <b>horizontally</b> across a row to see how a metric degrades as severity
+    increases. Scan <b>vertically</b> down a column to identify which metric types are
+    most affected at a given severity level.
   </p>
 </InfoBox>
 
@@ -55,37 +58,45 @@ import InfoBox from "./InfoBox";
   <h4><b>Interpretation</b></h4>
 
   <p>
-    If the curves remain stable across all severity levels, the model can be considered
-    robust to this corruption and no further action is required.
+    A robust model shows small, consistent deltas across all rows as severity increases.
+    If most deltas are near zero and no single metric collapses while others hold, the
+    model can be considered robust to the given corruption and no further action is required.
   </p>
 
   <p>When degradation is present, the pattern of decline indicates where the problem lies:</p>
   <ul>
     <li>
-      <b>Sharp drop at one or two specific severity levels</b> — suggests a threshold
-      effect where the augmentation crosses a perceptual or geometric limit the model was
-      not trained to handle; targeted data augmentation or fine-tuning at that severity
-      range is recommended
+      <b>AP@.50 stable but AP@.10:.95 dropping</b> — the model is still finding objects
+      but box localisation is being disrupted; consider fine-tuning with tighter IoU criteria
     </li>
     <li>
-      <b>Gradual, consistent decline across all severities</b> — points to a broader
-      sensitivity to the augmentation type itself; adding this augmentation more broadly
-      into training data is recommended rather than targeting a specific severity level
+      <b>Small-object AP degrading faster than medium / large</b> — the corruption is
+      disproportionately affecting small instances; targeted augmentation at those scales
+      is recommended
     </li>
     <li>
-      <b>F-Beta curve collapsing at extreme confidence thresholds</b> — the model's
-      useful operating range is narrowing under corruption; consider recalibrating the
-      deployment confidence threshold for this condition
+      <b>F2 degrading faster than F1</b> — recall is falling more than precision, meaning
+      the model is missing more objects than it is generating spurious ones; retraining
+      with additional samples under this corruption type is advised
     </li>
     <li>
-      <b>PR and COCO PR curves disagreeing noticeably</b> — this discrepancy is itself
-      a signal worth investigating before drawing conclusions from either curve
+      <b>Confidence threshold shifting substantially upward at higher severities</b> — the
+      model is becoming less calibrated; a much stricter confidence threshold is needed to
+      maintain the same precision/recall balance, which may indicate that deployment
+      thresholds need recalibrating per operating condition
     </li>
   </ul>
 
+  <p>In cases of significant degradation, consider:</p>
+  <ul>
+    <li>Retraining with additional samples augmented using the observed corruption type</li>
+    <li>Reviewing confidence thresholds — some degradation in F-score may be recoverable by tuning rather than retraining</li>
+    <li>Reviewing model architecture if degradation is severe and consistent across all metric types</li>
+  </ul>
+
   <p>
-    If curves improve as severity increases, this may indicate the model has overfitted
-    to this corruption type during training. In that case, retraining with fewer augmented
+    If metrics improve as severity increases, this may indicate the model has overfitted to
+    this corruption type during training. In that case, retraining with fewer augmented
     samples of this type is recommended.
   </p>
 </InfoBox>

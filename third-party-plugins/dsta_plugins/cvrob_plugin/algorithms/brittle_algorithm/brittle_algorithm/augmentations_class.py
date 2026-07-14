@@ -4,10 +4,13 @@ import os
 os.environ['NO_ALBUMENTATIONS_UPDATE'] = '1'
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
+import inspect
 
 def make_augmentation_dict(lib_name):
     if lib_name in ['album', 'albumentations']:
         return make_augmentation_dict_album2()
+    elif lib_name in ['nrtk']:
+        return make_augmentation_dict_nrtk()
     return None
 
 def check_module(module):
@@ -18,10 +21,10 @@ def check_module(module):
         return corrupt_func_nrtk_reduced
     elif 'albumentations' in s:
         return corrupt_func_album_reduced
-    elif 'imagecorruptions' in s:
-        return corrupt_func_imagecorrupt_reduced
-    elif 'augly' in s:
-        return corrupt_func_augly_reduced
+    # elif 'imagecorruptions' in s:
+    #     return corrupt_func_imagecorrupt_reduced
+    # elif 'augly' in s:
+    #     return corrupt_func_augly_reduced
     else:
         raise ValueError('not valid library name')
 
@@ -39,18 +42,47 @@ def corrupt_func_album_reduced(images_np, aug_func, aug_params):
 
     return np.array(corrupted)
 
-def corrupt_func_augly_reduced(images_np, aug_func, aug_params): 
-    corrupted_imgs = np.array([aug_np_wrapper(img, aug_func, **aug_params) for img in images_np])
-    return corrupted_imgs
+# def corrupt_func_augly_reduced(images_np, aug_func, aug_params): 
+#     corrupted_imgs = np.array([aug_np_wrapper(img, aug_func, **aug_params) for img in images_np])
+#     return corrupted_imgs
+
+_NRTK_PERTURBER_CACHE = {}
+ 
+ 
+def _make_hashable(value):
+    """Recursively convert dict/list values into hashable tuples for use as a cache key."""
+    if isinstance(value, dict):
+        return tuple(sorted((k, _make_hashable(v)) for k, v in value.items()))
+    if isinstance(value, (list, tuple)):
+        return tuple(_make_hashable(v) for v in value)
+    return value
 
 def corrupt_func_nrtk_reduced(images_np, aug_func, aug_params):
-    perturber = aug_func(**aug_params)
-    corrupted_imgs = np.array([ perturber(img)[0] for img in images_np ])
-    return corrupted_imgs
+    def apply(img):
+        if img_gsd is not None:
+            return perturber(image=img, img_gsd=img_gsd)[0]
+        return perturber(image=img)[0]
+ 
+    img_gsd = aug_params.get("img_gsd", None)
+    rseed = aug_params.get("random_seed", 42)
+    clean_params = {k: v for k, v in aug_params.items() 
+                    if k not in ("img_gsd", "random_seed")}
+ 
+    if 'seed' in inspect.signature(aug_func).parameters:
+        clean_params['seed'] = rseed
+ 
+    cache_key = (aug_func, _make_hashable(clean_params))
+    perturber = _NRTK_PERTURBER_CACHE.get(cache_key)
+    if perturber is None:
+        perturber = aug_func(**clean_params)
+        _NRTK_PERTURBER_CACHE[cache_key] = perturber
+ 
+    result = np.array([apply(img) for img in images_np])
+    return result
 
-def corrupt_func_imagecorrupt_reduced(images_np, aug_func, aug_params):
-    corrupted_imgs = np.array([ corrupt(img.astype(np.uint8), corruption_name=aug_params['corrname'], severity=aug_params['severity']) for img in images_np ])
-    return corrupted_imgs
+# def corrupt_func_imagecorrupt_reduced(images_np, aug_func, aug_params):
+#     corrupted_imgs = np.array([ corrupt(img.astype(np.uint8), corruption_name=aug_params['corrname'], severity=aug_params['severity']) for img in images_np ])
+#     return corrupted_imgs
 
 def make_augmentation_dict_album():
     augmentations_album, aug_names_album = get_album_augmentations_list()
@@ -213,6 +245,97 @@ def get_augmentation_dict_album_header():
 
     return d
 
+# from nrtk.impls.perturb_image.optical import RadialDistortionPerturber
+from nrtk.impls.perturb_image.optical.otf import CircularAperturePerturber, DefocusPerturber, DetectorPerturber, JitterPerturber, TurbulenceAperturePerturber
+# from nrtk.impls.perturb_image.photometric.enhance import SharpnessPerturber, BrightnessPerturber
+from nrtk.impls.perturb_image.environment import WaterDropletPerturber, HazePerturber
+
+def get_augmentation_dict_nrtk_headers():
+
+    nrtk_rain = [
+        ['light', [0.0,0.5], 5, 0.05],
+        ['medium', [0.5,1.0], 10, 0.5],
+        ['heavy', [1.0,1.5], 15, 1.0],
+    ]
+    d_func = {
+        "None": "None",
+        "CircularAperture": CircularAperturePerturber,
+        # "Sharpness": SharpnessPerturber,
+        "Rain": WaterDropletPerturber,
+        # "Brightness": BrightnessPerturber,
+        "Haze": HazePerturber,
+        "Defocus": DefocusPerturber,
+        "Detector": DetectorPerturber,
+        "Jitter": JitterPerturber,
+        "TurbulenceAperture": TurbulenceAperturePerturber,
+        # "Radial": RadialDistortionPerturber,
+    }
+    d_params = {
+        "None":
+        { 
+            "None": {}
+        },
+
+        # "Sharpness": 
+        # {
+        #     f"factor_{round(1+x*0.1, 1)}": {"factor": round(1+x*0.1, 1)} for x in range(1,4)
+        # },
+        # "Brightness": 
+        # {
+        #     f"factor_{round(1-x*0.2, 1)}": {"factor": round(1-x*0.2, 1)} for x in range(1,4)
+        # },
+        "Rain": 
+        {
+            f"rain_{x[0]}": {"size_range": x[1], "num_drops":x[2]} for x in nrtk_rain
+        },
+        "Haze": 
+        {
+            f"factor_{round(1+0.1*x**2, 1)}": {"factor": round(1+0.1*x**2, 1)} for x in range(1,4)
+        },
+        "Defocus":
+        {
+            f"width_{x}": {"w_x": (5*x)*5e-4 , "w_y": (5*x)*5e-4, "img_gsd": 0.03} for x in range(1,4)
+        },
+        "Detector":
+        {
+            f"width_{x}": {"w_x": (10*x)*1e-5 , "w_y": (10*x)*1e-5, "img_gsd": 0.03} for x in range(1,4)
+        },   
+        "Jitter":
+        {
+            f"jitter_amp_{x}": {"s_x":(5*x)*1e-4, "img_gsd": 0.03} for x in range(1,4)
+        },
+        "TurbulenceAperture":
+        {
+            f"cn2_at_1m_{x}": {"cn2_at_1m": (10**x)*1.7e-14, "img_gsd": 0.03} for x in range(1,4)
+        },   
+        "CircularAperture": 
+        {
+            f"wavelength_{x}": {"mtf_wavelengths": [x*1e-4, (10**x)*1e-4], "mtf_weights": [0.5, 0.5], "img_gsd": 0.03} for x in range(4,7)
+        },
+        # "Radial": 
+        # {
+        #     f"k_{round(0.03*x, 2)}": {"k": [round(0.03*x, 2), 0, 0]} for x in range(1,4)
+        # },
+    }
+
+    return d_func, d_params
+
+def make_augmentation_dict_nrtk():
+    d_func, d_params = get_augmentation_dict_nrtk_headers()
+    assert d_func.keys() == d_params.keys()
+    d = {}
+    for key, func in d_func.items():
+        param_dict = d_params[key]
+        if key != "None":
+            for k1,v1 in param_dict.items():
+                print(k1, v1)
+                v1['random_seed'] = 42
+
+        print("aug_func", func)
+        new_aug = Augmentation(key, param_dict, func)
+        d[key] = new_aug 
+    return d
+
 DETERMINISTIC = {"None", "BrightnessUp", "BrightnessDown", "GaussianBlur", "ScaleUp", "ScaleDown", "Compression"}
 
 import ast
@@ -281,27 +404,27 @@ def make_augmentation_dict_album2():
         d[k] = new_aug 
     return d 
 
-def make_augmentation_dict_imagecorrupt():
-    augmentations = [
-        (corrupt, {'corrname': 'gaussian_noise'}),
-        (corrupt, {'corrname': 'fog'}),
-        (corrupt, {'corrname': 'brightness'}),
-        (corrupt, {'corrname': 'zoom_blur'}),
-    ]
-    aug_str = ['gaussian_noise', 'fog', 'brightness', 'zoom_blur']
-    augmentations2 = []
-    for a in augmentations:
-        td = {}
-        aug_func = a[0]
-        for severity in range(6):
-            aug_params = a[1]
-            td[f"severity_{severity}"] = aug_params
-        augmentations_album2.append((aug_func, td))
-    d = {}
-    for aug_tuple, aug_name in zip(augmentations_album2, aug_names_album):
-        new_aug = Augmentation(aug_name, aug_tuple[1], aug_tuple[0])
-        d[aug_name] = new_aug 
-    return d
+# def make_augmentation_dict_imagecorrupt():
+#     augmentations = [
+#         (corrupt, {'corrname': 'gaussian_noise'}),
+#         (corrupt, {'corrname': 'fog'}),
+#         (corrupt, {'corrname': 'brightness'}),
+#         (corrupt, {'corrname': 'zoom_blur'}),
+#     ]
+#     aug_str = ['gaussian_noise', 'fog', 'brightness', 'zoom_blur']
+#     augmentations2 = []
+#     for a in augmentations:
+#         td = {}
+#         aug_func = a[0]
+#         for severity in range(6):
+#             aug_params = a[1]
+#             td[f"severity_{severity}"] = aug_params
+#         augmentations_album2.append((aug_func, td))
+#     d = {}
+#     for aug_tuple, aug_name in zip(augmentations_album2, aug_names_album):
+#         new_aug = Augmentation(aug_name, aug_tuple[1], aug_tuple[0])
+#         d[aug_name] = new_aug 
+#     return d
 
 class Augmentation:
     def __init__(self, name, param_dict, aug_func):
@@ -317,7 +440,6 @@ class Augmentation:
         self.aug_func = aug_func
         self.random_seed = None
         self.deterministic = True if name in DETERMINISTIC else False 
-
 
     def set_seed(self, x):
         self.random_seed = x
@@ -353,7 +475,7 @@ class Augmentation:
 
     def corr_func_arr(self, arr, severity_idx):
         if type(severity_idx) == int:
-            #print(self.severities, "SEV", severity_idx)
+            print(self.severities, "SEV", severity_idx)
             severity = self.severities[severity_idx]
         else:
             severity = severity_idx
@@ -366,7 +488,6 @@ class Augmentation:
     
     def corr_func_dataloader(self, testloader, severity_idx):
         severity = self.determine_severity(severity_idx)
-
         if self.name in ["None", None] or severity in ["None", None]:
             return testloader
 
@@ -376,14 +497,14 @@ class Augmentation:
             severity_idx,
         )
 
-        pin_memory = torch.cuda.is_available()
-
+        pin_memory = False#torch.cuda.is_available()
         return torch.utils.data.DataLoader(
             dataset,
             batch_size=testloader.batch_size,
             shuffle=False,
             num_workers=0,
-            pin_memory=False,
+            pin_memory=pin_memory,
+            collate_fn=testloader.collate_fn,
         )
 
 class CorruptedDataset(torch.utils.data.Dataset):

@@ -407,59 +407,6 @@ class Plugin(IAlgorithm):
         class_names_arg = self._input_arguments.get('class_names') or None
         return handle_class_names_arg(class_names_arg, model)
 
-    # def _run_severity_epochs(
-    #     self,
-    #     model,
-    #     test_loader,
-    #     aug_class,
-    #     severity_name: str,
-    #     severity_idx: int,
-    #     num_epochs: int,
-    #     class_names: dict,
-    # ):
-    #     """
-    #     Run ``num_epochs`` evaluation passes for one (aug, severity) combination
-    #     and return averaged detection statistics.
-
-    #     Returns:
-    #         avg_stats  - per-class metrics averaged over epochs
-    #         avg_matrix - detection-matching matrix averaged over epochs
-    #         avg_map  - scalar mAP@50 averaged over valid epochs (None if none valid)
-    #     """
-    #     all_stats = []; all_matrices = []; all_maps = []
-
-    #     for i in range(num_epochs):
-    #         print("NUMEPOCHS", num_epochs)
-    #         seed = 1000 * severity_idx + i
-    #         aug_class.set_seed(seed)
-
-    #         if severity_name == "None":
-    #             corrupted_loader = test_loader
-    #         else:
-    #             corrupted_loader = aug_class.corr_func_dataloader(test_loader, severity_name)
-
-    #         det_stats = evaluate_detection_detailed(
-    #             model,
-    #             corrupted_loader,
-    #             None,
-    #             class_names,
-    #             iou_thresh=self._iou_thres,
-    #             score_thresh=self._score_thres,
-    #         )
-
-    #         all_stats.append(det_stats["per_class"])
-    #         all_matrices.append(det_stats["matrix"])
-    #         all_maps.append(det_stats["map"])
-
-    #     avg_stats = average_detection_stats(all_stats)
-    #     avg_matrix = np.mean(all_matrices, axis=0)
-    #     avg_map = (
-    #         float(np.mean([x for x in all_maps if x >= 0]))
-    #         if any(x >= 0 for x in all_maps)
-    #         else None
-    #     )
-    #     return avg_stats, avg_matrix, avg_map
-
     def _get_display_info_for_severity(
         self,
         model,
@@ -1047,7 +994,6 @@ class Plugin(IAlgorithm):
         return path_dict
 
     def _save_one_image(self, image: np.ndarray, subfolder_name: str, idx: int) -> str:
-
         save_dir = self._save_folder / subfolder_name
         save_dir.mkdir(parents=True, exist_ok=True)
         image_path = save_dir / f"{idx}_without_prediction.png"
@@ -1062,51 +1008,6 @@ class Plugin(IAlgorithm):
         image = np.clip(image, 0, 255).astype(np.uint8)
         Image.fromarray(image).save(image_path)
         return str(image_path)
-
-    # def _get_one_corrupted_image(
-    #     self,
-    #     testloader,
-    #     aug_class,
-    #     severity,
-    #     target_idx
-    # ):
-    #     current_idx = 0
-
-    #     for images, targets in testloader:
-    #         batch_size = len(images)
-    #         # target image inside this batch
-    #         if current_idx + batch_size > target_idx:
-    #             local_idx = target_idx - current_idx
-    #             image = images[local_idx]
-    #             target = targets[local_idx]
-
-    #             image_np = (
-    #                 image.mul(255)
-    #                 .byte()
-    #                 .cpu()
-    #                 .numpy()
-    #                 .transpose(1, 2, 0)
-    #             )
-
-    #             if aug_class.name == "None" or severity == "None":
-    #                 corrupted_image = image_np
-    #             else:
-    #                 corrupted_image, _ = aug_class.corr_func_sample(
-    #                     image_np,
-    #                     target,
-    #                     severity
-    #                 )
-
-    #             corrupted_image = (
-    #                 corrupted_image
-    #                 .transpose(2, 0, 1)
-    #                 .astype(np.float32)
-    #                 / 255.0
-    #             )
-
-    #             return corrupted_image
-
-    #         current_idx += batch_size
 
     def _save_detection_matrix_path(
         self,
@@ -1195,7 +1096,6 @@ class Plugin(IAlgorithm):
 
     def _build_detection_gt(self, df):
         gt_dict = {}
-
         for _, row in df.iterrows():
             fname = row["file_name"]
             bbox = [row["x_min"], row["y_min"], row["x_max"], row["y_max"]]

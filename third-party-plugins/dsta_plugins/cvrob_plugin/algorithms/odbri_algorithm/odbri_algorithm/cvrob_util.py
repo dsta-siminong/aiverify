@@ -216,62 +216,35 @@ def image_brittleness(predA, predB, iou_thresh=0.5, alpha=0.5):
     brittleness = sum(s * d for s, d in drops) / total_weight
     return brittleness  # guaranteed in [0,1]
 
-# def image_brittleness0(predA, predB, iou_thresh=0.5):
-#     boxesA, labelsA, scoresA = predA["boxes"], predA["labels"], predA["scores"]
-#     boxesB, labelsB, scoresB = predB["boxes"], predB["labels"], predB["scores"]
-
-#     if len(boxesA) == 0:
-#         return 0.0
-
-#     usedB = set()
-#     drops = []
-
-#     orderA = torch.argsort(scoresA, descending=True)
-
-#     for ai in orderA.tolist():
-#         boxA = boxesA[ai]
-#         labelA = int(labelsA[ai].item())
-#         scoreA = float(scoresA[ai].item())
-
-#         best_j = None
-#         best_iou = 0.0
-#         best_scoreB = 0.0
-
-#         for bj in range(len(boxesB)):
-#             if bj in usedB:
-#                 continue
-#             if int(labelsB[bj].item()) != labelA:
-#                 continue
-
-#             iou = box_iou(boxA.unsqueeze(0), boxesB[bj].unsqueeze(0))[0, 0].item()
-#             if iou > best_iou:
-#                 best_iou = iou
-#                 best_j = bj
-#                 best_scoreB = float(scoresB[bj].item())
-
-#         if best_j is None or best_iou < iou_thresh:
-#             drop = scoreA
-#         else:
-#             usedB.add(best_j)
-#             drop = max(0.0, scoreA - best_scoreB) + scoreA * (1.0 - best_iou)
-
-#         drops.append(drop)
-
-#     return max(drops) if drops else 0.0
-
-# def serialize_detection(pred):
-#     return {
-#         k: v.cpu().tolist() for k,v in pred.items()
-#     }
-
 class DetectionDataset(torch.utils.data.Dataset):
-    def __init__(self, image_paths, targets, transform=None):
+    def __init__(self, image_paths, targets, transform=None, min_size=500):
         self.image_paths = image_paths
         self.targets = targets
         self.transform = transform
+        self.min_size = min_size
 
     def __len__(self):
         return len(self.image_paths)
+
+    def _resize_up(self, image, boxes):
+        """Upscale image so the smaller side == min_size, keep aspect ratio.
+        Do nothing if the smaller side is already >= min_size."""
+        W, H = image.size  # PIL: (width, height)
+        shorter_side = min(W, H)
+
+        if shorter_side >= self.min_size:
+            return image, boxes  # already big enough, leave as-is
+
+        scale = self.min_size / shorter_side
+        new_W = round(W * scale)
+        new_H = round(H * scale)
+
+        image = image.resize((new_W, new_H), Image.BILINEAR)
+
+        if boxes.numel() > 0:
+            boxes = boxes * scale  # scales x1,y1,x2,y2 uniformly
+
+        return image, boxes
 
     def __getitem__(self, idx):
         image = Image.open(self.image_paths[idx]).convert("RGB")
@@ -279,13 +252,15 @@ class DetectionDataset(torch.utils.data.Dataset):
 
         boxes = []
         labels = []
-
         for obj in target:
             boxes.append(obj["bbox"])
             labels.append(obj["label"])
 
         boxes = torch.tensor(boxes, dtype=torch.float32) if boxes else torch.zeros((0, 4))
         labels = torch.tensor(labels, dtype=torch.long) if labels else torch.zeros((0,), dtype=torch.long)
+
+        # resize + adjust boxes BEFORE ToTensor (while image is still PIL, in pixel coords)
+        image, boxes = self._resize_up(image, boxes)
 
         target_dict = {
             "boxes": boxes,

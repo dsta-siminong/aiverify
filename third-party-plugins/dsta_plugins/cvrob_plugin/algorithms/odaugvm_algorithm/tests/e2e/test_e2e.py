@@ -28,7 +28,7 @@ binary_classification_pipeline = {
     "ground_truth": "label",
     "plugin_argument_values": {
         "class_names": None, 
-        "aug_library": 'albumentations',
+        "aug_library": 'nrtk',
         'aug_methods': 'Rain',
         'custom_parameters': None,
         "num_epochs": 1,

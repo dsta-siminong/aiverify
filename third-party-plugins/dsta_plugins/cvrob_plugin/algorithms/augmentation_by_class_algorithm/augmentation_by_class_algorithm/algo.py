@@ -471,8 +471,10 @@ class Plugin(IAlgorithm):
 
                 corrupted_dir = Path(aug_name) / f"severity_{severity_name}"
 
-                display_image = self._get_one_corrupted_image(
-                    test_loader, aug_class, severity_name, display_idx
+                display_image = self._get_one_corrupted_image_direct(
+                    image_paths[display_idx],
+                    aug_class,
+                    severity_name,
                 )
 
                 image_path = self._save_one_image(display_image, str(corrupted_dir), Path(str(image_paths[display_idx])).name)
@@ -501,10 +503,10 @@ class Plugin(IAlgorithm):
                 crs.append(avg_report) ; cms.append(cm_stats)
 
             path_dict = self._sklearn_method(crs, cms, severities, class_names, Path(aug_name), aug_name)
-            print()
-            print("CRS")
-            print(crs)
-            print()
+            # print()
+            # print("CRS")
+            # print(crs)
+            # print()
             individual_results.update(
                 {
                     "display_info": display_info, 
@@ -567,15 +569,15 @@ class Plugin(IAlgorithm):
         big_df = None; rows = []
 
         for severity, cr, cm in zip(severities, data, data2):
-            print("CR")
-            pprint(cr)
-            print("CM")
-            pprint(cm)
-            print(f"Severity: {severity}")
-            print("CR keys:", list(cr.keys()))
+            # print("CR")
+            # pprint(cr)
+            # print("CM")
+            # pprint(cm)
+            # print(f"Severity: {severity}")
+            # print("CR keys:", list(cr.keys()))
 
             df = pd.DataFrame.from_dict(cr).T
-            print(df.index.value_counts())
+            # print(df.index.value_counts())
             df['severity'] = severity
             df['class'] = df.index
 
@@ -1066,25 +1068,59 @@ class Plugin(IAlgorithm):
 
         return str(image_path)
 
-    def _get_one_corrupted_image(self, testloader, aug_class, severity, target_idx):
-        current_idx = 0
+    # def _get_one_corrupted_image(self, testloader, aug_class, severity, target_idx):
+    #     current_idx = 0
 
-        for images, labels in testloader:
-            batch_size = images.shape[0]
+    #     for images, labels in testloader:
+    #         batch_size = images.shape[0]
 
-            # Check if target is inside this batch
-            if current_idx + batch_size > target_idx:
-                local_idx = target_idx - current_idx
+    #         # Check if target is inside this batch
+    #         if current_idx + batch_size > target_idx:
+    #             local_idx = target_idx - current_idx
 
-                images_np = (images * 255).byte().numpy().transpose(0, 2, 3, 1)
+    #             images_np = (images * 255).byte().numpy().transpose(0, 2, 3, 1)
 
-                if aug_class.name == "None" or severity == "None":
-                    corrupted = images_np
-                else:
-                    corrupted = aug_class.corr_func_arr(images_np, severity)
+    #             if aug_class.name == "None" or severity == "None":
+    #                 corrupted = images_np
+    #             else:
+    #                 corrupted = aug_class.corr_func_arr(images_np, severity)
 
-                corrupted = corrupted.transpose(0, 3, 1, 2) / 255.0
+    #             corrupted = corrupted.transpose(0, 3, 1, 2) / 255.0
 
-                return corrupted[local_idx]  # <-- only one image
+    #             return corrupted[local_idx]  # <-- only one image
 
-            current_idx += batch_size
+    #         current_idx += batch_size
+
+    def _get_one_corrupted_image_direct(
+        self,
+        image_path: str,
+        aug_class,         # Augmentation instance
+        severity: str,     # e.g. "severity_1" or "None"
+        resize: tuple[int, int] = (240, 320),  # (H, W) — match _load_images
+    ) -> np.ndarray:
+        """
+        Fetch and corrupt a single image directly from disk.
+        Matches the pipeline of _load_images + _get_one_corrupted_image exactly,
+        but without loading any other images.
+
+        Returns: CHW float32 numpy array in [0, 1]
+        """
+        # 1. Load and resize — identical to _load_images transform
+        image = Image.open(image_path).convert("RGB")
+        if resize is not None:
+            image = image.resize((resize[1], resize[0]), Image.BILINEAR)  # PIL takes (W, H)
+
+        # 2. To uint8 HWC numpy — skip the float tensor round-trip entirely
+        image_np = np.array(image, dtype=np.uint8)  # HWC uint8
+
+        # 3. Corrupt
+        if aug_class.name == "None" or severity == "None":
+            corrupted = image_np  # HWC uint8
+        else:
+            corrupted = aug_class.corr_func_arr(
+                image_np[None],   # needs batch dim: (1, H, W, C)
+                severity
+            )[0]                  # back to (H, W, C)
+
+        # 4. Normalise to CHW float32 [0, 1]
+        return corrupted.transpose(2, 0, 1).astype(np.float32) / 255.0

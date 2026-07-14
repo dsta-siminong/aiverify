@@ -18,7 +18,7 @@
     {
       "type": "Algorithm",
       "cid": "augmentation_by_class_algorithm",
-      "datapath": "augmentations_by_class_algorithm.sample.json"
+      "datapath": "augmentation_by_class_algorithm.sample.json"
     }
   ],
   "properties": [

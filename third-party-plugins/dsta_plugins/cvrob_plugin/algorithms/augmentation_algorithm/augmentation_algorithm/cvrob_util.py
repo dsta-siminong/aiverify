@@ -1,13 +1,15 @@
-import requests
+# import requests
 from PIL import Image
-from io import BytesIO
+# from io import BytesIO
 import torch 
 import numpy as np
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
-from tqdm import tqdm
+# from tqdm import tqdm
 import torch.nn as nn
 from pathlib import Path
+from torch.utils.data import Dataset
+from torchvision import transforms
 
 def evaluate(model, loader, device):
     """
@@ -310,3 +312,40 @@ def best_fit_gradient(x_values, y_values):
     denominator = np.sum((x_values - x_mean) ** 2)
     
     return numerator / denominator
+
+class ImageDataset(Dataset):
+    def __init__(self, image_paths, labels):
+        self.image_paths = image_paths
+        self.labels = labels
+        self.transform = transforms.ToTensor()
+
+    def __len__(self):
+        return len(self.image_paths)
+
+    def __getitem__(self, idx):
+        image = Image.open(self.image_paths[idx]).convert("RGB")
+        image = self.transform(image)  # (3, H, W)
+        label = self.labels[idx]
+        return image, label
+
+def pad_collate(batch):
+    images, labels = zip(*batch)
+
+    max_h = max(img.shape[1] for img in images)
+    max_w = max(img.shape[2] for img in images)
+
+    padded_images = []
+
+    for img in images:
+        _, h, w = img.shape
+
+        # Pad on the bottom and right
+        pad = (0, max_w - w,   # left, right
+               0, max_h - h)   # top, bottom
+
+        padded_images.append(nn.functional.pad(img, pad, value=0))
+
+    images = torch.stack(padded_images)
+    labels = torch.tensor(labels, dtype=torch.long)
+
+    return images, labels

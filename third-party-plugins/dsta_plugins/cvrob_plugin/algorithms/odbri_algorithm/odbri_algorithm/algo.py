@@ -692,35 +692,6 @@ class Plugin(IAlgorithm):
 
         self._results = output_results
 
-    # def _load_images(self, image_paths: list[str], labels) -> list[np.ndarray]:
-    #     """
-    #     Load a list of numpy images from file paths.
-
-    #     Args:
-    #         image_paths (list[str]): A list of image file paths
-
-    #     Returns:
-    #         np.ndarray: A list of numpy images
-    #     """
-    #     transform = transforms.Compose([
-    #         transforms.Resize((240, 320)),  # H, W
-    #         transforms.ToTensor()
-    #     ])
-
-    #     # Load all images into a tensor
-    #     image_tensors = torch.stack([transform(Image.open(p).convert("RGB")) for p in image_paths])
-
-    #     # Convert labels to tensor
-    #     label_tensors = torch.tensor(labels, dtype=torch.long)
-
-    #     # Create TensorDataset
-    #     dataset = TensorDataset(image_tensors, label_tensors)
-
-    #     # Create DataLoader
-    #     loader = DataLoader(dataset, batch_size=16, shuffle=False)
-
-    #     return dataset, loader
-
     def _save_one_image(self, image: np.ndarray, subfolder_name: str, idx: int) -> str:
 
         save_dir = self._save_folder / subfolder_name
@@ -737,48 +708,6 @@ class Plugin(IAlgorithm):
         image = np.clip(image, 0, 255).astype(np.uint8)
         Image.fromarray(image).save(image_path)
         return str(image_path)
-
-    # def _get_one_corrupted_image(
-    #     self,
-    #     testloader,
-    #     aug_class,
-    #     severity,#s_idx,
-    #     target_idx
-    # ):
-        current_idx = 0
-        #severity = aug_class.determine_severity(s_idx)
-        for images, targets in testloader:
-            batch_size = len(images)
-            # target image inside this batch
-            if current_idx + batch_size > target_idx:
-                local_idx = target_idx - current_idx
-                image = images[local_idx]
-                target = targets[local_idx]
-                image_np = (
-                    image.mul(255)
-                    .byte()
-                    .cpu()
-                    .numpy()
-                    .transpose(1, 2, 0)
-                )
-
-                if aug_class.name == "None" or severity == "None":
-                    corrupted_image = image_np
-                else:
-                    corrupted_image, _ = aug_class.corr_func_sample(
-                        image_np,
-                        target,
-                        severity
-                    )
-                corrupted_image = (
-                    corrupted_image
-                    .transpose(2, 0, 1)
-                    .astype(np.float32)
-                    / 255.0
-                )
-                return corrupted_image
-
-            current_idx += batch_size
 
     def _build_detection_gt(self, df):
         gt_dict = {}

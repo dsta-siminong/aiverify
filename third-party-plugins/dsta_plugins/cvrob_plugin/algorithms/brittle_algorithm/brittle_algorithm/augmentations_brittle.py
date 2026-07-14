@@ -145,22 +145,6 @@ def visualize_topk_matplotlib(
         imgA = unnormalize(imgs_A[i], transform)
         imgB = unnormalize(imgs_B[i], transform)
 
-        # predA = get_topk_predictions(probs_A[i], k=1)[0]
-        # predB = get_topk_predictions(probs_B[i], k=1)[0]
-        # predA_int = predA[0]; initial_class_prob_A = predA[1]
-        # predB_int = predB[0]; resultant_class_prob_B = predB[1]
-        # classA = predA[0]
-        # classB = predB[0]
-        # if class_names is not None:
-        #     classA = class_names[predA[0]]
-        #     classB = class_names[predB[0]]
-        # print('&'*16)
-        # print(predA_int , res.predA)
-        # print(predB_int , res.predB)
-        # print(initial_class_prob_A , probs_A[i][predA_int].item())
-        # print(resultant_class_prob_B, probs_B[i][predB_int].item())
-        # print('&'*16)
-
         predA_int = res.predA
         predB_int = res.predB
         classA = predA_int
@@ -172,10 +156,6 @@ def visualize_topk_matplotlib(
         initial_class_prob_A = probs_A[i][predA_int].item()
         resultant_initial_class_prob_B = probs_B[i][predA_int].item()
         resultant_class_prob_B = probs_B[i][predB_int].item()
-        # resultant_initial_class_prob_B = predA[1]-res.brittleness
-        # resultant_initial_class_prob_B_0 = probs_B[i][predA_int].item()
-        # print(resultant_initial_class_prob_B_0 , resultant_initial_class_prob_B)
-        # assert resultant_initial_class_prob_B_0 == resultant_initial_class_prob_B
 
         axes[row, 0].imshow(imgA)
         axes[row, 0].axis("off")
@@ -560,21 +540,6 @@ def unnormalize(img_tensor, transform=None):
 
     return img.permute(1,2,0).numpy()
 
-# def get_topk_predictions(probs, k=3):
-#     """
-#     Get the top-k predicted class indices and their probabilities.
-
-#     Args:
-#         probs (torch.Tensor): Tensor of predicted probabilities (1D or batch 2D).
-#         k (int, optional): Number of top predictions to return. Defaults to 3.
-
-#     Returns:
-#         List[Tuple[int, float]]: List of tuples containing (class_index, probability)
-#         for the top-k predictions.
-#     """
-#     vals, inds = probs.topk(k)
-#     return list(zip(inds.tolist(), vals.tolist()))
-
 def tensor_to_base64(img_tensor, transform=None, max_size: int = None, jpeg_quality: int = None):
     """
     Convert a C,H,W image tensor to a base64-encoded image string.
@@ -665,22 +630,6 @@ def visualize_topk_without_plotly(
             jpeg_quality=85
         )
 
-        # predA = get_topk_predictions(probs_A[i], k=1)[0]
-        # predB = get_topk_predictions(probs_B[i], k=1)[0]
-        # predA_int = predA[0]; initial_class_prob_A = predA[1]
-        # predB_int = predB[0]; resultant_class_prob_B = predB[1]
-        # classA = predA[0]
-        # classB = predB[0]
-        # if class_names is not None:
-        #     classA = class_names[predA[0]]
-        #     classB = class_names[predB[0]]
-        # print('&'*16)
-        # print(predA_int , res.predA)
-        # print(predB_int , res.predB)
-        # print(initial_class_prob_A , probs_A[i][predA_int].item())
-        # print(resultant_class_prob_B, probs_B[i][predB_int].item())
-        # print('&'*16)
-
         predA_int = res.predA
         predB_int = res.predB
         classA = predA_int
@@ -692,10 +641,6 @@ def visualize_topk_without_plotly(
         initial_class_prob_A = probs_A[i][predA_int].item()
         resultant_initial_class_prob_B = probs_B[i][predA_int].item()
         resultant_class_prob_B = probs_B[i][predB_int].item()
-        # resultant_initial_class_prob_B = predA[1]-res.brittleness
-        # resultant_initial_class_prob_B_0 = probs_B[i][predA_int].item()
-        # print(resultant_initial_class_prob_B_0 , resultant_initial_class_prob_B)
-        # assert resultant_initial_class_prob_B_0 == resultant_initial_class_prob_B
 
         classA_html = f'<span class="classA">{classA}</span>'
         classB_html = f'<span class="classB">{classB}</span>'

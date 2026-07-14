@@ -32,12 +32,10 @@ import InfoBox from "./InfoBox";
   <p><b>Legend:</b></p>
 
   <ul>
-    <li>image idx: image file path or identifier</li>
-    <li>pred: predicted class label from the model</li>
-    <li>classA: predicted class for the original / lower-severity image</li>
-    <li>classB: predicted class for the corrupted / higher-severity image</li>
-    <li>pred_proba: model confidence (probability) for the predicted class</li>
-    <li>Δ: brittleness score, i.e. difference between before and after prediction probabilities for the originally predicted class</li>
+    <li>image: file path or identifier of the image</li>
+    <li>detections: number of objects detected by the model within the image</li>
+    <li>top confidence: max confidence of a given detection in the image</li>
+    <li>brittleness: brittleness score, a consolidated averaged measure of the drop in confidence of the detections within the image</li>
   </ul>
 </InfoBox>
 

@@ -1,15 +1,6 @@
-<div style={{
-  width: "100%",
-  padding: "16px",
-  marginBottom: "24px",
-  border: "1px solid #e5e7eb",
-  borderRadius: "8px",
-  backgroundColor: "#fafafa",
-  boxSizing: "border-box",
-  display: "flex",
-  flexDirection: "column",
-  gap: "16px",
-}}>
+import InfoBox from "./InfoBox";
+
+<InfoBox>
   <h3>Per-Class Detection Statistics (Object Detection)</h3>
 
   <p>
@@ -34,20 +25,9 @@
     number of bounding box proposals per image, and background is handled implicitly. TP, FP,
     and FN over bounding boxes are therefore the complete picture for each foreground class.
   </p>
-</div>
+</InfoBox>
 
-<div style={{
-  width: "100%",
-  padding: "16px",
-  marginBottom: "24px",
-  border: "1px solid #e5e7eb",
-  borderRadius: "8px",
-  backgroundColor: "#fafafa",
-  boxSizing: "border-box",
-  display: "flex",
-  flexDirection: "column",
-  gap: "16px",
-}}>
+<InfoBox>
   <h4><b>How to read?</b></h4>
 
   <p>
@@ -71,20 +51,9 @@
     As severity increases, some degradation is expected — TP tends to decrease while FP and FN tend to rise.
     The concern is with how steeply and at what severity this degradation begins.
   </p>
-</div>
+</InfoBox>
 
-<div style={{
-  width: "100%",
-  padding: "16px",
-  marginBottom: "24px",
-  border: "1px solid #e5e7eb",
-  borderRadius: "8px",
-  backgroundColor: "#fafafa",
-  boxSizing: "border-box",
-  display: "flex",
-  flexDirection: "column",
-  gap: "16px",
-}}>
+<InfoBox>
   <h4><b>Interpretation</b></h4>
 
   <p>
@@ -138,4 +107,4 @@
     during training. In this case, retraining with fewer or less aggressive augmentation
     samples of this corruption type is recommended.
   </p>
-</div>
+</InfoBox>

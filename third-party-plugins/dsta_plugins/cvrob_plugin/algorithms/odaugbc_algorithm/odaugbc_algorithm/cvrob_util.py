@@ -257,13 +257,34 @@ def average_detection_stats(all_stats):
     return avg_stats
 
 class DetectionDataset(torch.utils.data.Dataset):
-    def __init__(self, image_paths, targets, transform=None):
+    def __init__(self, image_paths, targets, transform=None, min_size=500):
         self.image_paths = image_paths
         self.targets = targets
         self.transform = transform
+        self.min_size = min_size
 
     def __len__(self):
         return len(self.image_paths)
+
+    def _resize_up(self, image, boxes):
+        """Upscale image so the smaller side == min_size, keep aspect ratio.
+        Do nothing if the smaller side is already >= min_size."""
+        W, H = image.size  # PIL: (width, height)
+        shorter_side = min(W, H)
+
+        if shorter_side >= self.min_size:
+            return image, boxes  # already big enough, leave as-is
+
+        scale = self.min_size / shorter_side
+        new_W = round(W * scale)
+        new_H = round(H * scale)
+
+        image = image.resize((new_W, new_H), Image.BILINEAR)
+
+        if boxes.numel() > 0:
+            boxes = boxes * scale  # scales x1,y1,x2,y2 uniformly
+
+        return image, boxes
 
     def __getitem__(self, idx):
         image = Image.open(self.image_paths[idx]).convert("RGB")
@@ -271,13 +292,15 @@ class DetectionDataset(torch.utils.data.Dataset):
 
         boxes = []
         labels = []
-
         for obj in target:
             boxes.append(obj["bbox"])
             labels.append(obj["label"])
 
         boxes = torch.tensor(boxes, dtype=torch.float32) if boxes else torch.zeros((0, 4))
         labels = torch.tensor(labels, dtype=torch.long) if labels else torch.zeros((0,), dtype=torch.long)
+
+        # resize + adjust boxes BEFORE ToTensor (while image is still PIL, in pixel coords)
+        image, boxes = self._resize_up(image, boxes)
 
         target_dict = {
             "boxes": boxes,
