@@ -1,7 +1,7 @@
 [project]
 name = "odaugvm_algorithm"
 version = "0.1.0"
-description = "Object Detection Augmentation v Metric Algorithm"
+description = "This algorithm assesses the performance of the model over augmentations for object detection."
 authors = [{ name = "Example Author" }]
 readme = "README.md"
 dependencies = [
@@ -20,7 +20,10 @@ dependencies = [
     "torch>=2.9.1",
     "torchmetrics==1.9.0",
     "torchvision>=0.24.1",
-    "tqdm==4.67.1"
+    "tqdm==4.67.1",
+    "nrtk==1.0.4",
+    "numba==0.62.1",
+    "pybsm==0.16.0"
 ]
 requires-python = ">=3.10"
 license = { file = "LICENSE" }

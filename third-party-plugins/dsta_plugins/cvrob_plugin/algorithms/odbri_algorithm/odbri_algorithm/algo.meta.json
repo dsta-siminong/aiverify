@@ -1,16 +1,18 @@
 {
   "cid": "odbri_algorithm",
   "gid": "cvrob_plugin",
-  "name": "[WIP] OD Brittleness Algorithm",
+  "name": "ObjDet Brittleness Algorithm",
   "modelType": [
-    "classification"
+    "classification",
+    "detection"
   ],
   "version": "0.1.0",
   "author": "Example Author",
   "description": "This algorithm assesses the individual brittleness per image for object detection.",
   "tags": [
-    "OD Brittleness Algorithm",
-    "classification"
+    "Brittleness",
+    "classification",
+    "detection"
   ],
   "requireGroundTruth": true,
   "requiredFiles": [

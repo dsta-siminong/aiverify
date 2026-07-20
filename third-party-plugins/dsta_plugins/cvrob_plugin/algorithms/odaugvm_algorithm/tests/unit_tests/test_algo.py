@@ -82,10 +82,10 @@ class ObjectTest:
         ) = PluginManager.get_instance(PluginType.DATA, **{"filename": valid_ground_truth_path})
 
         ground_truth = "label"
-        model_type = ModelType.CLASSIFICATION
+        model_type = ModelType.DETECTION
         input_args = {
             "class_names": None,
-            "aug_library": "nrtk",
+            "aug_library": "albumentations",
             'aug_methods': 'Rain',
             'custom_parameters': None,
             "num_epochs": 1,
@@ -338,7 +338,7 @@ def test_init_plugin_instance_with_missing_ground_truth(
     data_instance_and_serializer = get_data_instance_and_serializer
     model_instance_and_serializer = get_model_instance_and_serializer
     ground_truth_instance_and_serializer = get_ground_truth_instance_and_serializer
-    model_type = ModelType.CLASSIFICATION
+    model_type = ModelType.DETECTION
     input_args = {}
     expected_exception = RuntimeError
     expected_exception_msg = "The algorithm has failed ground truth header validation."

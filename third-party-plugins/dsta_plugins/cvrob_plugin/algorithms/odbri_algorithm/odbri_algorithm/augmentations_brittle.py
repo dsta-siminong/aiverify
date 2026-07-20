@@ -15,6 +15,7 @@ from PIL import Image
 import io
 from pathlib import Path
 from dataclasses import dataclass
+from torchvision import transforms
 
 @dataclass
 class BrittlenessResultIndiv:
@@ -147,14 +148,24 @@ def _brittleness_label(norm: float) -> str:
         return "Highly brittle"
 
 
-def _detection_summary(scores_dict) -> tuple:
+def _detection_summary(scores_dict, score_threshold: float = 0.0) -> tuple:
     """
     Return (n_detections, top_confidence) from a detection output dict.
     scores_dict is {"boxes":..., "labels":..., "scores": Tensor}.
+ 
+    n_detections only counts entries with score >= score_threshold, so this
+    matches whatever _draw_detections_on_image will actually render as red
+    boxes when called with the same score_threshold. top_confidence is
+    always computed over ALL raw scores (not just the ones above threshold),
+    since "top confidence" is meaningful regardless of the display cutoff.
     """
     s = scores_dict["scores"]
-    n = len(s)
-    top = float(s.max().item()) if n > 0 else 0.0
+    if hasattr(s, "cpu"):
+        s = s.cpu().numpy()
+    else:
+        s = np.asarray(s)
+    top = float(s.max()) if len(s) > 0 else 0.0
+    n = int((s >= score_threshold).sum()) if len(s) > 0 else 0
     return n, top
 
 def _draw_detections_on_image(
@@ -216,7 +227,7 @@ def _draw_detections_on_image(
             name = class_names.get(str(lbl), str(lbl)) if class_names else str(lbl)
             draw.text((x1, max(0, y1 - 13)), f"{name} {score:.2f}", fill=(220, 30, 30), font=font)
 
-def _load_image_for_viz(image_path: str, aug_class, severity) -> "PIL.Image.Image":
+def _load_image_for_viz(image_path: str, aug_class, severity) -> "Image.Image":
     """
     Load a single image from disk and optionally apply a corruption.
 
@@ -250,7 +261,7 @@ def _path_to_pil_with_detections(
     gt_objects: list,
     class_names: dict,
     score_threshold: float = 0.5,
-) -> "PIL.Image.Image":
+) -> "Image.Image":
     """
     Load an image from disk (with optional corruption) and optionally overlay detections.
 
@@ -331,8 +342,8 @@ def visualize_topk_matplotlib(
             class_names, score_threshold,
         )
 
-        n_A, top_A = _detection_summary(scores_A[i])
-        n_B, top_B = _detection_summary(scores_B[i])
+        n_A, top_A = _detection_summary(scores_A[i], score_threshold)
+        n_B, top_B = _detection_summary(scores_B[i], score_threshold)
 
         brittleness = res.brittleness
         label = _brittleness_label(brittleness)
@@ -394,112 +405,6 @@ def visualize_topk_matplotlib(
 
     return save_path, fragment_paths
 
-# def visualize_topk_plotly(
-#     results_sorted,
-#     scores_A, scores_B,
-#     K=10,
-#     class_names=None,
-#     transform=None,
-#     directory=Path(),
-#     image_paths=None,
-#     aug_class=None,
-#     severity_A=None,
-#     severity_B=None,
-#     # ── detection-overlay params (all optional) ──────────────────────────
-#     gt_labels=None,        # list[list[dict]]: ground-truth per image
-#     score_threshold=0.5,
-# ):
-#     topk = results_sorted[:K]
-
-#     fig = make_subplots(
-#         rows=K,
-#         cols=3,
-#         column_widths=[0.4, 0.2, 0.4],
-#         horizontal_spacing=0.05,
-#         vertical_spacing=0.05,
-#         specs=[[{"type": "image"}, {"type": "xy"}, {"type": "image"}] for _ in range(K)],
-#     )
-
-#     for r, res in enumerate(topk, start=1):
-#         i = res.index
-#         img_path = str(image_paths[i]) if image_paths else None
-#         idx = Path(img_path).name if img_path else i
-
-#         # Encode as JPEG (10-30x smaller than raw z= array).
-#         # When gt_labels is supplied, render detections onto the PIL image first.
-#         _with_det = gt_labels is not None
-#         imgA_b64 = "data:image/jpeg;base64," + _pil_to_base64(
-#             _path_to_pil_with_detections(
-#                 img_path, aug_class, severity_A,
-#                 scores_A[i] if _with_det else None,
-#                 gt_labels[i] if _with_det else None,
-#                 class_names, score_threshold,
-#             ), jpeg_quality=85
-#         )
-#         imgB_b64 = "data:image/jpeg;base64," + _pil_to_base64(
-#             _path_to_pil_with_detections(
-#                 img_path, aug_class, severity_B,
-#                 scores_B[i] if _with_det else None,
-#                 gt_labels[i] if _with_det else None,
-#                 class_names, score_threshold,
-#             ), jpeg_quality=85
-#         )
-
-#         n_A, top_A = _detection_summary(scores_A[i])
-#         n_B, top_B = _detection_summary(scores_B[i])
-
-#         brittleness = res.brittleness
-#         label = _brittleness_label(brittleness)
-#         det_delta = n_B - n_A
-#         det_delta_str = (
-#             f"+{det_delta} more" if det_delta > 0
-#             else f"{abs(det_delta)} fewer" if det_delta < 0
-#             else "no change"
-#         )
-
-#         fig.add_trace(go.Image(source=imgA_b64), row=r, col=1)
-
-#         fig.add_trace(
-#             go.Scatter(
-#                 x=[0.5], y=[0.5],
-#                 mode="text",
-#                 text=[(
-#                     f"<b>{idx}</b><br><br>"
-#                     f"<b>Before</b><br>"
-#                     f"Detections: {n_A}<br>"
-#                     f"Top conf: {top_A:.2f}<br><br>"
-#                     f"<b>After</b><br>"
-#                     f"Detections: {n_B} ({det_delta_str})<br>"
-#                     f"Top conf: {top_B:.2f}<br><br>"
-#                     f"<b>Brittleness</b><br>"
-#                     f"{norm_brit:.2f} / 1.00<br>"
-#                     f"<i>{label}</i><br>"
-#                     f"<span style='color:grey;font-size:0.85em'>"
-#                     f"raw: {raw_brit:.3f}</span>"
-#                 )],
-#                 showlegend=False
-#             ),
-#             row=r, col=2
-#         )
-
-#         fig.update_xaxes(visible=False, row=r, col=2)
-#         fig.update_yaxes(visible=False, row=r, col=2)
-
-#         fig.add_trace(go.Image(source=imgB_b64), row=r, col=3)
-
-#     fig.update_layout(
-#         height=360 * K,
-#         showlegend=False,
-#         title="Top-K Most Brittle Images (Detection)",
-#         template="plotly_white"
-#     )
-
-#     _suffix = "_with_predictions" if gt_labels is not None else ""
-#     save_path = directory / f"brittleness_topk{_suffix}.html"
-#     fig.write_html(save_path, include_plotlyjs="inline")
-
-#     return save_path
-
 def visualize_in_html(
     results_sorted,
     scoresA, scoresB,
@@ -555,8 +460,8 @@ def visualize_in_html(
             ), max_size=max_size, jpeg_quality=jpeg_quality
         )
 
-        n_A, top_A = _detection_summary(scoresA[i])
-        n_B, top_B = _detection_summary(scoresB[i])
+        n_A, top_A = _detection_summary(scoresA[i], score_threshold)
+        n_B, top_B = _detection_summary(scoresB[i], score_threshold)
 
         gt = labels[i]
         n_gt = len(gt)
@@ -852,8 +757,8 @@ def visualize_topk_without_plotly(
             ), jpeg_quality=85
         )
  
-        n_A, top_A = _detection_summary(scores_A[i])
-        n_B, top_B = _detection_summary(scores_B[i])
+        n_A, top_A = _detection_summary(scores_A[i], score_threshold)
+        n_B, top_B = _detection_summary(scores_B[i], score_threshold)
  
         brittleness = res.brittleness
         brit_label = _brittleness_label(brittleness)

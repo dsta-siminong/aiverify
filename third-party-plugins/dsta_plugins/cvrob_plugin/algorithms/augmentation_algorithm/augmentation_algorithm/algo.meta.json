@@ -1,7 +1,7 @@
 {
   "cid": "augmentation_algorithm",
   "gid": "cvrob_plugin",
-  "name": "Augmentation v Metric Algorithm",
+  "name": "ImClass Augmentation v Metric Algorithm",
   "modelType": [
     "classification"
   ],
@@ -9,7 +9,7 @@
   "author": "Example Author",
   "description": "This algorithm shows the relationship between certain augmentations and the model's performance metrics",
   "tags": [
-    "Augmentation v Metric Algorithm",
+    "Augmentation v Metric",
     "classification"
   ],
   "requireGroundTruth": true,

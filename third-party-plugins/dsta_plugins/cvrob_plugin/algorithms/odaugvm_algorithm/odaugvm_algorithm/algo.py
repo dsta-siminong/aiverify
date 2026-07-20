@@ -24,8 +24,10 @@ import torchvision.transforms as transforms
 import torch
 from torch.utils.data import DataLoader, TensorDataset
 from .cvrob_util import evaluate_detection, triplets, augmentation_gradient_det, handle_class_names_arg, DetectionDataset
-from .augmentations_class import make_augmentation_dict
+from .augmentations_class import make_augmentation_dict, custom_parameter_change
 from pathlib import Path
+import pandas as pd
+from PIL import ImageDraw, ImageFont
 # =====================================================================================
 # NOTE:
 # 1. Check that you have installed the aiverify_test_engine latest package.
@@ -48,7 +50,7 @@ class Plugin(IAlgorithm):
     _metadata: PluginMetadata = PluginMetadata(_name, _description, _version)
     _plugin_type: PluginType = PluginType.ALGORITHM
     _requires_ground_truth: bool = True
-    _supported_algorithm_model_type: List = [ModelType.CLASSIFICATION]
+    _supported_algorithm_model_type: List = [ModelType.CLASSIFICATION, ModelType.DETECTION]
 
     @staticmethod
     def get_metadata() -> PluginMetadata:
@@ -346,6 +348,7 @@ class Plugin(IAlgorithm):
         #make ground truth
         file_names = [Path(i).name for i in self._data_instance.get_data()["image_directory"]]
         df: pd.DataFrame = self._ground_truth_instance.get_data()
+        df = self._normalize_columns(df)
         self._gt_dict = self._build_detection_gt(df)
 
         self._ordered_ground_truth = [
@@ -381,14 +384,6 @@ class Plugin(IAlgorithm):
         self._progress_inst.update(1)
 
     def _augmentation_method(self, aug_dict):
-        image_paths: list[str] = self._data_instance.get_data()["image_directory"].tolist()
-        ground_truths = self._ordered_ground_truth
-        test_dataset, test_loader = self._load_images_objdet(image_paths, ground_truths)
-        #KIV: set a random seed here manually; if we want to manually set it then we'll need to change this
-        np.random.seed(42) 
-        display_idx = np.random.choice(len(image_paths))
-        output_results = dict()
-
         if "_model" in dir(self._model_instance):
             model = self._model_instance._model
         elif "_pipeline" in dir(self._model_instance):
@@ -405,6 +400,15 @@ class Plugin(IAlgorithm):
         class_names_arg = self._input_arguments['class_names'] or None 
         class_names = handle_class_names_arg(class_names_arg, model)
         print("Class names:", class_names)
+        self._ordered_ground_truth = self._resolve_class_ids(self._ordered_ground_truth, class_names)
+
+        image_paths: list[str] = self._data_instance.get_data()["image_directory"].tolist()
+        ground_truths = self._ordered_ground_truth
+        test_dataset, test_loader = self._load_images_objdet(image_paths, ground_truths)
+        #KIV: set a random seed here manually; if we want to manually set it then we'll need to change this
+        np.random.seed(42)
+        display_idx = np.random.choice(len(image_paths))
+        output_results = dict()
 
         for aug_name, aug_class in aug_dict.items():
             
@@ -444,13 +448,10 @@ class Plugin(IAlgorithm):
                 }
                 ground_truth = ground_truths[display_idx]
 
-                image_path2 = self._save_image_with_predictions(
+                image_path2, drawn_prediction = self._save_image_with_predictions(
                     image=display_image,
-                    pred_boxes=prediction['boxes'],#pred_boxes,
-                    pred_labels=prediction['labels'],#pred_labels,
-                    pred_scores=prediction['scores'],#pred_scores,
+                    prediction=prediction,
                     gt_boxes=ground_truth,        # list of {"bbox": [...], "label": ...}
-                    gt_labels=[obj["label"] for obj in ground_truth],
                     class_names=class_names,
                     subfolder_name=str(corrupted_dir),
                     idx=display_idx,
@@ -460,7 +461,7 @@ class Plugin(IAlgorithm):
                 random_display = [
                     str(Path(image_path).relative_to(self._output_folder)),
                     ground_truth,#gt_classes,
-                    prediction,#pred_classes,
+                    drawn_prediction,#pred_classes,
                     str(Path(image_path2).relative_to(self._output_folder)),
                 ]
                 display_info.update({str(severity): random_display})
@@ -489,23 +490,102 @@ class Plugin(IAlgorithm):
 
         self._results = output_results
 
+    def _normalize_columns(self, df):
+        """
+        Normalize supported ground-truth CSV schemas to a common internal
+        schema: file_name, x_min, y_min, x_max, y_max, class_raw
+
+        `class_raw` is left untouched here — it may hold numeric ids (AI
+        Verify schema) or string class names (TF Object Detection schema).
+        Resolving it to a numeric class_id is handled separately by
+        _resolve_class_ids.
+
+        Supports:
+        - AI Verify schema: file_name, x_min, y_min, x_max, y_max, class_id
+        - TF Object Detection API schema: filename, width, height, class,
+            xmin, ymin, xmax, ymax
+        """
+        cols = {c.lower().strip(): c for c in df.columns}
+        present = set(cols.keys())
+
+        schema_aiv = {"file_name", "x_min", "y_min", "x_max", "y_max", "class_id"}
+        schema_tfod = {"filename", "width", "height", "class", "xmin", "ymin", "xmax", "ymax"}
+
+        if schema_aiv.issubset(present):
+            rename_map = {
+                cols["file_name"]: "file_name",
+                cols["x_min"]: "x_min",
+                cols["y_min"]: "y_min",
+                cols["x_max"]: "x_max",
+                cols["y_max"]: "y_max",
+                cols["class_id"]: "class_raw",
+            }
+            return df.rename(columns=rename_map)
+
+        if schema_tfod.issubset(present):
+            rename_map = {
+                cols["filename"]: "file_name",
+                cols["xmin"]: "x_min",
+                cols["ymin"]: "y_min",
+                cols["xmax"]: "x_max",
+                cols["ymax"]: "y_max",
+                cols["class"]: "class_raw",
+            }
+            return df.rename(columns=rename_map)
+
+        raise ValueError(
+            "Unrecognized ground-truth CSV schema. Expected columns matching "
+            f"either {sorted(schema_aiv)} or {sorted(schema_tfod)}, got "
+            f"{sorted(present)}."
+        )
+
     def _build_detection_gt(self, df):
         gt_dict = {}
 
         for _, row in df.iterrows():
             fname = row["file_name"]
             bbox = [row["x_min"], row["y_min"], row["x_max"], row["y_max"]]
-            label = row["class_id"]
+            label = row["class_raw"]  # not yet resolved to a numeric id
 
-            if fname not in gt_dict:
-                gt_dict[fname] = []
-
-            gt_dict[fname].append({
+            gt_dict.setdefault(fname, []).append({
                 "bbox": bbox,
-                "label": label
+                "label": label,
             })
 
         return gt_dict
+
+    def _resolve_class_ids(self, ordered_ground_truth, class_names: dict):
+        """
+        Resolve each annotation's `label` (class_raw) to a numeric class_id,
+        in place across the per-image ground truth structure.
+
+        ordered_ground_truth: list (one entry per image) of lists of
+            {"bbox": [...], "label": <raw class value>} dicts.
+        class_names: dict mapping class id as a string to class name, e.g.
+            {'0': 'class_0', '1': 'class_1', '2': 'class_2', '3': 'class_3'}
+
+        If a label is already numeric (or numeric-as-string, e.g. '2'), it's
+        used directly as class_id — no lookup needed. Otherwise it's treated
+        as a class name and mapped back to its id via class_names.
+        """
+        name_to_id = {name: int(id_str) for id_str, name in class_names.items()}
+
+        def resolve(value):
+            try:
+                return int(value)
+            except (ValueError, TypeError):
+                pass
+            if value not in name_to_id:
+                raise ValueError(
+                    f"Class value '{value}' is neither a numeric class_id nor "
+                    f"a known class name. Known class names: {sorted(name_to_id)}"
+                )
+            return name_to_id[value]
+
+        return [
+            [{"bbox": ann["bbox"], "label": resolve(ann["label"])} for ann in per_image]
+            for per_image in ordered_ground_truth
+        ]
 
     def _load_images_objdet(self, image_paths, targets):
         transform = transforms.Compose([
@@ -528,39 +608,20 @@ class Plugin(IAlgorithm):
 
     def _save_image_with_predictions(
         self,
-        image: np.ndarray,
-        pred_boxes,
-        pred_labels,
-        pred_scores,
+        image,
+        prediction,
         gt_boxes,
-        gt_labels,
+        #gt_labels,
         class_names: dict,
         subfolder_name: str,
         idx: int,
         score_threshold: float = 0.5,
-    ) -> str:
-        """
-        Overlay ground-truth boxes (green) and predicted boxes (red) on the image,
-        then save it as ``{idx}_with_prediction.png`` in the same subfolder structure
-        used by _save_one_image.
+    ) -> tuple[str, dict]:          # <-- now returns (path, drawn_prediction)
 
-        Args:
-            image (np.ndarray): CHW float image (values in [0, 1] or [0, 255]).
-            pred_boxes: Tensor or array of shape (N, 4) with [x1, y1, x2, y2] predictions.
-            pred_labels: Array of predicted label ids (length N).
-            pred_scores: Array of prediction confidence scores (length N).
-            gt_boxes: List of [x_min, y_min, x_max, y_max] from ground-truth objects.
-            gt_labels: List of ground-truth label ids.
-            class_names (dict): Mapping from str(label_id) -> class name string.
-            subfolder_name (str): Sub-folder name (mirrors the one used by _save_one_image).
-            idx (int): Image index, used in the filename.
-            score_threshold (float): Predictions below this confidence are skipped.
-
-        Returns:
-            str: Absolute path to the saved overlay image.
-        """
-        from PIL import ImageDraw, ImageFont
-
+        pred_boxes=prediction['boxes']
+        pred_labels=prediction['labels']
+        pred_scores=prediction['scores']
+        
         save_dir = self._save_folder / subfolder_name
         save_dir.mkdir(parents=True, exist_ok=True)
         image_path = save_dir / f"{idx}_with_prediction.png"
@@ -573,7 +634,6 @@ class Plugin(IAlgorithm):
         pil_img = Image.fromarray(img_hwc).convert("RGB")
         draw = ImageDraw.Draw(pil_img)
 
-        # Try to load a small font; fall back to the default if unavailable.
         try:
             font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 12)
         except Exception:
@@ -591,8 +651,11 @@ class Plugin(IAlgorithm):
                     draw.text((x1, max(0, y1 - 13)), f"GT:{name}", fill=(0, 200, 0), font=font)
 
         # --- Predicted boxes (red) ---
+        # Build this in lockstep with the drawing loop so it can never drift
+        # out of sync with what's actually rendered.
+        drawn_boxes, drawn_labels, drawn_scores = [], [], []
+
         if pred_boxes is not None and len(pred_boxes) > 0:
-            # Convert tensors to numpy if needed
             boxes_np = pred_boxes.cpu().numpy() if hasattr(pred_boxes, "cpu") else np.asarray(pred_boxes)
             for i, (box, label, score) in enumerate(zip(boxes_np, pred_labels, pred_scores)):
                 if float(score) < score_threshold:
@@ -602,8 +665,18 @@ class Plugin(IAlgorithm):
                 name = class_names.get(str(label), str(label))
                 draw.text((x1, max(0, y1 - 13)), f"{name} {score:.2f}", fill=(220, 30, 30), font=font)
 
+                drawn_boxes.append([x1, y1, x2, y2])
+                drawn_labels.append(label)
+                drawn_scores.append(float(score))
+
         pil_img.save(image_path)
-        return str(image_path)
+
+        drawn_prediction = {
+            "boxes": drawn_boxes,
+            "labels": drawn_labels,
+            "scores": drawn_scores,
+        }
+        return str(image_path), drawn_prediction
 
     def _save_one_image(self, image: np.ndarray, subfolder_name: str, idx: int) -> str:
 

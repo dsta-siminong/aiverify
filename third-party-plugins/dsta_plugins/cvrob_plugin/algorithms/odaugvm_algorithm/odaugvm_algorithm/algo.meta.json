@@ -1,16 +1,18 @@
 {
   "cid": "odaugvm_algorithm",
   "gid": "cvrob_plugin",
-  "name": "[WIP] OD Algorithm v Metric Algorithm",
+  "name": "ObjDet Algorithm v Metric Algorithm",
   "modelType": [
-    "classification"
+    "classification",
+    "detection"
   ],
   "version": "0.1.0",
   "author": "Example Author",
   "description": "This algorithm assesses the performance of the model over augmentations for object detection.",
   "tags": [
-    "OD Algorithm v Metric Algorithm",
-    "classification"
+    "Augmentation v Metric",
+    "classification",
+    "detection"
   ],
   "requireGroundTruth": true,
   "requiredFiles": [

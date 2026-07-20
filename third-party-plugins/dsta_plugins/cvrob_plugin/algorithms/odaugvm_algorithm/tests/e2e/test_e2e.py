@@ -4,7 +4,7 @@ import pytest
 from odaugvm_algorithm.algo_init import AlgoInit
 from aiverify_test_engine.plugins.enums.model_type import ModelType
 
-binary_classification_pipeline = {
+detection_pipeline = {
     # "data_path": str(
     #     "/home/bjieyong/aiverify/cvrob/pedestrian/PennFudanPed/PennFudanPed/PNGImages"
     # ),
@@ -24,11 +24,11 @@ binary_classification_pipeline = {
         "/home/bjieyong/aiverify/cvrob/bccd/BCCD/bccd_detection.csv"
     ),
     "run_pipeline": True,
-    "model_type": ModelType.CLASSIFICATION,
+    "model_type": ModelType.DETECTION,
     "ground_truth": "label",
     "plugin_argument_values": {
         "class_names": None, 
-        "aug_library": 'nrtk',
+        "aug_library": 'albumentations',
         'aug_methods': 'Rain',
         'custom_parameters': None,
         "num_epochs": 1,
@@ -41,7 +41,7 @@ binary_classification_pipeline = {
     "data_set",
     [
         
-        binary_classification_pipeline,
+        detection_pipeline,
         
     ],
 )

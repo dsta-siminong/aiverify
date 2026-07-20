@@ -159,7 +159,7 @@ export const AugmentationSeverityPanel = ({ props }) => {
       {/* Predictions column */}
       <div style={{ flex: 1, paddingRight: "1.25rem" }}>
         <SectionLabel>Predictions</SectionLabel>
-        <StatRow label="Boxes" value={pred.total} highlight={countMatch ? "#16a34a" : "#dc2626"} />
+        <StatRow label="Boxes" value={pred.total} highlight={countMatch ? "#085224" : "#680b0b"} />
         <LabelPills perLabel={pred.perLabel} colorFn={labelColor} />
       </div>
 
@@ -262,7 +262,7 @@ export const AugmentationSeverityPanel = ({ props }) => {
         {severityEntries.map((entry, i) => {
           if (!entry) return null;
           const { severityKey, withoutPredUrl, withPredUrl, gt, pred, countMatch } = entry;
-          const borderColor = countMatch ? "#16a34a" : "#dc2626";
+          const borderColor = countMatch ? "#085224" : "#680b0b";
 
           return (
             // The outer wrapper must contain everything for this severity level —

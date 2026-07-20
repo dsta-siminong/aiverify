@@ -1,16 +1,18 @@
 {
   "cid": "odaugbc_algorithm",
   "gid": "cvrob_plugin",
-  "name": "[WIP] OD Augmentation by Class Algorithm",
+  "name": "ObjDet Augmentation by Class Algorithm",
   "modelType": [
-    "classification"
+    "classification",
+    "detection"
   ],
   "version": "0.1.0",
   "author": "Example Author",
   "description": "This algorithm runs the augmentations and visualizes the trends of metrics by class for object detection.",
   "tags": [
-    "OD Augmentation by Class Algorithm",
-    "classification"
+    "Augmentation by Class",
+    "classification",
+    "detection"
   ],
   "requireGroundTruth": true,
   "requiredFiles": [

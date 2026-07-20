@@ -1,7 +1,7 @@
 {
   "cid": "augmentation_by_class_algorithm",
   "gid": "cvrob_plugin",
-  "name": "Augmentation by Class Algorithm",
+  "name": "ImClass Augmentation by Class Algorithm",
   "modelType": [
     "classification"
   ],
@@ -9,7 +9,7 @@
   "author": "Example Author",
   "description": "This algorithm runs the augmentations and visualizes the trends of metrics by class",
   "tags": [
-    "Augmentation by Class Algorithm",
+    "Augmentation by Class",
     "classification"
   ],
   "requireGroundTruth": true,

@@ -314,27 +314,128 @@ class DetectionDataset(torch.utils.data.Dataset):
 
 # ======= COCO STUFF =========
 
+# def create_coco_gt(
+#     image_paths,
+#     df,
+#     class_names,
+#     output_json,
+# ):
+#     """
+#     Create a COCO-format ground-truth json.
+
+#     Parameters
+#     ----------
+#     image_paths : list[str] or list[Path]
+#         List of image paths (same images as used in the dataset).
+
+#     df : pandas dataframe containing:
+#         file_name
+#         x_min
+#         x_max
+#         y_min
+#         y_max
+#         class_id
+
+#     class_names : dict
+#         Example:
+#             {"0": "cat",
+#              "1": "dog"}
+
+#     output_json : str
+#         Output json filename.
+#     """
+#     images = []
+#     annotations = []
+#     ann_id = 1
+
+#     # map filename -> image_id
+#     image_id_map = {}
+
+#     for image_id, img_path in enumerate(image_paths, start=1):
+
+#         img_path = Path(img_path)
+#         filename = img_path.name
+
+#         with Image.open(img_path) as img:
+#             width, height = img.size
+
+#         images.append({
+#             "id": image_id,
+#             "file_name": filename,
+#             "width": width,
+#             "height": height,
+#         })
+
+#         image_id_map[filename] = image_id
+
+#     # annotations
+#     for _, row in df.iterrows():
+
+#         filename = row["file_name"]
+
+#         if filename not in image_id_map:
+#             continue
+
+#         x_min = float(row["x_min"])
+#         x_max = float(row["x_max"])
+#         y_min = float(row["y_min"])
+#         y_max = float(row["y_max"])
+
+#         w = x_max - x_min
+#         h = y_max - y_min
+
+#         annotations.append({
+#             "id": ann_id,
+#             "image_id": image_id_map[filename],
+#             "category_id": int(row["class_id"]),
+#             "bbox": [x_min, y_min, w, h],
+#             "area": w * h,
+#             "iscrowd": 0,
+#         })
+
+#         ann_id += 1
+
+#     # categories
+#     categories = [
+#         {
+#             "id": int(cid),
+#             "name": name,
+#             "supercategory": "none",
+#         }
+#         for cid, name in sorted(class_names.items(), key=lambda x: int(x[0]))
+#     ]
+
+#     coco = {
+#         "images": images,
+#         "annotations": annotations,
+#         "categories": categories,
+#     }
+
+#     with open(output_json, "w") as f:
+#         json.dump(coco, f, indent=2)
+
+#     print(f"Saved COCO annotations to {output_json}")
+
 def create_coco_gt(
     image_paths,
-    df,
+    ordered_ground_truth,
     class_names,
     output_json,
 ):
     """
-    Create a COCO-format ground-truth json.
+    Create a COCO-format ground-truth json from already-resolved,
+    per-image ground truth.
 
     Parameters
     ----------
     image_paths : list[str] or list[Path]
-        List of image paths (same images as used in the dataset).
+        List of image paths, in the same order as ordered_ground_truth
+        (i.e. image_paths[i] corresponds to ordered_ground_truth[i]).
 
-    df : pandas dataframe containing:
-        file_name
-        x_min
-        x_max
-        y_min
-        y_max
-        class_id
+    ordered_ground_truth : list[list[dict]]
+        One entry per image, each a list of {"bbox": [x_min, y_min,
+        x_max, y_max], "label": class_id} dicts. Output of
+        _resolve_class_ids.
 
     class_names : dict
         Example:
@@ -344,15 +445,18 @@ def create_coco_gt(
     output_json : str
         Output json filename.
     """
+    if len(image_paths) != len(ordered_ground_truth):
+        raise ValueError(
+            f"image_paths ({len(image_paths)}) and ordered_ground_truth "
+            f"({len(ordered_ground_truth)}) must be the same length and "
+            f"aligned by position."
+        )
+
     images = []
     annotations = []
     ann_id = 1
 
-    # map filename -> image_id
-    image_id_map = {}
-
-    for image_id, img_path in enumerate(image_paths, start=1):
-
+    for image_id, (img_path, anns) in enumerate(zip(image_paths, ordered_ground_truth), start=1):
         img_path = Path(img_path)
         filename = img_path.name
 
@@ -366,36 +470,21 @@ def create_coco_gt(
             "height": height,
         })
 
-        image_id_map[filename] = image_id
+        for ann in anns:
+            x_min, y_min, x_max, y_max = ann["bbox"]
+            w = x_max - x_min
+            h = y_max - y_min
 
-    # annotations
-    for _, row in df.iterrows():
+            annotations.append({
+                "id": ann_id,
+                "image_id": image_id,
+                "category_id": int(ann["label"]),
+                "bbox": [x_min, y_min, w, h],
+                "area": w * h,
+                "iscrowd": 0,
+            })
+            ann_id += 1
 
-        filename = row["file_name"]
-
-        if filename not in image_id_map:
-            continue
-
-        x_min = float(row["x_min"])
-        x_max = float(row["x_max"])
-        y_min = float(row["y_min"])
-        y_max = float(row["y_max"])
-
-        w = x_max - x_min
-        h = y_max - y_min
-
-        annotations.append({
-            "id": ann_id,
-            "image_id": image_id_map[filename],
-            "category_id": int(row["class_id"]),
-            "bbox": [x_min, y_min, w, h],
-            "area": w * h,
-            "iscrowd": 0,
-        })
-
-        ann_id += 1
-
-    # categories
     categories = [
         {
             "id": int(cid),

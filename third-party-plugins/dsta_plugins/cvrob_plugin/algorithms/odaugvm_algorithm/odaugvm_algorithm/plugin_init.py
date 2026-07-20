@@ -34,8 +34,8 @@ def parse_input_args():
     parser.add_argument(
         "--model_type",
         required=True,
-        choices=["CLASSIFICATION", "REGRESSION"],
-        help="The type of model (CLASSIFICATION or REGRESSION).",
+        choices=["CLASSIFICATION", "REGRESSION, DETECTION"],
+        help="The type of model (CLASSIFICATION or REGRESSION or DETECTION).",
     )
     parser.add_argument(
         "--core_modules_path",

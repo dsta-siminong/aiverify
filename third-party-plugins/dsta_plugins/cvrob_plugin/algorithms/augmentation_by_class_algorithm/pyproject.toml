@@ -1,7 +1,7 @@
 [project]
 name = "augmentation_by_class_algorithm"
 version = "0.1.0"
-description = "This algorithm runs the augmentations and visualizes the trends of metrics by class"
+description = "This algorithm runs the augmentations and visualizes the trends of metrics by class."
 authors = [{ name = "Example Author" }]
 readme = "README.md"
 dependencies = [

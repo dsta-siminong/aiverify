@@ -1,7 +1,7 @@
 {
   "cid": "brittle_algorithm",
   "gid": "cvrob_plugin",
-  "name": "Brittleness Algorithm",
+  "name": "ImClass Brittleness Algorithm",
   "modelType": [
     "classification"
   ],
@@ -9,7 +9,7 @@
   "author": "Example Author",
   "description": "This algorithm assesses the individual brittlness per image.",
   "tags": [
-    "Brittleness Algorithm",
+    "Brittleness",
     "classification"
   ],
   "requireGroundTruth": true,
