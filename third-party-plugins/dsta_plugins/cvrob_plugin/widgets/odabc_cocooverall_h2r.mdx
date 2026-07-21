@@ -1,0 +1,93 @@
+import InfoBox from "./InfoBox";
+
+<InfoBox>
+  <h3>COCO Overall Curves (Object Detection)</h3>
+
+  <p>
+    This widget shows a model's overall detection quality for each specified corruption
+    algorithm, aggregated across all severities and grouped by curve type rather than by
+    severity level.
+  </p>
+
+  <p>
+    Two families of plots are displayed: F-Beta curves broken out by metric (Precision,
+    Recall, and one or more F-scores such as F1, F2, or F3, depending on how many beta
+    values were configured), and COCO-style Precision-Recall curves broken out by IoU
+    matching threshold. Each plot summarises detection quality by sweeping across
+    confidence thresholds, rather than reporting a single fixed score.
+  </p>
+</InfoBox>
+
+<InfoBox>
+  <h4><b>How to read?</b></h4>
+
+  <p>
+    Unlike the per-severity view, these plots are not repeated per severity level — each
+    plot already aggregates across all severities of the augmentation. Instead, compare
+    plots against each other within the same section to see how the model behaves under
+    different metric definitions or matching strictness.
+  </p>
+
+  <p>The two sections convey different aspects of model performance:</p>
+  <ul>
+    <li>
+      <b>FBeta Curves</b> — one plot per metric (Precision, Recall, and each configured
+      F-score, e.g. F1, F2, F3, ...), plotted against confidence threshold. Recall dropping
+      faster than Precision means the model is missing objects; the reverse means it's
+      over-predicting. Higher beta values (F2, F3) up-weight recall more, so comparing
+      F-score plots shows how that trade-off shifts
+    </li>
+    <li>
+      <b>P-R Curves</b> — one plot per IoU threshold (0.10–0.95), plotting precision
+      against recall under the COCO matching protocol at that strictness level. Lower
+      thresholds (0.10–0.30) are more forgiving; higher thresholds (0.75–0.95) demand
+      tighter box overlap, revealing how precisely the model localises objects
+    </li>
+  </ul>
+
+  <p>
+    In general, curves shifting downward as the IoU threshold increases is expected. What
+    matters is how steeply that shift happens — a model with well-calibrated boxes will
+    degrade slowly across IoU thresholds, while a model that only roughly localises objects
+    will drop off sharply once IoU demands exceed a certain point.
+  </p>
+</InfoBox>
+
+<InfoBox>
+  <h4><b>Interpretation</b></h4>
+
+  <p>
+    If Precision and Recall curves stay close together and both remain high, the model is
+    well balanced for this augmentation overall and no further action is required.
+  </p>
+
+  <p>When degradation is present, the pattern across curves indicates where the problem lies:</p>
+  <ul>
+    <li>
+      <b>Recall far below Precision across most thresholds</b> — the model is systematically
+      under-detecting objects under this corruption; consider lowering the deployment
+      confidence threshold or adding more training data for this augmentation
+    </li>
+    <li>
+      <b>Precision far below Recall across most thresholds</b> — the model is generating
+      excess false positives under this corruption; consider raising the deployment
+      confidence threshold or reviewing hard-negative examples
+    </li>
+    <li>
+      <b>P-R curves collapsing sharply only at high IoU thresholds (0.75+)</b> — detection
+      itself is intact but localization is imprecise under this corruption; targeted
+      fine-tuning on bounding-box regression for this augmentation is recommended
+    </li>
+    <li>
+      <b>P-R curves already weak even at low IoU thresholds (0.10–0.30)</b> — the model is
+      failing to detect objects at all under this corruption, not just localizing them
+      poorly; this points to a more fundamental robustness gap requiring broader retraining
+    </li>
+  </ul>
+
+  <p>
+    Because these plots aggregate across all severities, use them alongside the per-severity
+    curves: the overall view identifies whether a corruption is a problem at all, while the
+    per-severity view identifies at which intensity the problem begins.
+  </p>
+</InfoBox>

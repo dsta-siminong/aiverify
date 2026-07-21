@@ -39,8 +39,8 @@ export function transformData(data, data2, severities, class_names) {
   const rows = [];
   const cmRows = [];
 
-  // Detect OD format: cr[0] has a "map_50" key (or class keys contain TP directly)
-  const isODFormat = data[0] && "map_50" in data[0];
+  // Detect OD format: cr[0] has a "map" key (or class keys contain TP directly)
+  const isODFormat = data[0] && "map" in data[0];
 
   for (let s = 0; s < severities.length; s++) {
     const severity = severities[s];
@@ -50,7 +50,7 @@ export function transformData(data, data2, severities, class_names) {
     if (isODFormat) {
       // OD: classification_report already contains TP/FP/FN per class
       for (const key of Object.keys(cr)) {
-        if (key === "map_50") continue; // skip the top-level mAP key
+        if (key === "map") continue; // skip the top-level mAP key
         const classStats = cr[key];
         rows.push({
           severity,
@@ -728,11 +728,11 @@ export function MapTable({ classificationReport, severities }) {
           <tbody>
             <tr>
               <td style={{ border: "1px solid #ccc", padding: "6px", fontWeight: "bold" }}>
-                mAP@50
+                mAP
               </td>
               {chunk.map((sev, i) => {
                 const severityIndex = severities.indexOf(sev);
-                const value = classificationReport[severityIndex]?.map_50;
+                const value = classificationReport[severityIndex]?.map;
                 return (
                   <td
                     key={sev}

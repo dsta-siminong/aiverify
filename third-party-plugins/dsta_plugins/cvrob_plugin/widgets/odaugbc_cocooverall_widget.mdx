@@ -1,0 +1,222 @@
+export const cid = "odaugbc_algorithm"
+//export const ib_cid = "augbyclass_inputblock"
+
+
+<div style={{ marginBottom: "1rem" }}>
+  <div
+    style={{
+      textAlign: "center",
+      fontWeight: "bold",
+      fontSize: "2.2rem",
+      color: "#b91c1c",
+      textDecoration: "underline"
+    }}
+  >
+    {props.properties.title}
+  </div>
+</div>
+
+import {
+  transformData,
+  ClassLineChart,
+  PopulationChart,
+  StackedBarChart,
+  ClassMetricsTable
+} from './augbyclass-chart.jsx';
+
+export const COCOGraphsOverallSection = ({ props }) => {
+  const resultsData = props.getResults ? props.getResults(cid).results : null;
+
+  if (!resultsData || resultsData.length === 0) {
+    return <div>No results data available</div>;
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "3rem" }}>
+      <h2
+        style={{
+          textAlign: "center",
+          fontWeight: "bold",
+          textDecoration: "underline",
+          color: "red",
+          marginBottom: "2rem",
+        }}
+      >
+        COCO Evaluation Curves (Overall)
+      </h2>
+
+      {resultsData.map((augmentationItem, index) => {
+        const { Augmentation, coco_graphs_overall } = augmentationItem;
+
+        if (!coco_graphs_overall) {
+          return (
+            <div
+              key={index}
+              style={{
+                padding: "1em",
+                border: "1px dashed #ccc",
+                borderRadius: "8px",
+                textAlign: "center",
+                color: "#777",
+              }}
+            >
+              <h3>{Augmentation}</h3>
+              <div>No overall COCO graphs available.</div>
+            </div>
+          );
+        }
+
+        const { fbeta, pr } = coco_graphs_overall;
+
+        return (
+          <div
+            key={index}
+            style={{
+              border: "1px solid #ccc",
+              borderRadius: "10px",
+              padding: "2rem",
+            }}
+          >
+            <h3
+              style={{
+                textAlign: "center",
+                fontWeight: "bold",
+                marginBottom: "2rem",
+              }}
+            >
+              {Augmentation}
+            </h3>
+
+            {/* Section for FBeta Curves */}
+            {fbeta && (
+              <div style={{ marginBottom: "3rem" }}>
+                <h3
+                  style={{
+                    textAlign: "center",
+                    fontWeight: "bold",
+                    textDecoration: "underline",
+                    color: "#b91c1c",
+                    marginBottom: "2rem",
+                  }}
+                >
+                  FBeta Curves
+                </h3>
+
+                {Object.entries(fbeta).map(([metric, imgPath], i) => {
+                  let imgUrl = null;
+
+                  try {
+                    imgUrl = props.getArtifactURL(cid, imgPath);
+                  } catch (err) {
+                    console.error("Artifact URL error:", err);
+                  }
+
+                  if (!imgUrl) return null;
+
+                  return (
+                    <div
+                      key={i}
+                      style={{
+                        marginBottom: "2rem",
+                        breakInside: "avoid",
+                        pageBreakInside: "avoid",
+                      }}
+                    >
+                      <h4
+                        style={{
+                          textAlign: "center",
+                          fontWeight: "bold",
+                          textDecoration: "underline",
+                          marginTop: "1rem",
+                          marginBottom: "1rem",
+                        }}
+                      >
+                        {metric} - {Augmentation}
+                      </h4>
+
+                      <img
+                        src={imgUrl}
+                        alt={`FBeta ${metric} - ${Augmentation}`}
+                        style={{
+                          maxWidth: "600px",
+                          width: "100%",
+                          display: "block",
+                          margin: "0 auto",
+                        }}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Section for P-R Curves */}
+            {pr && (
+              <div style={{ marginBottom: "1rem" }}>
+                <h3
+                  style={{
+                    textAlign: "center",
+                    fontWeight: "bold",
+                    textDecoration: "underline",
+                    color: "#b91c1c",
+                    marginBottom: "2rem",
+                  }}
+                >
+                  P-R Curves
+                </h3>
+
+                {Object.entries(pr).map(([iouLabel, imgPath], i) => {
+                  let imgUrl = null;
+
+                  try {
+                    imgUrl = props.getArtifactURL(cid, imgPath);
+                  } catch (err) {
+                    console.error("Artifact URL error:", err);
+                  }
+
+                  if (!imgUrl) return null;
+
+                  return (
+                    <div
+                      key={i}
+                      style={{
+                        marginBottom: "2rem",
+                        breakInside: "avoid",
+                        pageBreakInside: "avoid",
+                      }}
+                    >
+                      <h4
+                        style={{
+                          textAlign: "center",
+                          fontWeight: "bold",
+                          textDecoration: "underline",
+                          marginTop: "1rem",
+                          marginBottom: "1rem",
+                        }}
+                      >
+                        {iouLabel} - {Augmentation}
+                      </h4>
+
+                      <img
+                        src={imgUrl}
+                        alt={`P-R ${iouLabel} - ${Augmentation}`}
+                        style={{
+                          maxWidth: "600px",
+                          width: "100%",
+                          display: "block",
+                          margin: "0 auto",
+                        }}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+<COCOGraphsOverallSection props={props} />

@@ -657,3 +657,65 @@ def average_summaries(all_summaries):
         }
 
     return avg
+
+def plotMultipleFBetaCurves(curveDfs, curve_name, legend_names, filename):
+    '''
+    Overlay a single named curve (e.g. 'precision', 'recall', 'F1', 'F2', ...) from
+    multiple plotFBetaCurve() outputs onto one plot, for comparison.
+    :param curveDfs: list of DataFrames, each as returned by plotFBetaCurve()
+    :param curve_name: which curve to pull out of each DataFrame (e.g. 'F1')
+    :param legend_names: list of legend labels, same length as curveDfs, one per DataFrame
+    :param filename: output filename
+    :return: None
+    '''
+    if len(curveDfs) != len(legend_names):
+        raise ValueError(f'curveDfs (len={len(curveDfs)}) and legend_names (len={len(legend_names)}) must be the same length')
+
+    fig, ax = plt.subplots(figsize=(12, 9))
+    for curveDf, legend_name in zip(curveDfs, legend_names):
+        if curve_name not in curveDf.index:
+            raise ValueError(f"curve_name '{curve_name}' not found in DataFrame for legend '{legend_name}' (available: {list(curveDf.index)})")
+        x = curveDf.loc[curve_name, 'x']
+        y = curveDf.loc[curve_name, 'y']
+        ax.plot(x, y, label=legend_name)
+
+    ax.set_title(f'{curve_name} comparison')
+    ax.set_xlabel('confidence threshold')
+    ax.set_ylabel('score')
+    ax.set_xlim(0, 1.0)
+    ax.set_ylim(0, 1.01)
+    ax.grid(True)
+    ax.legend(loc='center left', bbox_to_anchor=(1.02, 0.5), borderaxespad=0)
+    fig.savefig(filename, bbox_inches='tight')
+    plt.close(fig)
+
+def plotMultiplePRCurves(curveDfs, curve_name, legend_names, filename):
+    '''
+    Overlay a single named IoU curve (e.g. 'iou=0.50') from multiple plotPRCurve()
+    outputs onto one plot, for comparison.
+    :param curveDfs: list of DataFrames, each as returned by plotPRCurve()
+    :param curve_name: which curve to pull out of each DataFrame (e.g. 'iou=0.50')
+    :param legend_names: list of legend labels, same length as curveDfs, one per DataFrame
+    :param filename: output filename
+    :return: None
+    '''
+    if len(curveDfs) != len(legend_names):
+        raise ValueError(f'curveDfs (len={len(curveDfs)}) and legend_names (len={len(legend_names)}) must be the same length')
+
+    fig, ax = plt.subplots(figsize=(12, 9))
+    for curveDf, legend_name in zip(curveDfs, legend_names):
+        if curve_name not in curveDf.index:
+            raise ValueError(f"curve_name '{curve_name}' not found in DataFrame for legend '{legend_name}' (available: {list(curveDf.index)})")
+        x = curveDf.loc[curve_name, 'x']
+        y = curveDf.loc[curve_name, 'y']
+        ax.plot(x, y, label=legend_name)
+
+    ax.set_title(f'P-R curve comparison ({curve_name})')
+    ax.set_xlabel('recall')
+    ax.set_ylabel('precision')
+    ax.set_xlim(0, 1.0)
+    ax.set_ylim(0, 1.01)
+    ax.grid(True)
+    ax.legend(loc='center left', bbox_to_anchor=(1.02, 0.5), borderaxespad=0)
+    fig.savefig(filename, bbox_inches='tight')
+    plt.close(fig)

@@ -30,7 +30,7 @@ import pandas as pd
 # import matplotlib.pyplot as plt
 # import plotly.express as px 
 # from pprint import pprint
-
+from PIL import ImageDraw, ImageFont
 # =====================================================================================
 # NOTE:
 # 1. Check that you have installed the aiverify_test_engine latest package.
@@ -408,47 +408,7 @@ class Plugin(IAlgorithm):
             raise ValueError("aug method not valid")
         aug_class = aug_dict[aug_name]
 
-        severity_before = self._input_arguments.get("severity_before")
-        severity_after = self._input_arguments.get("severity_after")
-        severity_before_idx = self._input_arguments.get("severity_before_idx")
-        severity_after_idx = self._input_arguments.get("severity_after_idx")
-
-        # normalize empty strings to None (important if UI sends "")
-        severity_before = severity_before if severity_before != "" else None
-        severity_after = severity_after if severity_after != "" else None
-
-        # ---- validation ----
-        if (
-            severity_before is None
-            and severity_after is None
-            and severity_before_idx is None
-            and severity_after_idx is None
-        ):
-            raise ValueError(
-                "Must provide either severity_before/after (string) "
-                "or severity_before_idx/after_idx (integer)"
-            )
-
-        # ---- choose strings if provided ----
-        if severity_before is not None or severity_after is not None:
-            if severity_before is None or severity_after is None:
-                raise ValueError(
-                    "Both severity_before and severity_after must be provided together"
-                )
-            severity0 = severity_before
-            severity1 = severity_after
-
-        # ---- otherwise use indices ----
-        else:
-            if severity_before_idx is None or severity_after_idx is None:
-                raise ValueError(
-                    "Both severity_before_idx and severity_after_idx must be provided together"
-                )
-            severity0 = severity_before_idx
-            severity1 = severity_after_idx
-
-        severities = (severity0, severity1)
-        print("SEVERITIES:", severities)
+        severities = self._validate_severities()
         if severities[0] == "None":
             loader_A = test_loader
         else: 
@@ -496,7 +456,7 @@ class Plugin(IAlgorithm):
         #KIV: define the top_k value here; if want to make custom then we change this
         TOPK_SAFE = 15
         TOPK = 10
-        display_info = []      
+            
         output_results = brittle_res_to_dict(b_result)
         # output_results = {k:v for k,v in output_results.items() if k not in ["imgs_A", "imgs_B"]}
         results_list = output_results['results']
@@ -505,6 +465,73 @@ class Plugin(IAlgorithm):
 
         print("### Starting looping for display info... ###")
 
+        display_info = self._loop_for_display_info(
+            model, 
+            severities, 
+            aug_class,
+            image_paths,
+            ground_truths,
+            aug_name,
+            top_k_indices,
+            class_names
+        )
+       
+        print("### Finished looping for display info!!! ###")
+        output_results.update(
+            {"display_info": display_info}
+        )
+
+        all_result_paths_dict = process_and_visualize_brittleness_method(
+            b_result,
+            self._output_folder,
+            aug_class,
+            severities,
+            class_names_int,
+            image_paths,
+            self._score_thres,
+            aug_name,
+            ground_truths,
+            TOPK
+        )
+
+        mpl_path, mpl_frag_paths = all_result_paths_dict['mpl']
+        mpl_path_with_det, mpl_frag_paths_with_det = all_result_paths_dict['mpl_det']
+        plotly_path = all_result_paths_dict['plotly']
+        plotly_path_with_det = all_result_paths_dict['plotly_det']
+        html_path = all_result_paths_dict['html']
+        html_path_with_det = all_result_paths_dict['html_det']
+
+        print("### Finished visualization for display info!!! ###")
+        output_results.update(
+            {
+                "matplotlib_image_path": str(mpl_path.relative_to(self._output_folder)),
+                "plotly_image_path": str(plotly_path.relative_to(self._output_folder)),
+                "html_carousel_path": str(html_path.relative_to(self._output_folder)),
+                "matplotlib_fragment_paths": [str(x.relative_to(self._output_folder)) for x in mpl_frag_paths],
+                "matplotlib_image_path_with_det": str(mpl_path_with_det.relative_to(self._output_folder)),
+                "plotly_image_path_with_det": str(plotly_path_with_det.relative_to(self._output_folder)),
+                "html_carousel_path_with_det": str(html_path_with_det.relative_to(self._output_folder)),
+                "matplotlib_fragment_paths_with_det": [str(x.relative_to(self._output_folder)) for x in mpl_frag_paths_with_det],
+                "dataset_size": len(image_paths),
+                "class_names": class_names
+            }
+        )
+
+        self._results = output_results
+
+
+    def _loop_for_display_info(
+        self,
+        model, 
+        severities, 
+        aug_class,
+        image_paths,
+        ground_truths,
+        aug_name,
+        top_k_indices,
+        class_names
+    ):
+        display_info = []
         model.eval()
         with torch.no_grad():
 
@@ -536,13 +563,10 @@ class Plugin(IAlgorithm):
 
                     ground_truth = ground_truths[display_idx]
 
-                    image_path2 = self._save_image_with_predictions(
+                    image_path2, drawn_prediction = self._save_image_with_predictions(
                         image=corrupted_images[i],
-                        pred_boxes=prediction['boxes'],#pred_boxes,
-                        pred_labels=prediction['labels'],#pred_labels,
-                        pred_scores=prediction['scores'],#pred_scores,
+                        prediction=prediction,
                         gt_boxes=ground_truth,        # list of {"bbox": [...], "label": ...}
-                        gt_labels=[obj["label"] for obj in ground_truth],
                         class_names=class_names,
                         subfolder_name=str(corrupted_dir),
                         idx=display_idx,
@@ -552,146 +576,55 @@ class Plugin(IAlgorithm):
                     random_display = [
                         str(Path(image_path).relative_to(self._output_folder)),
                         ground_truth,
-                        prediction,
+                        drawn_prediction,
                         str(Path(image_path2).relative_to(self._output_folder)),
                     ]
                     display_info.append({f"severity_{s}_number_{i+1}": random_display})
-        
-        print("### Finished looping for display info!!! ###")
-        output_results.update(
-            {"display_info": display_info}
-        )
 
-        results_correctb4 = [
-            r for r in b_result.results
-            if delta_detections_labels(r, 0.25)
-        ]
-        results_correctb4_incorrectaft = [
-            r for r in b_result.results
-            if delta_detections_labels(r, 0.25) and delta_detections(r, 0.5)
-        ]
+        return display_info   
+    
+    def _validate_severities(self):
+        severity_before = self._input_arguments.get("severity_before")
+        severity_after = self._input_arguments.get("severity_after")
+        severity_before_idx = self._input_arguments.get("severity_before_idx")
+        severity_after_idx = self._input_arguments.get("severity_after_idx")
 
-        aug_dir =  self._output_folder / aug_name
-        mpl_dir = aug_dir / f"matplotlib"
-        mpl_dir.mkdir(parents=True, exist_ok=True)
-        plotly_dir = aug_dir / f"plotly"
-        plotly_dir.mkdir(parents=True, exist_ok=True)
+        # normalize empty strings to None (important if UI sends "")
+        severity_before = severity_before if severity_before != "" else None
+        severity_after = severity_after if severity_after != "" else None
+        # ---- validation ----
+        if (
+            severity_before is None
+            and severity_after is None
+            and severity_before_idx is None
+            and severity_after_idx is None
+        ):
+            raise ValueError(
+                "Must provide either severity_before/after (string) "
+                "or severity_before_idx/after_idx (integer)"
+            )
 
-        sev_A = aug_class.determine_severity(severities[0]) if severities[0] != "None" else "None"
-        sev_B = aug_class.determine_severity(severities[1])
+        # ---- choose strings if provided ----
+        if severity_before is not None or severity_after is not None:
+            if severity_before is None or severity_after is None:
+                raise ValueError(
+                    "Both severity_before and severity_after must be provided together"
+                )
+            severity0 = severity_before
+            severity1 = severity_after
 
-        print("### Starting visualization for display info... ###")
+        # ---- otherwise use indices ----
+        else:
+            if severity_before_idx is None or severity_after_idx is None:
+                raise ValueError(
+                    "Both severity_before_idx and severity_after_idx must be provided together"
+                )
+            severity0 = severity_before_idx
+            severity1 = severity_after_idx
 
-        mpl_path, mpl_frag_paths = visualize_topk_matplotlib(
-            results_correctb4, #TODO: use logic of correctb4 from imageclass version
-            b_result.probs_A, 
-            b_result.probs_B,  
-            K=min(TOPK, len(results_correctb4)),
-            class_names=class_names_int, 
-            transform=None,
-            directory=mpl_dir,
-            image_paths=image_paths,
-            aug_class=aug_class,
-            severity_A=sev_A,
-            severity_B=sev_B,
-            gt_labels=None,
-            score_threshold=self._score_thres
-        )
-        mpl_path_with_det, mpl_frag_paths_with_det = visualize_topk_matplotlib(
-            results_correctb4, #TODO: use logic of correctb4 from imageclass version
-            b_result.probs_A, 
-            b_result.probs_B,  
-            K=min(TOPK, len(results_correctb4)),
-            class_names=class_names_int, 
-            transform=None,
-            directory=mpl_dir,
-            image_paths=image_paths,
-            aug_class=aug_class,
-            severity_A=sev_A,
-            severity_B=sev_B,
-            gt_labels=ground_truths,
-            score_threshold=self._score_thres
-        )
-
-        plotly_path = visualize_topk_without_plotly(
-            results_correctb4, #TODO: use logic of correctb4 from imageclass version
-            b_result.probs_A, 
-            b_result.probs_B, 
-            K=min(TOPK, len(results_correctb4)),
-            class_names=class_names_int, 
-            transform=None,
-            directory = plotly_dir,
-            image_paths=image_paths,
-            aug_class=aug_class,
-            severity_A=sev_A,
-            severity_B=sev_B,
-            gt_labels=None,
-            score_threshold=self._score_thres
-        )
-        plotly_path_with_det = visualize_topk_without_plotly(
-            results_correctb4, #TODO: use logic of correctb4 from imageclass version
-            b_result.probs_A, 
-            b_result.probs_B, 
-            K=min(TOPK, len(results_correctb4)),
-            class_names=class_names_int, 
-            transform=None,
-            directory = plotly_dir,
-            image_paths=image_paths,
-            aug_class=aug_class,
-            severity_A=sev_A,
-            severity_B=sev_B,
-            gt_labels=ground_truths,
-            score_threshold=self._score_thres
-        )
-
-        html_path = visualize_in_html(
-            results_correctb4_incorrectaft, 
-            b_result.probs_A, 
-            b_result.probs_B, 
-            b_result.labels, 
-            class_names=class_names_int, 
-            transform=None,
-            directory = plotly_dir,
-            image_paths=image_paths,
-            aug_class=aug_class,
-            severity_A=sev_A,
-            severity_B=sev_B,
-            draw_detections=False,
-            score_threshold=self._score_thres
-        )
-        html_path_with_det = visualize_in_html(
-            results_correctb4_incorrectaft, 
-            b_result.probs_A, 
-            b_result.probs_B, 
-            b_result.labels, 
-            class_names=class_names_int, 
-            transform=None,
-            directory = plotly_dir,
-            image_paths=image_paths,
-            aug_class=aug_class,
-            severity_A=sev_A,
-            severity_B=sev_B,
-            draw_detections=True,
-            score_threshold=self._score_thres
-        )
-
-        print("### Finished visualization for display info!!! ###")
-        output_results.update(
-            {
-                "matplotlib_image_path": str(mpl_path.relative_to(self._output_folder)),
-                "plotly_image_path": str(plotly_path.relative_to(self._output_folder)),
-                "html_carousel_path": str(html_path.relative_to(self._output_folder)),
-                "matplotlib_fragment_paths": [str(x.relative_to(self._output_folder)) for x in mpl_frag_paths],
-                "matplotlib_image_path_with_det": str(mpl_path_with_det.relative_to(self._output_folder)),
-                "plotly_image_path_with_det": str(plotly_path_with_det.relative_to(self._output_folder)),
-                "html_carousel_path_with_det": str(html_path_with_det.relative_to(self._output_folder)),
-                "matplotlib_fragment_paths_with_det": [str(x.relative_to(self._output_folder)) for x in mpl_frag_paths_with_det],
-                "dataset_size": len(image_paths),
-                "class_names": class_names
-            }
-        )
-
-        self._results = output_results
+        severities = (severity0, severity1)
+        print("SEVERITIES:", severities)
+        return severities
 
     def _save_one_image(self, image: np.ndarray, subfolder_name: str, idx: int) -> str:
 
@@ -828,39 +761,20 @@ class Plugin(IAlgorithm):
 
     def _save_image_with_predictions(
         self,
-        image: np.ndarray,
-        pred_boxes,
-        pred_labels,
-        pred_scores,
+        image,
+        prediction,
         gt_boxes,
-        gt_labels,
+        #gt_labels,
         class_names: dict,
         subfolder_name: str,
         idx: int,
         score_threshold: float = 0.5,
-    ) -> str:
-        """
-        Overlay ground-truth boxes (green) and predicted boxes (red) on the image,
-        then save it as ``{idx}_with_prediction.png`` in the same subfolder structure
-        used by _save_one_image.
+    ) -> tuple[str, dict]:          # <-- now returns (path, drawn_prediction)
 
-        Args:
-            image (np.ndarray): CHW float image (values in [0, 1] or [0, 255]).
-            pred_boxes: Tensor or array of shape (N, 4) with [x1, y1, x2, y2] predictions.
-            pred_labels: Array of predicted label ids (length N).
-            pred_scores: Array of prediction confidence scores (length N).
-            gt_boxes: List of [x_min, y_min, x_max, y_max] from ground-truth objects.
-            gt_labels: List of ground-truth label ids.
-            class_names (dict): Mapping from str(label_id) -> class name string.
-            subfolder_name (str): Sub-folder name (mirrors the one used by _save_one_image).
-            idx (int): Image index, used in the filename.
-            score_threshold (float): Predictions below this confidence are skipped.
-
-        Returns:
-            str: Absolute path to the saved overlay image.
-        """
-        from PIL import ImageDraw, ImageFont
-
+        pred_boxes=prediction['boxes']
+        pred_labels=prediction['labels']
+        pred_scores=prediction['scores']
+        
         save_dir = self._save_folder / subfolder_name
         save_dir.mkdir(parents=True, exist_ok=True)
         image_path = save_dir / f"{idx}_with_prediction.png"
@@ -873,7 +787,6 @@ class Plugin(IAlgorithm):
         pil_img = Image.fromarray(img_hwc).convert("RGB")
         draw = ImageDraw.Draw(pil_img)
 
-        # Try to load a small font; fall back to the default if unavailable.
         try:
             font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 12)
         except Exception:
@@ -891,8 +804,11 @@ class Plugin(IAlgorithm):
                     draw.text((x1, max(0, y1 - 13)), f"GT:{name}", fill=(0, 200, 0), font=font)
 
         # --- Predicted boxes (red) ---
+        # Build this in lockstep with the drawing loop so it can never drift
+        # out of sync with what's actually rendered.
+        drawn_boxes, drawn_labels, drawn_scores = [], [], []
+
         if pred_boxes is not None and len(pred_boxes) > 0:
-            # Convert tensors to numpy if needed
             boxes_np = pred_boxes.cpu().numpy() if hasattr(pred_boxes, "cpu") else np.asarray(pred_boxes)
             for i, (box, label, score) in enumerate(zip(boxes_np, pred_labels, pred_scores)):
                 if float(score) < score_threshold:
@@ -902,8 +818,18 @@ class Plugin(IAlgorithm):
                 name = class_names.get(str(label), str(label))
                 draw.text((x1, max(0, y1 - 13)), f"{name} {score:.2f}", fill=(220, 30, 30), font=font)
 
+                drawn_boxes.append([x1, y1, x2, y2])
+                drawn_labels.append(label)
+                drawn_scores.append(float(score))
+
         pil_img.save(image_path)
-        return str(image_path)
+
+        drawn_prediction = {
+            "boxes": drawn_boxes,
+            "labels": drawn_labels,
+            "scores": drawn_scores,
+        }
+        return str(image_path), drawn_prediction
 
     def _get_one_corrupted_image_direct(self, image_paths, ground_truths, aug_class, severity, target_idx):#s_idx,
         image = Image.open(image_paths[target_idx]).convert("RGB")

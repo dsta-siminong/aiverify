@@ -16,6 +16,7 @@ import io
 from pathlib import Path
 from dataclasses import dataclass
 from torchvision import transforms
+from .cvrob_util import delta_detections, delta_detections_labels
 
 @dataclass
 class BrittlenessResultIndiv:
@@ -105,6 +106,41 @@ def brittle_res_to_dict(br):
         "labels": safe_convert(br.labels),
     }
     return d
+
+def _pil_to_base64(
+    pil_img,
+    max_size: int = None,
+    jpeg_quality: int = None,
+) -> str:
+    """
+    Encode an already-rendered PIL image to base64.
+
+    This is the PIL counterpart of tensor_to_base64: it accepts an image that
+    has already been drawn on (e.g. with detection overlays) and encodes it
+    without re-running unnormalize().
+
+    Args:
+        pil_img (PIL.Image.Image): RGB image to encode.
+        max_size (int, optional): Downscale longest edge to at most this many pixels.
+        jpeg_quality (int, optional): JPEG quality 1-95; PNG if None.
+
+    Returns:
+        str: Base64-encoded image string (no data-URI prefix).
+    """
+    if max_size is not None:
+        w, h = pil_img.size
+        scale = max_size / max(w, h)
+        if scale < 1.0:
+            pil_img = pil_img.resize(
+                (int(w * scale), int(h * scale)),
+                Image.LANCZOS
+            )
+    buffer = io.BytesIO()
+    if jpeg_quality is not None:
+        pil_img.save(buffer, format="JPEG", quality=jpeg_quality, optimize=True)
+    else:
+        pil_img.save(buffer, format="PNG")
+    return base64.b64encode(buffer.getvalue()).decode()
 
 # ==== BRITTLENESS HELPERS ====
 
@@ -300,7 +336,7 @@ def visualize_topk_matplotlib(
     scores_A, scores_B,
     K=10,
     class_names=None,
-    transform=None,
+    # transform=None,
     directory=Path(),
     image_paths=None,
     aug_class=None,
@@ -394,13 +430,42 @@ def visualize_topk_matplotlib(
             bbox=dict(boxstyle="round", facecolor="white", alpha=0.8)
         )
 
+        axes[row, 0].imshow(imgA)
+        axes[row, 0].axis("off")
+        axes[row, 0].text(
+            0.02, 0.98,
+            (
+                f"image: {idx}\n"
+                f"BEFORE corruption\n"
+                f"Detections: {n_A}  |  Top conf: {top_A:.2f}"
+            ),
+            transform=axes[row, 0].transAxes,
+            va="top", ha="left", fontsize=9,
+            bbox=dict(boxstyle="round", facecolor="white", alpha=0.8)
+        )
+
+        axes[row, 1].imshow(imgB)
+        axes[row, 1].axis("off")
+        axes[row, 1].text(
+            0.02, 0.98,
+            (
+                f"image: {idx}\n"
+                f"AFTER corruption\n"
+                f"Detections: {n_B} ({det_delta_str})  |  Top conf: {top_B:.2f}\n"
+                f"Brittleness: {brittleness:.2f} / 1.00  →  {label}"
+            ),
+            transform=axes[row, 1].transAxes,
+            va="top", ha="left", fontsize=9,
+            bbox=dict(boxstyle="round", facecolor="white", alpha=0.8)
+        )
+
         fragment_path = fragments_dir / f"brittleness_top_{row + 1}{_suffix}.png"
         fragment_paths.append(fragment_path)
         fig_row.savefig(fragment_path)
         plt.close(fig_row)
 
     save_path = directory / f"brittleness_topk{_suffix}.png"
-    plt.savefig(save_path)
+    fig.savefig(save_path)
     plt.close(fig)
 
     return save_path, fragment_paths
@@ -410,7 +475,7 @@ def visualize_in_html(
     scoresA, scoresB,
     labels,
     class_names=None,
-    transform=None,
+    # transform=None,
     directory=Path(),
     image_paths=None,
     aug_class=None,
@@ -577,142 +642,105 @@ show();
     # print("Saved brittleness_carousel.html")
     return save_path
 
-# ==== HELPER FUNCTIONS ====
+# def unnormalize(img_tensor, transform=None):
+#     """
+#     Convert a possibly normalized image tensor to a displayable HWC NumPy array.
+#     """
+#     stats = extract_normalize(transform)
 
-def unnormalize(img_tensor, transform=None):
-    """
-    Convert a possibly normalized image tensor to a displayable HWC NumPy array.
-    """
-    stats = extract_normalize(transform)
+#     img = img_tensor.clone()
 
-    img = img_tensor.clone()
+#     if stats is not None:
+#         mean, std = stats
+#         mean = torch.tensor(mean).view(-1,1,1)
+#         std  = torch.tensor(std).view(-1,1,1)
+#         img = img * std + mean
 
-    if stats is not None:
-        mean, std = stats
-        mean = torch.tensor(mean).view(-1,1,1)
-        std  = torch.tensor(std).view(-1,1,1)
-        img = img * std + mean
+#     # Always make display-safe
+#     img = img - img.min()
+#     img = img / (img.max() + 1e-8)
 
-    # Always make display-safe
-    img = img - img.min()
-    img = img / (img.max() + 1e-8)
+#     return img.permute(1,2,0).numpy()
 
-    return img.permute(1,2,0).numpy()
+# def get_topk_predictions(probs, k=3):
+#     """
+#     Get the top-k predicted class indices and their probabilities.
 
-def get_topk_predictions(probs, k=3):
-    """
-    Get the top-k predicted class indices and their probabilities.
+#     Args:
+#         probs (torch.Tensor): Tensor of predicted probabilities (1D or batch 2D).
+#         k (int, optional): Number of top predictions to return. Defaults to 3.
 
-    Args:
-        probs (torch.Tensor): Tensor of predicted probabilities (1D or batch 2D).
-        k (int, optional): Number of top predictions to return. Defaults to 3.
+#     Returns:
+#         List[Tuple[int, float]]: List of tuples containing (class_index, probability)
+#         for the top-k predictions.
+#     """
+#     vals, inds = probs.topk(k)
+#     return list(zip(inds.tolist(), vals.tolist()))
 
-    Returns:
-        List[Tuple[int, float]]: List of tuples containing (class_index, probability)
-        for the top-k predictions.
-    """
-    vals, inds = probs.topk(k)
-    return list(zip(inds.tolist(), vals.tolist()))
+# def tensor_to_base64(img_tensor, transform=None, max_size: int = None, jpeg_quality: int = None):
+#     """
+#     Convert a C,H,W image tensor to a base64-encoded image string.
 
-def tensor_to_base64(img_tensor, transform=None, max_size: int = None, jpeg_quality: int = None):
-    """
-    Convert a C,H,W image tensor to a base64-encoded image string.
+#     Args:
+#         img_tensor (torch.Tensor): Image tensor with shape (C, H, W), values in [0,1].
+#         transform: Optional preprocessing transform, used to unnormalize if needed.
+#         max_size (int, optional): Downscale so the longest edge is at most this many pixels.
+#         jpeg_quality (int, optional): If set (1-95), encode as JPEG. Otherwise PNG.
 
-    Args:
-        img_tensor (torch.Tensor): Image tensor with shape (C, H, W), values in [0,1].
-        transform: Optional preprocessing transform, used to unnormalize if needed.
-        max_size (int, optional): Downscale so the longest edge is at most this many pixels.
-        jpeg_quality (int, optional): If set (1-95), encode as JPEG. Otherwise PNG.
+#     Returns:
+#         str: Base64-encoded image. Caller prepends the data URI prefix.
+#     """
+#     img = unnormalize(img_tensor, transform)
+#     img = (img * 255).astype(np.uint8)
+#     pil_img = Image.fromarray(img)
 
-    Returns:
-        str: Base64-encoded image. Caller prepends the data URI prefix.
-    """
-    img = unnormalize(img_tensor, transform)
-    img = (img * 255).astype(np.uint8)
-    pil_img = Image.fromarray(img)
+#     if max_size is not None:
+#         w, h = pil_img.size
+#         scale = max_size / max(w, h)
+#         if scale < 1.0:
+#             pil_img = pil_img.resize(
+#                 (int(w * scale), int(h * scale)),
+#                 Image.LANCZOS
+#             )
 
-    if max_size is not None:
-        w, h = pil_img.size
-        scale = max_size / max(w, h)
-        if scale < 1.0:
-            pil_img = pil_img.resize(
-                (int(w * scale), int(h * scale)),
-                Image.LANCZOS
-            )
+#     buffer = io.BytesIO()
+#     if jpeg_quality is not None:
+#         pil_img.save(buffer, format="JPEG", quality=jpeg_quality, optimize=True)
+#     else:
+#         pil_img.save(buffer, format="PNG")
+#     return base64.b64encode(buffer.getvalue()).decode()
 
-    buffer = io.BytesIO()
-    if jpeg_quality is not None:
-        pil_img.save(buffer, format="JPEG", quality=jpeg_quality, optimize=True)
-    else:
-        pil_img.save(buffer, format="PNG")
-    return base64.b64encode(buffer.getvalue()).decode()
+# def extract_normalize(transform):
+#     """
+#     Extract the mean and standard deviation from a torchvision Normalize transform.
 
-def _pil_to_base64(
-    pil_img,
-    max_size: int = None,
-    jpeg_quality: int = None,
-) -> str:
-    """
-    Encode an already-rendered PIL image to base64.
+#     Args:
+#         transform (torchvision.transforms or None): Transform object to inspect.
 
-    This is the PIL counterpart of tensor_to_base64: it accepts an image that
-    has already been drawn on (e.g. with detection overlays) and encodes it
-    without re-running unnormalize().
+#     Returns:
+#         Tuple[List[float], List[float]] or None: Returns (mean, std) if a Normalize
+#         transform is present, else None.
+#     """
 
-    Args:
-        pil_img (PIL.Image.Image): RGB image to encode.
-        max_size (int, optional): Downscale longest edge to at most this many pixels.
-        jpeg_quality (int, optional): JPEG quality 1-95; PNG if None.
+#     if transform is None:
+#         return None
 
-    Returns:
-        str: Base64-encoded image string (no data-URI prefix).
-    """
-    if max_size is not None:
-        w, h = pil_img.size
-        scale = max_size / max(w, h)
-        if scale < 1.0:
-            pil_img = pil_img.resize(
-                (int(w * scale), int(h * scale)),
-                Image.LANCZOS
-            )
-    buffer = io.BytesIO()
-    if jpeg_quality is not None:
-        pil_img.save(buffer, format="JPEG", quality=jpeg_quality, optimize=True)
-    else:
-        pil_img.save(buffer, format="PNG")
-    return base64.b64encode(buffer.getvalue()).decode()
+#     if isinstance(transform, transforms.Normalize):
+#         return transform.mean, transform.std
 
-def extract_normalize(transform):
-    """
-    Extract the mean and standard deviation from a torchvision Normalize transform.
+#     if isinstance(transform, transforms.Compose):
+#         for t in transform.transforms:
+#             if isinstance(t, transforms.Normalize):
+#                 return t.mean, t.std
 
-    Args:
-        transform (torchvision.transforms or None): Transform object to inspect.
-
-    Returns:
-        Tuple[List[float], List[float]] or None: Returns (mean, std) if a Normalize
-        transform is present, else None.
-    """
-
-    if transform is None:
-        return None
-
-    if isinstance(transform, transforms.Normalize):
-        return transform.mean, transform.std
-
-    if isinstance(transform, transforms.Compose):
-        for t in transform.transforms:
-            if isinstance(t, transforms.Normalize):
-                return t.mean, t.std
-
-    return None
+#     return None
 
 def visualize_topk_without_plotly(
     results_sorted,
     scores_A, scores_B,
     K=10,
     class_names=None,
-    transform=None,
+    # transform=None,
     directory=Path(),
     image_paths=None,
     aug_class=None,
@@ -964,3 +992,138 @@ h1 {{
         f.write(html)
  
     return save_path
+
+def process_and_visualize_brittleness_method(
+    b_result,
+    output_folder,
+    aug_class,
+    severities,
+    class_names_int,
+    image_paths,
+    score_thres,
+    aug_name,
+    ground_truths,
+    TOPK
+):
+    d = {}
+    results_correctb4 = [
+        r for r in b_result.results
+        if delta_detections_labels(r, 0.25)
+    ]
+    results_correctb4_incorrectaft = [
+        r for r in b_result.results
+        if delta_detections_labels(r, 0.25) and delta_detections(r, 0.5)
+    ]
+
+    aug_dir =  output_folder / aug_name
+    mpl_dir = aug_dir / f"matplotlib"
+    mpl_dir.mkdir(parents=True, exist_ok=True)
+    plotly_dir = aug_dir / f"plotly"
+    plotly_dir.mkdir(parents=True, exist_ok=True)
+
+    sev_A = aug_class.determine_severity(severities[0]) if severities[0] != "None" else "None"
+    sev_B = aug_class.determine_severity(severities[1])
+
+    print("### Starting visualization for display info... ###")
+
+    mpl_path, mpl_frag_paths = visualize_topk_matplotlib(
+        results_correctb4, #TODO: use logic of correctb4 from imageclass version
+        b_result.probs_A, 
+        b_result.probs_B,  
+        K=min(TOPK, len(results_correctb4)),
+        class_names=class_names_int, 
+        # transform=None,
+        directory=mpl_dir,
+        image_paths=image_paths,
+        aug_class=aug_class,
+        severity_A=sev_A,
+        severity_B=sev_B,
+        gt_labels=None,
+        score_threshold=score_thres
+    )
+    mpl_path_with_det, mpl_frag_paths_with_det = visualize_topk_matplotlib(
+        results_correctb4, #TODO: use logic of correctb4 from imageclass version
+        b_result.probs_A, 
+        b_result.probs_B,  
+        K=min(TOPK, len(results_correctb4)),
+        class_names=class_names_int, 
+        # transform=None,
+        directory=mpl_dir,
+        image_paths=image_paths,
+        aug_class=aug_class,
+        severity_A=sev_A,
+        severity_B=sev_B,
+        gt_labels=ground_truths,
+        score_threshold=score_thres
+    )
+
+    plotly_path = visualize_topk_without_plotly(
+        results_correctb4, #TODO: use logic of correctb4 from imageclass version
+        b_result.probs_A, 
+        b_result.probs_B, 
+        K=min(TOPK, len(results_correctb4)),
+        class_names=class_names_int, 
+        # transform=None,
+        directory = plotly_dir,
+        image_paths=image_paths,
+        aug_class=aug_class,
+        severity_A=sev_A,
+        severity_B=sev_B,
+        gt_labels=None,
+        score_threshold=score_thres
+    )
+    plotly_path_with_det = visualize_topk_without_plotly(
+        results_correctb4, #TODO: use logic of correctb4 from imageclass version
+        b_result.probs_A, 
+        b_result.probs_B, 
+        K=min(TOPK, len(results_correctb4)),
+        class_names=class_names_int, 
+        # transform=None,
+        directory = plotly_dir,
+        image_paths=image_paths,
+        aug_class=aug_class,
+        severity_A=sev_A,
+        severity_B=sev_B,
+        gt_labels=ground_truths,
+        score_threshold=score_thres
+    )
+
+    html_path = visualize_in_html(
+        results_correctb4_incorrectaft, 
+        b_result.probs_A, 
+        b_result.probs_B, 
+        b_result.labels, 
+        class_names=class_names_int, 
+        # transform=None,
+        directory = plotly_dir,
+        image_paths=image_paths,
+        aug_class=aug_class,
+        severity_A=sev_A,
+        severity_B=sev_B,
+        draw_detections=False,
+        score_threshold=score_thres
+    )
+    html_path_with_det = visualize_in_html(
+        results_correctb4_incorrectaft, 
+        b_result.probs_A, 
+        b_result.probs_B, 
+        b_result.labels, 
+        class_names=class_names_int, 
+        # transform=None,
+        directory = plotly_dir,
+        image_paths=image_paths,
+        aug_class=aug_class,
+        severity_A=sev_A,
+        severity_B=sev_B,
+        draw_detections=True,
+        score_threshold=score_thres
+    )
+
+    d['mpl'] = [mpl_path, mpl_frag_paths]
+    d['mpl_det'] = [mpl_path_with_det, mpl_frag_paths_with_det]
+    d['plotly'] = plotly_path
+    d['plotly_det'] = plotly_path_with_det
+    d['html'] = html_path
+    d['html_det'] = html_path_with_det
+
+    return d

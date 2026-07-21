@@ -495,6 +495,7 @@ class Plugin(IAlgorithm):
             coco_graph_dict = {}
             crs = []
             cms = []
+            fbeta_df_list = []; pr_df_list = []
 
             severities = ["None"] + aug_class.severities
             if aug_name == "None":
@@ -511,7 +512,7 @@ class Plugin(IAlgorithm):
 
                 save_dir_coco = self._save_folder / corrupted_dir
                 save_dir_coco.mkdir(parents=True, exist_ok=True)
-                avg_stats, avg_matrix, avg_map, avg_summary, coco_imgs = self._run_severity_epochs_coco(
+                avg_stats, avg_matrix, avg_map, avg_summary, coco_imgs, coco_dfs = self._run_severity_epochs_coco(
                     model, test_loader, aug_class, severity_name, severity_idx,
                     num_epochs, class_names, 
                     gt_json, image_paths, self._iou_thres, self._score_thres, save_dir_coco
@@ -536,7 +537,25 @@ class Plugin(IAlgorithm):
                 crs.append({"map": avg_map, **avg_stats})
                 cms.append(avg_matrix)
 
-            path_dict = self._detection_method(crs, severities, class_names, Path(aug_name), aug_name)
+                fbeta_df_list.append(coco_dfs[0]); pr_df_list.append(coco_dfs[1])
+
+
+            path_dict = self._detection_method(
+                crs, 
+                severities, 
+                class_names, 
+                Path(aug_name), 
+                aug_name
+            )
+            overall_coco_path_dict = self._overall_coco_path_method(
+                fbeta_df_list, 
+                pr_df_list,
+                severities, 
+                Path(aug_name), 
+                aug_name,
+                iou_thres = f"iou={self._iou_thres:.2f}",
+                fbeta_metric = None,
+            )
             individual_results.update({
                 "display_info": display_info,
                 "classification_report": crs,
@@ -544,7 +563,8 @@ class Plugin(IAlgorithm):
                 "plot_paths": path_dict,
                 "confusion_matrix": cm_dict,
                 "coco_graphs": coco_graph_dict,
-                "coco_summary": coco_dict
+                "coco_summary": coco_dict,
+                "coco_graphs_overall": overall_coco_path_dict
             })
 
             combined_results.append(individual_results)
@@ -1346,9 +1366,9 @@ class Plugin(IAlgorithm):
             summary = cocoEval.collectSummaryResults(fbeta_betas=(1, 2), fbeta_iou_thrs=(iou_threshold,))
 
             fbeta_filename = save_dir_coco / "fbeta_curve.png"
-            cocoEval.plotFBetaCurve(fbeta_filename, betas=[1,2], iouThr=iou_threshold, average='macro')
+            fbeta_df = cocoEval.plotFBetaCurve(fbeta_filename, betas=[1,2], iouThr=iou_threshold, average='macro')
             pr_filename = save_dir_coco / "pr_curve.png"
-            cocoEval.plotPRCurve(pr_filename, average='macro')
+            pr_df = cocoEval.plotPRCurve(pr_filename, average='macro')
             cocopr_filename = save_dir_coco / "cocopr_curve.png" #TODO: KIV doing this by class
             cocoEval.plotCocoPRCurve(cocopr_filename)
             per_class_report = cocoEval.generateReport()
@@ -1372,4 +1392,49 @@ class Plugin(IAlgorithm):
             else None
         )
         avg_summary = average_summaries(all_summaries)
-        return avg_stats, avg_matrix, avg_map, avg_summary, [fbeta_filename, pr_filename, cocopr_filename]
+        coco_filenames = [fbeta_filename, pr_filename, cocopr_filename]
+        coco_dfs = [fbeta_df, pr_df]
+
+        return avg_stats, avg_matrix, avg_map, avg_summary, coco_filenames, coco_dfs
+
+    def _overall_coco_path_method(
+        self,
+        fbeta_df_list, 
+        pr_df_list,
+        severities, 
+        subfolder_name, 
+        aug_name,
+        iou_thres = None,
+        fbeta_metric = None,
+    ):
+
+        plt.rcParams.update({'font.size': 18})
+        path_dict = {}
+        path_dict['fbeta'] = {}
+        path_dict['pr'] = {}
+
+        save_dir0 = self._save_folder / subfolder_name
+        save_dir0.mkdir(parents=True, exist_ok=True)
+        save_dir = save_dir0 / "figures"
+        save_dir.mkdir(parents=True, exist_ok=True)
+        # print()
+        # print("FBETA", fbeta_metric, "PR", iou_thres)
+        # print(fbeta_df_list[0].head())
+        # print()
+
+        for col in fbeta_df_list[0].index:
+            if fbeta_metric is not None and fbeta_metric != col:
+                continue
+            fbeta_path = save_dir / f"coco_fbeta_{col}.png"
+            plotMultiplePRCurves(fbeta_df_list, col, severities, fbeta_path)
+            path_dict['fbeta'][col] = str(fbeta_path.relative_to(self._output_folder))
+        
+        for col in pr_df_list[0].index:
+            if iou_thres is not None and iou_thres != col:
+                continue
+            safe_col = col.replace("=", "_")
+            pr_path = save_dir / f"coco_pr_{safe_col}.png"
+            plotMultiplePRCurves(pr_df_list, col, severities, pr_path)
+            path_dict['pr'][safe_col] = str(pr_path.relative_to(self._output_folder))
+
+        return path_dict
