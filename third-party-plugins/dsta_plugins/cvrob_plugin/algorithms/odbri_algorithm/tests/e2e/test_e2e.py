@@ -4,21 +4,22 @@ import pytest
 from odbri_algorithm.algo_init import AlgoInit
 from aiverify_test_engine.plugins.enums.model_type import ModelType
 
+
 binary_classification_pipeline = {
     "data_path": str(
         "/home/bjieyong/aiverify/cvrob/bccd/BCCD/JPEGImages"
     ),
     "model_path": str(
-        "/home/bjieyong/aiverify/cvrob/bccd/BCCD/bccdModel"
+        "/home/bjieyong/aiverify/cvrob/bccd/BCCD/bccdModel"#"/home/bjieyong/aiverify/cvrob/bccd/bccd_api.json"#
     ),
     "ground_truth_path": str(
         "/home/bjieyong/aiverify/cvrob/bccd/BCCD/bccd_detection.csv"
     ),
     "run_pipeline": True,
-    "model_type": ModelType.CLASSIFICATION,
+    "model_type": ModelType.DETECTION,
     "ground_truth": "label",
     "plugin_argument_values": {
-        "class_names": None, 
+        "class_names": "background,RBC,WBC,platelets", 
         "aug_library": "albumentations",
         "aug_method": "GaussianBlur",
         "severity_before": None,
@@ -29,6 +30,7 @@ binary_classification_pipeline = {
         "score_thres": 0.6
     }
 }
+
 
 @pytest.mark.parametrize(
     "data_set",

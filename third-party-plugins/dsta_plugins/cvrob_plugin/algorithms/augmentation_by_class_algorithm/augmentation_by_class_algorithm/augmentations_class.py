@@ -475,7 +475,7 @@ class Augmentation:
 
     def corr_func_arr(self, arr, severity_idx):
         if type(severity_idx) == int:
-            print(self.severities, "SEV", severity_idx)
+            # print(self.severities, "SEV", severity_idx)
             severity = self.severities[severity_idx]
         else:
             severity = severity_idx

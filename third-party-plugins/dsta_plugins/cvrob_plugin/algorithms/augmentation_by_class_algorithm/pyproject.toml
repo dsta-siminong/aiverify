@@ -5,13 +5,14 @@ description = "This algorithm runs the augmentations and visualizes the trends o
 authors = [{ name = "Example Author" }]
 readme = "README.md"
 dependencies = [
-    "aiverify-test-engine[all]",
     "albumentations==2.0.8",
     "augly==1.0.0",
     "imagecorruptions==1.1.2",
     "keras==3.12.0",
     "matplotlib==3.10.8",
-    "nrtk==0.26.0",
+    "nrtk==1.0.4",
+    "numba==0.62.1",
+    "pybsm==0.16.0",
     "numpy==1.26.4",
     "opencv-python-headless",
     "pandas==2.2.2",

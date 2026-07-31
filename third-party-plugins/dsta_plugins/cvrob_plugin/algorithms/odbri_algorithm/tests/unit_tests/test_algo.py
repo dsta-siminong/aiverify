@@ -35,7 +35,7 @@ valid_data_path = str(
     "/home/bjieyong/aiverify/cvrob/bccd/BCCD/JPEGImages"
 )
 valid_model_path = str(
-    "/home/bjieyong/aiverify/cvrob/bccd/BCCD/bccdModel"
+    "/home/bjieyong/aiverify/cvrob/bccd/BCCD/bccdModel"#"/home/bjieyong/aiverify/cvrob/bccd/bccd_api.json"#
 )
 valid_ground_truth_path = str(
     "/home/bjieyong/aiverify/cvrob/bccd/BCCD/bccd_detection.csv"
@@ -50,7 +50,9 @@ test_dict = {"data_str": "data_str"}
 test_tuple = ("data_str", "data_str")
 test_none = None
 
-
+plugin_type = PluginType.PIPELINE
+plugin_type_param = "pipeline_path"#"filename"
+i_type = IPipeline
 class ObjectTest:
     def __init__(self):
         test_discover_plugin()
@@ -64,7 +66,7 @@ class ObjectTest:
             model_instance,
             model_serializer_instance,
             model_error_message,
-        ) = PluginManager.get_instance(PluginType.PIPELINE, **{"pipeline_path": valid_model_path})
+        ) = PluginManager.get_instance(plugin_type, **{plugin_type_param: valid_model_path})
 
         (
             ground_truth_instance,
@@ -73,9 +75,9 @@ class ObjectTest:
         ) = PluginManager.get_instance(PluginType.DATA, **{"filename": valid_ground_truth_path})
 
         ground_truth = "label"
-        model_type = ModelType.CLASSIFICATION
+        model_type = ModelType.DETECTION
         input_args = {
-            "class_names": None,
+            "class_names": "background,RBC,WBC,platelets", 
             "aug_library": "albumentations",
             "aug_method": "GaussianBlur",
             "severity_before": None,
@@ -84,7 +86,6 @@ class ObjectTest:
             "severity_after_idx": 5,
             "iou_thres": 0.6,
             "score_thres": 0.6
-
         }
         expected_exception = RuntimeError
         expected_exception_msg = "The algorithm has failed data validation"
@@ -162,7 +163,7 @@ def get_model_instance_and_serializer(request):
         model_instance,
         model_serializer_instance,
         model_error_message,
-    ) = PluginManager.get_instance(PluginType.PIPELINE, **{"pipeline_path": request.param})
+    ) = PluginManager.get_instance(plugin_type, **{plugin_type_param: request.param})
     yield (model_instance, model_serializer_instance)
 
 
@@ -174,7 +175,7 @@ def get_invalid_model_instance(request):
             model_instance,
             model_serializer_instance,
             model_error_message,
-        ) = PluginManager.get_instance(PluginType.PIPELINE, **{"pipeline_path": request.param})
+        ) = PluginManager.get_instance(plugin_type, **{plugin_type_param: request.param})
     return excinfo
 
 
@@ -201,7 +202,7 @@ def test_create_plugin_instance_with_all_valid_input():
     )
 
     assert isinstance(test_plugin._data_instance, IData)
-    assert isinstance(test_plugin._model_instance, IPipeline)
+    assert isinstance(test_plugin._model_instance, i_type)
     assert isinstance(test_plugin._ground_truth_instance, IData)
     assert isinstance(test_plugin._logger, logging.Logger)
     assert isinstance(test_plugin._progress_inst, SimpleProgress)
@@ -509,14 +510,6 @@ def test_valid_run(get_data_instance_and_serializer_without_ground_truth):
     # just validate results schema instead of checking the results against expected output
     # as the results differ for every run
     results = remove_numpy_formats(test_plugin.get_results())
-    # print('-'*24)
-    # print(results)
-    # print('-'*24)
-    # import pickle
-    # with open("../../data.pkl", "wb") as f:
-    #     pickle.dump(results, f)
-    # print("DUMPED")
-
 
     validate_status = validate_json(
         results,

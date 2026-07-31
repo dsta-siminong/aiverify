@@ -35,7 +35,7 @@ valid_data_path = str(
     "../../../../../../all_images_all_classes"
 )
 valid_model_path = str(
-    "../../../../../../ship_pipe_sm/ship_pipe_sm"
+    "../../../../../../ship_pipe_sm/ship_pipe_sm"#"../../../../../../api.json"#
 )
 valid_ground_truth_path = str(
     "../../../../../../labels_all_classes.csv"
@@ -50,7 +50,9 @@ test_dict = {"data_str": "data_str"}
 test_tuple = ("data_str", "data_str")
 test_none = None
 
-
+plugin_type = PluginType.PIPELINE
+plugin_type_param = "pipeline_path"#"filename"
+i_type = IPipeline
 class ObjectTest:
     def __init__(self):
         test_discover_plugin()
@@ -64,7 +66,7 @@ class ObjectTest:
             model_instance,
             model_serializer_instance,
             model_error_message,
-        ) = PluginManager.get_instance(PluginType.PIPELINE, **{"pipeline_path": valid_model_path})
+        ) = PluginManager.get_instance(plugin_type, **{plugin_type_param: valid_model_path})
 
         (
             ground_truth_instance,
@@ -75,11 +77,12 @@ class ObjectTest:
         ground_truth = "label"
         model_type = ModelType.CLASSIFICATION
         input_args = {
-            "class_names": None,
-            "aug_library": "nrtk",
+            "class_names": "Barge,CG-P,ContainerShip,Cruise,Dredger,Ferry,LNG-LPG,RORO,Sampan,Trawler-FishingVessel,Tugboat,Warship,Yacht",
+            "aug_library": 'http://127.0.0.1:44627',
             'aug_methods': 'Rain',
             'custom_parameters': None,
             "num_epochs": 1,
+            # "model_api_url": "http://localhost:8000/predict_array",
         }
         expected_exception = RuntimeError
         expected_exception_msg = "The algorithm has failed data validation"
@@ -157,7 +160,7 @@ def get_model_instance_and_serializer(request):
         model_instance,
         model_serializer_instance,
         model_error_message,
-    ) = PluginManager.get_instance(PluginType.PIPELINE, **{"pipeline_path": request.param})
+    ) = PluginManager.get_instance(plugin_type, **{plugin_type_param: request.param})
     yield (model_instance, model_serializer_instance)
 
 
@@ -169,7 +172,7 @@ def get_invalid_model_instance(request):
             model_instance,
             model_serializer_instance,
             model_error_message,
-        ) = PluginManager.get_instance(PluginType.PIPELINE, **{"pipeline_path": request.param})
+        ) = PluginManager.get_instance(plugin_type, **{plugin_type_param: request.param})
     return excinfo
 
 
@@ -196,7 +199,7 @@ def test_create_plugin_instance_with_all_valid_input():
     )
 
     assert isinstance(test_plugin._data_instance, IData)
-    assert isinstance(test_plugin._model_instance, IPipeline)
+    assert isinstance(test_plugin._model_instance, i_type)
     assert isinstance(test_plugin._ground_truth_instance, IData)
     assert isinstance(test_plugin._logger, logging.Logger)
     assert isinstance(test_plugin._progress_inst, SimpleProgress)

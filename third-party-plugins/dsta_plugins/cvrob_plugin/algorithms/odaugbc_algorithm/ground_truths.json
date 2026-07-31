@@ -65708,22 +65708,22 @@
   "categories": [
     {
       "id": 0,
-      "name": "class_0",
+      "name": "background",
       "supercategory": "none"
     },
     {
       "id": 1,
-      "name": "class_1",
+      "name": "RBC",
       "supercategory": "none"
     },
     {
       "id": 2,
-      "name": "class_2",
+      "name": "WBC",
       "supercategory": "none"
     },
     {
       "id": 3,
-      "name": "class_3",
+      "name": "Platelets",
       "supercategory": "none"
     }
   ]

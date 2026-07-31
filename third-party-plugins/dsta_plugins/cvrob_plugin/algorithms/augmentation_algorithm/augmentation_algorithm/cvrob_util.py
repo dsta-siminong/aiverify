@@ -1,6 +1,6 @@
-# import requests
+import requests
 from PIL import Image
-# from io import BytesIO
+import io
 import torch 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -10,8 +10,63 @@ import torch.nn as nn
 from pathlib import Path
 from torch.utils.data import Dataset
 from torchvision import transforms
+import time
 
 def evaluate(model, loader, device):
+    if isinstance(model, str):
+        print("STRING MODEL!")
+        print(model)
+        return evaluate_via_api(model, loader)
+    else:
+        print("Direct model")
+        print(type(model), type(model), device)
+        return evaluate_direct(model, loader, device)
+
+def evaluate_via_api(model, loader):
+    API_URL = model
+    correct, total = 0, 0
+    predicted_labels, true_labels = [], []
+
+    session = requests.Session()
+
+    for inputs, targets in loader:
+        batch_np = inputs.numpy()
+
+        buffer = io.BytesIO()
+        np.save(buffer, batch_np)
+        buffer.seek(0)
+        t0 = time.perf_counter()
+        response = session.post(
+            API_URL,
+            files={"file": ("batch.npy", buffer, "application/octet-stream")},
+            timeout=300,
+        )
+        t1 = time.perf_counter()
+        response.raise_for_status()
+
+        result = response.json()
+        t2 = time.perf_counter()
+        print("HTTP round-trip:", t1 - t0)
+        print("JSON decode:", t2 - t1)
+        
+        predicted = np.array(result["predictions"])
+        targets_np = targets.numpy()
+
+        correct += (predicted == targets_np).sum()
+        total += len(targets_np)
+
+        predicted_labels.extend(predicted)
+        true_labels.extend(targets_np)
+
+    session.close()
+
+    return (
+        100 * correct / total,
+        np.array(predicted_labels),
+        np.array(true_labels),
+    )
+
+def evaluate_direct(model, loader, device):
     """
     Evaluate model using data from loader
 
@@ -25,19 +80,51 @@ def evaluate(model, loader, device):
             predicted_labels (np.array): predictions output by label
             true_labels (np.array): ground truth labels
     """
-    model.eval()
+    model.eval(); model.to(device)
     correct, total = 0, 0
     predicted_labels, true_labels = [], []
     with torch.no_grad():
         for inputs, targets in loader:
             inputs, targets = inputs.to(device), targets.to(device)
+            print(f"[mem before model()] {mem_mb():.1f} MB")
             outputs = model(inputs)
+            print(f"[mem after model()] {mem_mb():.1f} MB")
             _, predicted = torch.max(outputs, 1)
             correct += (predicted == targets).sum().item()
             total += targets.size(0)
             predicted_labels.extend(predicted.cpu().numpy())
             true_labels.extend(targets.cpu().numpy())
     return 100 * correct / total, np.array(predicted_labels), np.array(true_labels)
+
+def get_prediction_from_image(model, display_image, device):
+    if isinstance(model, str):
+        return get_prediction_from_image_api(model, display_image)
+    image = torch.tensor(display_image).unsqueeze(0).float()
+    image = image.to(device)
+    model = model.float(); model.to(device)
+
+    model.eval()
+    with torch.no_grad():
+        outputs = model(image)
+        _, prediction = torch.max(outputs, 1)
+    prediction = prediction.item()
+    return prediction
+
+def get_prediction_from_image_api(model, display_image):
+    API_URL = model
+    buffer = io.BytesIO()
+    np.save(buffer, display_image)
+    buffer.seek(0)
+
+    response = requests.post(
+        API_URL,
+        files={"file": ("array.npy", buffer, "application/octet-stream")},
+    )
+    response.raise_for_status()
+    result = response.json()
+
+    prediction = result["prediction"]  # already a plain int, no .item() needed
+    return prediction
 
 def triplets(s):
     """
@@ -59,6 +146,10 @@ def triplets(s):
     assert len(items) % 3 == 0, "Input length must be a multiple of 3"
     return [items[i:i+3] for i in range(0, len(items), 3)]
 
+import resource
+def mem_mb():
+    return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024 
+    
 def augmentation_gradient(model, test_loader, device, aug_class, plot_graphs=False, directory=Path(), num_epochs=1):
     """
     Evaluates how the model performance varies against the given augmentation/corruption
@@ -79,24 +170,32 @@ def augmentation_gradient(model, test_loader, device, aug_class, plot_graphs=Fal
             accuracies (list): list of floats of performance metric 
             fig (figure): outputs figure of plot_graphs library if not plot_graphs not False, else None
     """
+
+    print(f"[mem at the start of augmentation_gradient stuff] {mem_mb():.1f} MB")
     num_epochs = 1 if num_epochs is None else num_epochs
     # num_epochs = num_epochs if severity_name != "None" else 1 
     num_epochs = 1 if aug_class.deterministic else num_epochs
     print("===")
     print("Aug name", aug_class.name)
     print(f"Evaluating on severity 0/None...")
+    print(f"[mem before first evaluate] {mem_mb():.1f} MB")
     base_acc, _ , _ = evaluate(model, test_loader, device)
+    print(f"[mem after first evaluate] {mem_mb():.1f} MB")
     print(f"Accuracy at severity 0/None: {base_acc:.4f}")
     severities = aug_class.severities #[x for x in range(len(aug_class.severities))]
     accuracies = [base_acc]
+
     for severity_idx, severity in enumerate(severities):
         print(f"Evaluating on severity {severity}...")
+        print(f"[mem before corr_func_dataloader] {mem_mb():.1f} MB")
         all_acc = []
         for i in range(num_epochs):
             seed = 1000*i + severity_idx 
             aug_class.set_seed(seed)
             corrupted_loader = aug_class.corr_func_dataloader(test_loader, severity_idx=severity)
+            print(f"[mem after corr_func_dataloader] {mem_mb():.1f} MB")
             acc, _,_ = evaluate(model, corrupted_loader, device)
+            print(f"[mem after evaluate] {mem_mb():.1f} MB")
             all_acc.append(acc)
             print(f"epoch {i+1}: {acc}")
         final_acc = sum(all_acc)/len(all_acc)
@@ -181,7 +280,8 @@ def handle_class_names_arg(class_names_arg, model):
         ValueError: If a single provided value is not a valid integer.
     """
     if class_names_arg is None or str(class_names_arg).strip() == "":
-        
+        if isinstance(model, str): #API
+            raise ValueError("class_names must be specified if calling model as API")
         print("# fallback: infer from model")
         num_classes = get_num_classes(model)
         class_names = {str(i): f"class_{i}" for i in range(num_classes)}

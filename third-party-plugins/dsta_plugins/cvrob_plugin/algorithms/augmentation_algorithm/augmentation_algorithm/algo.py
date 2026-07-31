@@ -23,8 +23,8 @@ import numpy as np
 import torchvision.transforms as transforms
 import torch
 from torch.utils.data import DataLoader, TensorDataset
-from .cvrob_util import evaluate, triplets, augmentation_gradient, handle_class_names_arg, ImageDataset, pad_collate
-from .augmentations_class import make_augmentation_dict, custom_parameter_change
+from .cvrob_util import get_prediction_from_image, triplets, augmentation_gradient, handle_class_names_arg, mem_mb, evaluate
+from .augmentations_class import make_augmentation_dict, custom_parameter_change, handle_url_algos
 from pathlib import Path
 import pandas as pd
 # =====================================================================================
@@ -271,7 +271,7 @@ class Plugin(IAlgorithm):
             if not isinstance(self._ground_truth, str):
                 self.add_to_log(
                     logging.ERROR,
-                    "The algorithm has failed ground truth header validation. \
+                    f"The algorithm has failed ground truth header validation. \
                     Header must be in String and must be present in the dataset: {self._ground_truth}",
                 )
                 raise RuntimeError(
@@ -290,7 +290,7 @@ class Plugin(IAlgorithm):
         if not isinstance(self._base_path, PurePath):
             self.add_to_log(
                 logging.ERROR,
-                "The algorithm has failed validation for the project path. \
+                f"The algorithm has failed validation for the project path. \
                 Ensure that the project path is a valid path: {self._base_path}",
             )
             raise RuntimeError(
@@ -310,7 +310,7 @@ class Plugin(IAlgorithm):
         if not isinstance(self._plugin_type, PluginType):
             self.add_to_log(
                 logging.ERROR,
-                "The algorithm has failed validation for its plugin type. \
+                f"The algorithm has failed validation for its plugin type. \
                 Ensure that PluginType is PluginType.ALGORITHM: {Plugin._plugin_type}",
             )
             raise RuntimeError(
@@ -342,6 +342,7 @@ class Plugin(IAlgorithm):
         """
         A method to generate the algorithm results with the provided data, model, ground truth information.
         """
+        print(f"[mem at the start of generate] {mem_mb():.1f} MB")
         # Retrieve data information
         self._data = self._data_instance.get_data()
         #make ground truth
@@ -371,12 +372,14 @@ class Plugin(IAlgorithm):
             print(f"Custom parameters exception: {e} , {custom_parameters}")
             print()
 
+        print('aug dict', aug_dict)
         self._augmentation_method(aug_dict)
 
         # Update progress (For 100% completion)
         self._progress_inst.update(1)
 
     def _augmentation_method(self, aug_dict):
+        print(f"[mem at the start of _augmentation_method] {mem_mb():.1f} MB")
         image_paths: list[str] = self._data_instance.get_data()["image_directory"].tolist()
         ground_truths = self._ordered_ground_truth_df[self._ground_truth_label].tolist()
         test_dataset, test_loader = self._load_images(image_paths, ground_truths)
@@ -385,6 +388,9 @@ class Plugin(IAlgorithm):
         display_idx = np.random.choice(len(image_paths))
         output_results = dict()
 
+        # model_api_url = self._input_arguments.get("model_api_url") or None
+        # if model_api_url:
+        #     model = model_api_url
         if "_model" in dir(self._model_instance):
             model = self._model_instance._model
         elif "_pipeline" in dir(self._model_instance):
@@ -397,15 +403,26 @@ class Plugin(IAlgorithm):
         aug_methods = self._input_arguments.get('aug_methods') or 'all'
         aug_methods = [x.strip() for x in aug_methods.split(",") if x.strip()]
         print("Augmentation methods:", aug_methods)
+        if 'http' in aug_dict['url']:
+            handle_url_algos(aug_dict, aug_methods)
 
         class_names_arg = self._input_arguments['class_names'] or None 
+        # if model_api_url and not class_names_arg:
+        #     raise ValueError("class_names must be explicitly provided when using model_api_url, since class count can't be inferred from a remote API")
+
         class_names = handle_class_names_arg(class_names_arg, model)
         print("Class names:", class_names)
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         for aug_name, aug_class in aug_dict.items():
-            
+            print(f"{aug_name}: [mem at the start of aug_dict.items stuff] {mem_mb():.1f} MB")
+                      
             if aug_name not in aug_methods and aug_methods != ["all"]:
                 continue
+            if aug_name == 'url':
+                continue
+
+            print(f"{aug_name}: [mem at the start of aug_dict.items stuff] {mem_mb():.1f} MB")
             individual_results = dict() 
             individual_results.update({"Augmentation": aug_name})
 
@@ -414,7 +431,11 @@ class Plugin(IAlgorithm):
             os.makedirs(aug_dir, exist_ok=True)
 
             num_epochs = self._input_arguments.get('num_epochs') or 1
-            gradient, accuracies, fig_path = augmentation_gradient(model, test_loader, None, aug_class, 'matplotlib', aug_dir, num_epochs)
+            # loader1 = torch.utils.data.DataLoader(test_dataset, batch_size=1, shuffle=False)
+            # print(f"[mem before 1-image batch] {mem_mb():.1f} MB")
+            # acc, _, _ = evaluate(model, loader1, None)  # will run 100 forward passes but each on a single image
+            # print(f"[mem after 1-image batch loop] {mem_mb():.1f} MB")    
+            gradient, accuracies, fig_path = augmentation_gradient(model, test_loader, device, aug_class, 'matplotlib', aug_dir, num_epochs)
             first_drop = accuracies[1] - accuracies[0]
             severities = ["None"] + aug_class.severities
             for severity_idx, severity in enumerate(severities):
@@ -425,14 +446,7 @@ class Plugin(IAlgorithm):
                     severity,
                 )
                 image_path = self._save_one_image(display_image, str(corrupted_dir), Path(str(image_paths[display_idx])).name)
-                image = torch.tensor(display_image).unsqueeze(0).float()
-                model = model.float()
-
-                model.eval()
-                with torch.no_grad():
-                    outputs = model(image)
-                    _, prediction = torch.max(outputs, 1)
-                prediction = prediction.item()
+                prediction = get_prediction_from_image(model, display_image, device)
                 ground_truth = ground_truths[display_idx]
 
                 random_display = [
@@ -441,6 +455,7 @@ class Plugin(IAlgorithm):
                     class_names[str(prediction)],
                 ]
                 display_info.update({str(severity): random_display})
+                
             print(accuracies, first_drop)
             accuracies_dict = {k:v for k,v in zip(severities, accuracies)}
             print(aug_name, 'augmentation method gradient:', gradient)
@@ -475,6 +490,12 @@ class Plugin(IAlgorithm):
         Returns:
             np.ndarray: A list of numpy images
         """
+        # from .cvrob_util import ImageDataset  # or wherever it's imported from
+        # dataset = ImageDataset(image_paths, labels)
+        # dataset.transform = transforms.Compose([
+        #     transforms.Resize((500, 700)),  # H, W
+        #     transforms.ToTensor()
+        # ])
         transform = transforms.Compose([
             transforms.Resize((500, 700)),  # H, W
             transforms.ToTensor()
@@ -482,15 +503,7 @@ class Plugin(IAlgorithm):
         image_tensors = torch.stack([transform(Image.open(p).convert("RGB")) for p in image_paths])
         label_tensors = torch.tensor(labels, dtype=torch.long)
         dataset = TensorDataset(image_tensors, label_tensors)
-        loader = DataLoader(dataset, batch_size=128, shuffle=False)
-
-        # dataset = ImageDataset(image_paths, labels)
-        # loader = DataLoader(
-        #     dataset,
-        #     batch_size=16,
-        #     shuffle=False,
-        #     collate_fn=pad_collate,
-        # )
+        loader = DataLoader(dataset, batch_size=16, shuffle=False)
 
         return dataset, loader
 

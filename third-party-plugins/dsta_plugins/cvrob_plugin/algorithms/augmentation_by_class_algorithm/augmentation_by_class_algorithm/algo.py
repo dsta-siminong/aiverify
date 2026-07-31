@@ -22,7 +22,7 @@ import inspect
 import torchvision.transforms as transforms
 import torch
 from torch.utils.data import DataLoader, TensorDataset
-from .cvrob_util import evaluate, triplets, average_all_reports, handle_class_names_arg
+from .cvrob_util import evaluate, triplets, average_all_reports, handle_class_names_arg, get_prediction_from_image
 from .augmentations_class import make_augmentation_dict, custom_parameter_change
 from sklearn.metrics import classification_report, confusion_matrix, ConfusionMatrixDisplay
 
@@ -276,7 +276,7 @@ class Plugin(IAlgorithm):
             if not isinstance(self._ground_truth, str):
                 self.add_to_log(
                     logging.ERROR,
-                    "The algorithm has failed ground truth header validation. \
+                    f"The algorithm has failed ground truth header validation. \
                     Header must be in String and must be present in the dataset: {self._ground_truth}",
                 )
                 raise RuntimeError(
@@ -295,7 +295,7 @@ class Plugin(IAlgorithm):
         if not isinstance(self._base_path, PurePath):
             self.add_to_log(
                 logging.ERROR,
-                "The algorithm has failed validation for the project path. \
+                f"The algorithm has failed validation for the project path. \
                 Ensure that the project path is a valid path: {self._base_path}",
             )
             raise RuntimeError(
@@ -315,7 +315,7 @@ class Plugin(IAlgorithm):
         if not isinstance(self._plugin_type, PluginType):
             self.add_to_log(
                 logging.ERROR,
-                "The algorithm has failed validation for its plugin type. \
+                f"The algorithm has failed validation for its plugin type. \
                 Ensure that PluginType is PluginType.ALGORITHM: {Plugin._plugin_type}",
             )
             raise RuntimeError(
@@ -398,7 +398,7 @@ class Plugin(IAlgorithm):
         else:
             raise ValueError("idk what the", type(self._model_instance),"model instance is supposed to be ", dir(self._model_instance))
 
-        combined_results = []; combined_results2 = []
+        combined_results = []#; combined_results2 = []
 
         aug_methods = self._input_arguments.get('aug_methods') or 'all'
         aug_methods = [x.strip() for x in aug_methods.split(",") if x.strip()]
@@ -407,8 +407,9 @@ class Plugin(IAlgorithm):
         class_names_arg = self._input_arguments.get('class_names') or None 
         class_names = handle_class_names_arg(class_names_arg, model)
         print("Class names:", class_names)
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-        labels = [k for k in class_names]
+        # labels = [k for k in class_names]
         target_names = [class_names[k] for k in class_names]
 
         for aug_name, aug_class in aug_dict.items():
@@ -438,8 +439,9 @@ class Plugin(IAlgorithm):
                         corrupted_loader = test_loader
                     else:
                         corrupted_loader = aug_class.corr_func_dataloader(test_loader, severity_name)
-                    base_acc, y_pred, y_true = evaluate(model, corrupted_loader, next(model.parameters()).device)
-                    report = classification_report(y_true, 
+                    _, y_pred, y_true = evaluate(model, corrupted_loader, device)
+                    report = classification_report(
+                        y_true, 
                         y_pred, 
                         labels=list(range(len(target_names))),  
                         target_names=target_names, 
@@ -453,7 +455,7 @@ class Plugin(IAlgorithm):
                 avg_report = average_all_reports(all_reports)
                 avg_cm = np.mean(all_cm, axis=0)
                 TP = np.diag(avg_cm); FP = avg_cm.sum(axis=0) - TP; FN = avg_cm.sum(axis=1) - TP
-                TN = avg_cm.sum() - (TP+FP+FN); N = avg_cm.sum()
+                TN = avg_cm.sum() - (TP+FP+FN)#; N = avg_cm.sum()
                 if avg_cm.sum() == 0:
                     cm_stats = {
                         label: {
@@ -478,14 +480,7 @@ class Plugin(IAlgorithm):
                 )
 
                 image_path = self._save_one_image(display_image, str(corrupted_dir), Path(str(image_paths[display_idx])).name)
-                image = torch.tensor(display_image).unsqueeze(0).float()
-                model = model.float()
-
-                model.eval()
-                with torch.no_grad():
-                    outputs = model(image)
-                    _, prediction = torch.max(outputs, 1)
-                prediction = prediction.item()
+                prediction = get_prediction_from_image(model, display_image, device)
                 ground_truth = ground_truths[display_idx]
 
                 random_display = [
@@ -503,10 +498,6 @@ class Plugin(IAlgorithm):
                 crs.append(avg_report) ; cms.append(cm_stats)
 
             path_dict = self._sklearn_method(crs, cms, severities, class_names, Path(aug_name), aug_name)
-            # print()
-            # print("CRS")
-            # print(crs)
-            # print()
             individual_results.update(
                 {
                     "display_info": display_info, 
@@ -555,7 +546,7 @@ class Plugin(IAlgorithm):
         dataset = TensorDataset(image_tensors, label_tensors)
 
         # Create DataLoader
-        loader = DataLoader(dataset, batch_size=128, shuffle=False)
+        loader = DataLoader(dataset, batch_size=16, shuffle=False)
 
         return dataset, loader
 
@@ -569,12 +560,6 @@ class Plugin(IAlgorithm):
         big_df = None; rows = []
 
         for severity, cr, cm in zip(severities, data, data2):
-            # print("CR")
-            # pprint(cr)
-            # print("CM")
-            # pprint(cm)
-            # print(f"Severity: {severity}")
-            # print("CR keys:", list(cr.keys()))
 
             df = pd.DataFrame.from_dict(cr).T
             # print(df.index.value_counts())
@@ -1067,29 +1052,6 @@ class Plugin(IAlgorithm):
         Image.fromarray((image * 255.0).astype(np.uint8)).save(image_path)
 
         return str(image_path)
-
-    # def _get_one_corrupted_image(self, testloader, aug_class, severity, target_idx):
-    #     current_idx = 0
-
-    #     for images, labels in testloader:
-    #         batch_size = images.shape[0]
-
-    #         # Check if target is inside this batch
-    #         if current_idx + batch_size > target_idx:
-    #             local_idx = target_idx - current_idx
-
-    #             images_np = (images * 255).byte().numpy().transpose(0, 2, 3, 1)
-
-    #             if aug_class.name == "None" or severity == "None":
-    #                 corrupted = images_np
-    #             else:
-    #                 corrupted = aug_class.corr_func_arr(images_np, severity)
-
-    #             corrupted = corrupted.transpose(0, 3, 1, 2) / 255.0
-
-    #             return corrupted[local_idx]  # <-- only one image
-
-    #         current_idx += batch_size
 
     def _get_one_corrupted_image_direct(
         self,

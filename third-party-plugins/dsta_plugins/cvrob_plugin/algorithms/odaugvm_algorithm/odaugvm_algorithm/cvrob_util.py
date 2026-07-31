@@ -1,17 +1,27 @@
 import requests
 from PIL import Image
-from io import BytesIO
+import io
 import torch 
 import numpy as np
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
-from tqdm import tqdm
+# from tqdm import tqdm
 import torch.nn as nn
 from pathlib import Path
 from torchmetrics.detection.mean_ap import MeanAveragePrecision
 import gc
+import time
+import resource
+def mem_mb():
+    return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024 
 
 def evaluate_detection(model, loader, device, iou_threshold=0.5):
+    if isinstance(model, str):
+        return evaluate_detection_api(model, loader, iou_threshold)
+    else:
+        return evaluate_detection_direct(model, loader, device, iou_threshold)
+
+def evaluate_detection_direct(model, loader, device, iou_threshold=0.5):
     """Evaluate an object detection model using mean Average Precision (mAP).
 
     Computes the mAP score at a specified IoU threshold over all samples in
@@ -44,22 +54,107 @@ def evaluate_detection(model, loader, device, iou_threshold=0.5):
     """
     metric = MeanAveragePrecision(iou_thresholds=[iou_threshold])
 
-    model.eval()
+    model.eval(); model.to(device)
     with torch.no_grad():
         for images, targets in loader:
             images = [img.to(device) for img in images]
             targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
 
+            print(f"[mem before model()] {mem_mb():.1f} MB")
             outputs = model(images)
+            print(f"[mem after model()] {mem_mb():.1f} MB")
 
             preds = [{k: v.cpu() for k, v in o.items()} for o in outputs]
-            gts = [{k: v for k, v in t.items()} for t in targets]
+            gts = [{k: v.cpu() for k, v in t.items()} for t in targets]
 
             metric.update(preds, gts)
 
     result = metric.compute()
     metric.reset()
     return result["map"].item() #generalize in future
+
+def evaluate_detection_api(model, loader, iou_threshold=0.5):
+    API_URL = model
+    metric = MeanAveragePrecision(iou_thresholds=[iou_threshold])
+
+    for images, targets in loader:
+
+        batch = torch.stack(images)
+        batch_np = batch.numpy()
+
+        buffer = io.BytesIO()
+        np.save(buffer, batch_np)
+        buffer.seek(0)
+        t0 = time.perf_counter()
+        response = requests.post(
+            API_URL,
+            files={"file": ("batch.npy", buffer, "application/octet-stream")},
+        )
+        t1 = time.perf_counter()
+        response.raise_for_status()
+
+        preds_json = response.json()["predictions"]
+        t2 = time.perf_counter()
+        print("- HTTP round-trip:", t1 - t0)
+        print("-- JSON decode:", t2 - t1)
+
+        preds = []
+        for pred in preds_json:
+            preds.append({
+                "boxes": torch.tensor(pred["boxes"], dtype=torch.float32),
+                "scores": torch.tensor(pred["scores"], dtype=torch.float32),
+                "labels": torch.tensor(pred["labels"], dtype=torch.int64),
+            })
+
+        gts = [{k: v for k, v in t.items()} for t in targets]
+
+        metric.update(preds, gts)
+
+    result = metric.compute()
+    metric.reset()
+    return result["map"].item() #generalize in future
+
+
+def get_prediction_from_image(model, display_image, device):
+    if isinstance(model, str):
+        return get_prediction_from_image_api(model, display_image)
+    image = torch.tensor(display_image).unsqueeze(0).float()
+    image = image.to(device)
+
+    model.eval(); model.to(device)
+    with torch.no_grad():
+        outputs = model(image)
+    pred = outputs[0]
+
+    prediction = {
+        "boxes": pred["boxes"].cpu().numpy().tolist(),
+        "labels": pred["labels"].cpu().numpy().tolist(),
+        "scores": pred["scores"].cpu().numpy().tolist(),
+    }
+    return prediction
+
+def get_prediction_from_image_api(model, display_image):
+    API_URL = model
+
+    # display_image: (C, H, W)
+    batch = np.expand_dims(display_image.astype(np.float32), axis=0)
+
+    buffer = io.BytesIO()
+    np.save(buffer, batch)
+    buffer.seek(0)
+    
+    response = requests.post(
+        API_URL,
+        files={"file": ("array.npy", buffer, "application/octet-stream")},
+    )
+    response.raise_for_status()
+
+    result = response.json()
+
+    # Return the prediction for the single image
+    prediction = result["predictions"][0]
+
+    return prediction
 
 def triplets(s):
     """
@@ -96,7 +191,7 @@ def augmentation_gradient_det(
     print("===")
     print("Aug name", aug_class.name)
     print(f"Evaluating on severity 0/None...")
-    base_map = evaluate_detection(model, test_loader, device)
+    base_map = evaluate_detection(model, test_loader, device, iou_threshold)
     print(f"mAP at severity 0/None: {base_map:.4f}")
     severities = aug_class.severities #[x for x in range(len(aug_class.severities))]
     maps = [base_map]
@@ -202,7 +297,8 @@ def handle_class_names_arg(class_names_arg, model):
         ValueError: If a single provided value is not a valid integer.
     """
     if class_names_arg is None or str(class_names_arg).strip() == "":
-        
+        if isinstance(model, str): #API
+            raise ValueError("class_names must be specified if calling model as API")
         print("# fallback: infer from model")
         num_classes = get_num_classes(model)
         class_names = {str(i): f"class_{i}" for i in range(num_classes)}

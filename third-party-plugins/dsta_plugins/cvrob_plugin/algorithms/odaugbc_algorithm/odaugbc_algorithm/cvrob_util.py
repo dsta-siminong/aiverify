@@ -1,16 +1,16 @@
 import requests
 from PIL import Image
-from io import BytesIO
+import io
 import torch 
 import numpy as np
 import matplotlib.pyplot as plt
-import plotly.graph_objects as go
-from tqdm import tqdm
+# import plotly.graph_objects as go
+# from tqdm import tqdm
 import torch.nn as nn
 from pathlib import Path
 from torchmetrics.detection.mean_ap import MeanAveragePrecision
 import json
-from collections import defaultdict
+# from collections import defaultdict
 from torchvision.ops import box_iou
 
 def _filter_and_sort_preds(pred: dict, score_thresh: float):
@@ -69,6 +69,7 @@ def _match_predictions_to_gt(
         iou_matrix = torch.zeros(len(pred_boxes), len(gt_boxes))
  
     for p_idx, (plabel, iou_row) in enumerate(zip(pred_labels, iou_matrix)):
+        # print("clasx names",class_names)
         class_name = class_names[str(plabel.item())]
  
         if matched_gt:
@@ -106,6 +107,47 @@ def _match_predictions_to_gt(
             # missed detection — GT existed, no prediction claimed it
             matrix[int(glabel), 0] += 1        # GT=class x, PRED=background
             stats[class_name]["FN"] += 1
+
+def get_prediction_from_image(model, display_image, device):
+    if isinstance(model, str):
+        return get_prediction_from_image_api(model, display_image)
+    image = torch.tensor(display_image).unsqueeze(0).float()
+    image = image.to(device)
+
+    model.eval(); model.to(device)
+    with torch.no_grad():
+        outputs = model(image)
+    pred = outputs[0]
+
+    prediction = {
+        "boxes": pred["boxes"].cpu().numpy().tolist(),
+        "labels": pred["labels"].cpu().numpy().tolist(),
+        "scores": pred["scores"].cpu().numpy().tolist(),
+    }
+    return prediction
+
+def get_prediction_from_image_api(model, display_image):
+    API_URL = model
+
+    # display_image: (C, H, W)
+    batch = np.expand_dims(display_image.astype(np.float32), axis=0)
+
+    buffer = io.BytesIO()
+    np.save(buffer, batch)
+    buffer.seek(0)
+
+    response = requests.post(
+        API_URL,
+        files={"file": ("array.npy", buffer, "application/octet-stream")},
+    )
+    response.raise_for_status()
+
+    result = response.json()
+
+    # Return the prediction for the single image
+    prediction = result["predictions"][0]
+
+    return prediction
 
 def triplets(s):
     """
@@ -215,7 +257,8 @@ def handle_class_names_arg(class_names_arg, model):
         ValueError: If a single provided value is not a valid integer.
     """
     if class_names_arg is None or str(class_names_arg).strip() == "":
-        
+        if isinstance(model, str): #API
+            raise ValueError("class_names must be specified if calling model as API")
         print("# fallback: infer from model")
         num_classes = get_num_classes(model)
         class_names = {str(i): f"class_{i}" for i in range(num_classes)}
@@ -313,108 +356,6 @@ class DetectionDataset(torch.utils.data.Dataset):
         return image, target_dict
 
 # ======= COCO STUFF =========
-
-# def create_coco_gt(
-#     image_paths,
-#     df,
-#     class_names,
-#     output_json,
-# ):
-#     """
-#     Create a COCO-format ground-truth json.
-
-#     Parameters
-#     ----------
-#     image_paths : list[str] or list[Path]
-#         List of image paths (same images as used in the dataset).
-
-#     df : pandas dataframe containing:
-#         file_name
-#         x_min
-#         x_max
-#         y_min
-#         y_max
-#         class_id
-
-#     class_names : dict
-#         Example:
-#             {"0": "cat",
-#              "1": "dog"}
-
-#     output_json : str
-#         Output json filename.
-#     """
-#     images = []
-#     annotations = []
-#     ann_id = 1
-
-#     # map filename -> image_id
-#     image_id_map = {}
-
-#     for image_id, img_path in enumerate(image_paths, start=1):
-
-#         img_path = Path(img_path)
-#         filename = img_path.name
-
-#         with Image.open(img_path) as img:
-#             width, height = img.size
-
-#         images.append({
-#             "id": image_id,
-#             "file_name": filename,
-#             "width": width,
-#             "height": height,
-#         })
-
-#         image_id_map[filename] = image_id
-
-#     # annotations
-#     for _, row in df.iterrows():
-
-#         filename = row["file_name"]
-
-#         if filename not in image_id_map:
-#             continue
-
-#         x_min = float(row["x_min"])
-#         x_max = float(row["x_max"])
-#         y_min = float(row["y_min"])
-#         y_max = float(row["y_max"])
-
-#         w = x_max - x_min
-#         h = y_max - y_min
-
-#         annotations.append({
-#             "id": ann_id,
-#             "image_id": image_id_map[filename],
-#             "category_id": int(row["class_id"]),
-#             "bbox": [x_min, y_min, w, h],
-#             "area": w * h,
-#             "iscrowd": 0,
-#         })
-
-#         ann_id += 1
-
-#     # categories
-#     categories = [
-#         {
-#             "id": int(cid),
-#             "name": name,
-#             "supercategory": "none",
-#         }
-#         for cid, name in sorted(class_names.items(), key=lambda x: int(x[0]))
-#     ]
-
-#     coco = {
-#         "images": images,
-#         "annotations": annotations,
-#         "categories": categories,
-#     }
-
-#     with open(output_json, "w") as f:
-#         json.dump(coco, f, indent=2)
-
-#     print(f"Saved COCO annotations to {output_json}")
 
 def create_coco_gt(
     image_paths,
@@ -550,52 +491,53 @@ def evaluate_detection_and_create_coco_predictions(
     predictions = []
     dataset_idx = 0
 
-    model.eval()
-    with torch.no_grad():
-        for images, targets in loader:
-            images = [img.to(device) for img in images]
-            targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
+    for images, targets in loader:
+        targets = [{k: v.cpu() for k, v in t.items()} for t in targets]
 
-            outputs = model(images)  # <-- single forward pass, shared by both paths
+        preds = predict(model, images, device)
 
-            preds = [{k: v.cpu() for k, v in o.items()} for o in outputs]
-            gts   = [{k: v.cpu() for k, v in t.items()} for t in targets]
+        metric.update(preds, targets)
 
-            metric.update(preds, gts)
+        for pred, gt in zip(preds, targets):
+            pred_boxes, pred_labels, pred_scores = _filter_and_sort_preds(
+                pred, score_thresh
+            )
 
-            for pred, gt in zip(preds, gts):
-                pred_boxes, pred_labels, pred_scores = _filter_and_sort_preds(pred, score_thresh)
-                _match_predictions_to_gt(
-                    pred_boxes, pred_labels,
-                    gt["boxes"], gt["labels"],
-                    iou_thresh, class_names, per_class, matrix,
-                )
+            _match_predictions_to_gt(
+                pred_boxes,
+                pred_labels,
+                gt["boxes"],
+                gt["labels"],
+                iou_thresh,
+                class_names,
+                per_class,
+                matrix,
+            )
 
-            # --- COCO predictions, built from the same `preds` we just computed ---
-            for pred in preds:
-                filename = Path(image_paths[dataset_idx]).name
-                image_id = filename_to_image_id[filename]
+        for pred in preds:
+            filename = Path(image_paths[dataset_idx]).name
+            image_id = filename_to_image_id[filename]
 
-                boxes = pred["boxes"].numpy()
-                labels = pred["labels"].numpy()
-                scores = pred["scores"].numpy()
+            boxes = pred["boxes"].numpy()
+            labels = pred["labels"].numpy()
+            scores = pred["scores"].numpy()
 
-                for box, label, score in zip(boxes, labels, scores):
-                    if score < coco_score_threshold:
-                        continue
-                    x1, y1, x2, y2 = box
-                    predictions.append({
-                        "image_id": image_id,
-                        "category_id": int(label),
-                        "bbox": [
-                            float(x1),
-                            float(y1),
-                            float(x2 - x1),
-                            float(y2 - y1),
-                        ],
-                        "score": float(score),
-                    })
-                dataset_idx += 1
+            for box, label, score in zip(boxes, labels, scores):
+                if score < coco_score_threshold:
+                    continue
+                x1, y1, x2, y2 = box
+                predictions.append({
+                    "image_id": image_id,
+                    "category_id": int(label),
+                    "bbox": [
+                        float(x1),
+                        float(y1),
+                        float(x2 - x1),
+                        float(y2 - y1),
+                    ],
+                    "score": float(score),
+                })
+            dataset_idx += 1
 
     with open(output_json, "w") as f:
         json.dump(predictions, f, indent=2)
@@ -624,6 +566,47 @@ def evaluate_detection_and_create_coco_predictions(
         "per_class": per_class,
         "matrix": matrix,
     }
+
+def predict(model, images, device):
+    if isinstance(model, str):
+        return predict_api(model, images)
+    return predict_direct(model, images, device)
+
+def predict_direct(model, images, device):
+    model.eval(); model.to(device)
+
+    images = [img.to(device) for img in images]
+
+    with torch.inference_mode():
+        outputs = model(images)
+
+    return [{k: v.cpu() for k, v in o.items()} for o in outputs]
+
+def predict_api(api_url, images):
+    # images is List[Tensor]
+    batch = torch.stack(images).cpu().numpy()
+
+    buffer = io.BytesIO()
+    np.save(buffer, batch)
+    buffer.seek(0)
+
+    response = requests.post(
+        api_url,
+        files={"file": ("batch.npy", buffer, "application/octet-stream")},
+    )
+    response.raise_for_status()
+
+    outputs = response.json()["predictions"]
+
+    preds = []
+    for pred in outputs:
+        preds.append({
+            "boxes": torch.tensor(pred["boxes"], dtype=torch.float32),
+            "labels": torch.tensor(pred["labels"], dtype=torch.int64),
+            "scores": torch.tensor(pred["scores"], dtype=torch.float32),
+        })
+
+    return preds
 
 def average_summaries(all_summaries):
     '''

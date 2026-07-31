@@ -1,6 +1,6 @@
 import requests
 from PIL import Image
-from io import BytesIO
+import io
 import torch 
 import torch.nn.functional as F 
 import numpy as np
@@ -12,6 +12,47 @@ import torchvision.transforms as transforms
 from sklearn.metrics import precision_score, recall_score  , f1_score  , roc_auc_score
 from sklearn.preprocessing import label_binarize
 from torchvision.ops import box_iou
+
+def get_prediction_from_image(model, display_image, device):
+    if isinstance(model, str):
+        return get_prediction_from_image_api(model, display_image)
+    image = torch.tensor(display_image).unsqueeze(0).float()
+    image = image.to(device)
+
+    model.eval(); model.to(device)
+    with torch.no_grad():
+        outputs = model(image)
+    pred = outputs[0]
+
+    prediction = {
+        "boxes": pred["boxes"].cpu().numpy().tolist(),
+        "labels": pred["labels"].cpu().numpy().tolist(),
+        "scores": pred["scores"].cpu().numpy().tolist(),
+    }
+    return prediction
+
+def get_prediction_from_image_api(model, display_image):
+    API_URL = model
+
+    # display_image: (C, H, W)
+    batch = np.expand_dims(display_image.astype(np.float32), axis=0)
+
+    buffer = io.BytesIO()
+    np.save(buffer, batch)
+    buffer.seek(0)
+
+    response = requests.post(
+        API_URL,
+        files={"file": ("array.npy", buffer, "application/octet-stream")},
+    )
+    response.raise_for_status()
+
+    result = response.json()
+
+    # Return the prediction for the single image
+    prediction = result["predictions"][0]
+
+    return prediction
 
 def triplets(s):
     """
@@ -108,7 +149,8 @@ def handle_class_names_arg(class_names_arg, model):
         ValueError: If a single provided value is not a valid integer.
     """
     if class_names_arg is None or str(class_names_arg).strip() == "":
-        
+        if isinstance(model, str): #API
+            raise ValueError("class_names must be specified if calling model as API")
         print("# fallback: infer from model")
         num_classes = get_num_classes(model)
         class_names = {str(i): f"class_{i}" for i in range(num_classes)}
@@ -133,20 +175,55 @@ def handle_class_names_arg(class_names_arg, model):
     return class_names
 
 def collect_detection_predictions(model, loader, device):
-    model.eval()
-    # all_imgs = []
     all_preds = []
 
-    with torch.no_grad():
-        for images, _ in loader:
-            images = [img.to(device) for img in images]
-            outputs = model(images)
+    for images, _ in loader:
+        preds = predict(model, images, device)
+        all_preds.extend(preds)
 
-            for img, out in zip(images, outputs):
-                # all_imgs.append(img.cpu())
-                all_preds.append({k: v.cpu() for k, v in out.items()})
+    return all_preds#torch.stack(all_imgs), 
 
-    return all_preds #torch.stack(all_imgs), 
+def predict(model, images, device):
+    if isinstance(model, str):
+        return predict_api(model, images)
+    return predict_direct(model, images, device)
+
+def predict_direct(model, images, device):
+    print(type(model), type(images), device)
+    model.eval(); model.to(device)
+
+    images = [img.to(device) for img in images]
+
+    with torch.inference_mode():
+        outputs = model(images)
+
+    return [{k: v.cpu() for k, v in o.items()} for o in outputs]
+
+def predict_api(api_url, images):
+    # images is List[Tensor]
+    batch = torch.stack(images).cpu().numpy()
+
+    buffer = io.BytesIO()
+    np.save(buffer, batch)
+    buffer.seek(0)
+
+    response = requests.post(
+        api_url,
+        files={"file": ("batch.npy", buffer, "application/octet-stream")},
+    )
+    response.raise_for_status()
+
+    outputs = response.json()["predictions"]
+
+    preds = []
+    for pred in outputs:
+        preds.append({
+            "boxes": torch.tensor(pred["boxes"], dtype=torch.float32),
+            "labels": torch.tensor(pred["labels"], dtype=torch.int64),
+            "scores": torch.tensor(pred["scores"], dtype=torch.float32),
+        })
+
+    return preds
 
 def image_brittleness(predA, predB, iou_thresh=0.5, alpha=0.5):
     boxesA, labelsA, scoresA = predA["boxes"], predA["labels"], predA["scores"]

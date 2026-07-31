@@ -23,7 +23,7 @@ import numpy as np
 import torchvision.transforms as transforms
 import torch
 from torch.utils.data import DataLoader, TensorDataset
-from .cvrob_util import evaluate_detection, triplets, augmentation_gradient_det, handle_class_names_arg, DetectionDataset
+from .cvrob_util import get_prediction_from_image, triplets, augmentation_gradient_det, handle_class_names_arg, DetectionDataset
 from .augmentations_class import make_augmentation_dict, custom_parameter_change
 from pathlib import Path
 import pandas as pd
@@ -400,6 +400,7 @@ class Plugin(IAlgorithm):
         class_names_arg = self._input_arguments['class_names'] or None 
         class_names = handle_class_names_arg(class_names_arg, model)
         print("Class names:", class_names)
+        self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self._ordered_ground_truth = self._resolve_class_ids(self._ordered_ground_truth, class_names)
 
         image_paths: list[str] = self._data_instance.get_data()["image_directory"].tolist()
@@ -424,7 +425,7 @@ class Plugin(IAlgorithm):
 
             #Main mAP/performance evaluation method
             gradient, maps, fig_path = augmentation_gradient_det(
-                model, test_loader, None, aug_class, 'matplotlib', aug_dir, num_epochs, self._iou_thres
+                model, test_loader, self._device, aug_class, 'matplotlib', aug_dir, num_epochs, self._iou_thres
             )
             first_drop = maps[0] - maps[1]
             severities = ["None"] + aug_class.severities
@@ -434,18 +435,8 @@ class Plugin(IAlgorithm):
                 corrupted_dir = Path(aug_name) / f"severity{severity}"
                 display_image = self._get_one_corrupted_image_direct(image_paths, ground_truths, aug_class, severity, display_idx)
                 image_path = self._save_one_image(display_image, str(corrupted_dir), display_idx)
-                image = torch.tensor(display_image).unsqueeze(0).float()
+                prediction = get_prediction_from_image(model, display_image, self._device)
 
-                model.eval()
-                with torch.no_grad():
-                    outputs = model(image)
-                pred = outputs[0]
-
-                prediction = {
-                    "boxes": pred["boxes"].cpu().numpy().tolist(),
-                    "labels": pred["labels"].cpu().numpy().tolist(),
-                    "scores": pred["scores"].cpu().numpy().tolist(),
-                }
                 ground_truth = ground_truths[display_idx]
 
                 image_path2, drawn_prediction = self._save_image_with_predictions(

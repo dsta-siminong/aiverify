@@ -3,16 +3,68 @@ import datetime
 import time
 import warnings
 from collections import defaultdict
-
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-
 from . import mask as maskUtils
-
-
 warnings.filterwarnings(action='ignore', message='Mean of empty slice')
 
+def average_curve_dataframes(df_list):
+    '''
+    Average a list of "curve" DataFrames -- as returned by
+    COCOeval.computeFBetaCurveData / computePRCurveData / computeCocoPRCurveData
+    -- produced across multiple evaluation epochs (same config, different data/seed).
+
+    Every DataFrame in df_list is expected to share the same index (curve names)
+    and, row for row, the same 'x' values (true whenever they come from the same
+    params, e.g. the same confidence-threshold or recall grid). Only 'y' is
+    averaged (elementwise, ignoring NaNs); 'x' is carried over from the first
+    DataFrame unchanged.
+
+    :param df_list: list of DataFrames indexed by curve name, with columns 'x', 'y'
+    :return: single DataFrame, same index/'x' as df_list[0], 'y' averaged over df_list
+    '''
+    if not df_list:
+        return None
+    if len(df_list) == 1:
+        return df_list[0]
+
+    base = df_list[0]
+    avg_y = []
+    for curve_name in base.index:
+        ys = np.stack(
+            [np.asarray(df.loc[curve_name, 'y'], dtype=np.float64) for df in df_list],
+            axis=0,
+        )
+        avg_y.append(np.nanmean(ys, axis=0))
+
+    return pd.DataFrame(
+        {'x': [np.asarray(x) for x in base['x']], 'y': avg_y},
+        index=base.index,
+    )
+
+def plot_curve_dataframe(curveDf, filename, title, xlabel, ylabel, xlim=(0.0, 1.0), ylim=(0.0, 1.01)):
+    '''
+    Plot every row of a "curve" DataFrame (columns 'x', 'y', indexed by curve name)
+    as a labeled line and save the figure to filename. Shared by the single-epoch
+    plotXXXCurve methods and by callers that want to plot an epoch-averaged curve
+    produced via average_curve_dataframes.
+    '''
+    fig, ax = plt.subplots(figsize=(12, 9))
+    for curve_name, row in curveDf.iterrows():
+        ax.plot(row['x'], row['y'], label=str(curve_name))
+
+    ax.set_title(title)
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+    ax.set_xlim(*xlim)
+    ax.set_ylim(*ylim)
+    ax.grid(True)
+    ax.legend(loc='center left', bbox_to_anchor=(1.02, 0.5), borderaxespad=0)
+    fig.savefig(filename, bbox_inches='tight')
+    plt.close(fig)
+
+# ==================================================================================
 
 class COCOeval:
     # Interface for evaluating detection on the Microsoft COCO dataset.
@@ -502,20 +554,21 @@ class COCOeval:
             summarize = _summarizeKps
         self.stats = summarize()
 
-    def plotCocoPRCurve(self, filename, classIdx=None):
+    def computeCocoPRCurveData(self, classIdx=None):
         '''
-        Plot COCO-style Precision-Recall curves
-        :param filename: output filename
-        :param classIdx: to plot for a specific class
-        :return: None
+        Compute COCO-style Precision-Recall curve data without plotting anything.
+        Useful for collecting per-epoch curve data (e.g. across multiple evaluation
+        runs) so it can be averaged before a single plot is produced -- see
+        ``average_curve_dataframes`` / ``plot_curve_dataframe`` at module level.
+
+        :param classIdx: to compute for a specific class
+        :return: DataFrame indexed by curve name ('iou=0.10', 'iou=0.15', ...),
+                 with columns 'x' (recall grid) and 'y' (precision), one row per IoU curve
         '''
         if not self.eval:
             raise Exception('Please run accumulate() first')
 
         p = self.params
-
-        if classIdx is not None:
-            className = p.catIdsToCatNms[classIdx]
 
         precisions = self.eval['precision']
 
@@ -525,24 +578,34 @@ class COCOeval:
             prArray = np.mean(precisions[:, :, :, 0, 2], axis=2)
 
         x = np.arange(0.0, 1.01, 0.01)
-        plt.figure()
-        if classIdx is None:
-            title = f'COCO P-R curve'
-        else:
-            title = f'COCO P-R curve for class={className}'
-
+        curves = {}  # curve name -> (x, y), x=recall, y=precision
         for idx, iouThr in enumerate(p.iouThrs):
-            plt.plot(x, prArray[idx, :], label=f'iou={iouThr:0.2f}')
+            curves[f'iou={iouThr:0.2f}'] = (x, prArray[idx, :])
 
-        plt.title(title)
-        plt.xlabel('recall')
-        plt.ylabel('precision')
-        plt.xlim(0, 1.0)
-        plt.ylim(0, 1.01)
-        plt.grid(True)
-        plt.legend(loc='lower left')
-        plt.savefig(filename)
-        plt.close()
+        curveDf = pd.DataFrame(
+            {'x': [np.asarray(cx) for cx, cy in curves.values()],
+             'y': [np.asarray(cy) for cx, cy in curves.values()]},
+            index=pd.Index(curves.keys(), name='curve')
+        )
+        return curveDf
+
+    def plotCocoPRCurve(self, filename, classIdx=None):
+        '''
+        Plot COCO-style Precision-Recall curves
+        :param filename: output filename
+        :param classIdx: to plot for a specific class
+        :return: DataFrame with the plotted curve data (see computeCocoPRCurveData)
+        '''
+        if classIdx is not None:
+            className = self.params.catIdsToCatNms[classIdx]
+            title = f'COCO P-R curve for class={className}'
+        else:
+            title = 'COCO P-R curve'
+
+        curveDf = self.computeCocoPRCurveData(classIdx=classIdx)
+        plot_curve_dataframe(curveDf, filename, title=title, xlabel='recall', ylabel='precision')
+        return curveDf
+
 
     def accumulateFBeta(self):
         print('Accumulating F-beta evaluation results...')
@@ -949,6 +1012,48 @@ class COCOeval:
 
         return report
 
+    def computeFBetaCurveData(self, betas=[1], iouThr=0.5, areaRng='all', classIdx=None, average='macro'):
+        '''
+        Compute F-beta curve data (precision/recall/F-beta vs confidence threshold)
+        without plotting anything. Useful for collecting per-epoch curve data so it
+        can be averaged before a single plot is produced -- see
+        ``average_curve_dataframes`` / ``plot_curve_dataframe`` at module level.
+
+        :param betas: F-beta scores to compute
+        :param iouThr: IOU threshold
+        :param areaRng: object area range (options: 'all', 'small', 'medium', 'large')
+        :param classIdx: to compute for a specific class
+        :param average: averaging method (options: 'micro', 'macro', 'weighted')
+        :return: DataFrame indexed by curve name ('precision', 'recall', 'F1', ...),
+                 with columns 'x' (confidence thresholds) and 'y' (curve values), one row per curve
+        '''
+        if not self.evalFBeta:
+            raise Exception('Please run accumulateFBeta() first')
+
+        p = self.params
+
+        tpCum, fpCum, fnCum, numGtCum = self._filterCum(iouThr, areaRng, classIdx)
+        precision, recall = self._calculatePrecisionRecall(tpCum, fpCum, fnCum, numGtCum, average)
+
+        curves = {}  # curve name -> (x, y)
+        curves['precision'] = (p.confThrs, precision)
+        curves['recall'] = (p.confThrs, recall)
+
+        for beta in betas:
+            score = np.divide(
+                        (1 + beta**2) * precision * recall,
+                        (beta**2 * precision) + recall,
+                        out=np.full(precision.shape, 0, np.float64),
+                        where=(precision + recall)!=0)
+            curves[f'F{beta}'] = (p.confThrs, score)
+
+        curveDf = pd.DataFrame(
+            {'x': [np.asarray(x) for x, y in curves.values()],
+             'y': [np.asarray(y) for x, y in curves.values()]},
+            index=pd.Index(curves.keys(), name='curve')
+        )
+        return curveDf
+
     def plotFBetaCurve(self, filename, betas=[1], iouThr=0.5, areaRng='all', classIdx=None, average='macro'):
         '''
         Plot F-beta curves
@@ -961,35 +1066,18 @@ class COCOeval:
         :return: DataFrame indexed by curve name ('precision', 'recall', 'F1', ...),
                  with columns 'x' (confidence thresholds) and 'y' (curve values), one row per curve
         '''
-        if not self.evalFBeta:
-            raise Exception('Please run accumulateFBeta() first')
-
         p = self.params
 
         if classIdx is not None:
             className = p.catIdsToCatNms[classIdx]
 
-        tpCum, fpCum, fnCum, numGtCum = self._filterCum(iouThr, areaRng, classIdx)
-        precision, recall = self._calculatePrecisionRecall(tpCum, fpCum, fnCum, numGtCum, average)
+        curveDf = self.computeFBetaCurveData(betas=betas, iouThr=iouThr, areaRng=areaRng, classIdx=classIdx, average=average)
 
-        curves = {}  # curve name -> (x, y)
-        curves['precision'] = (p.confThrs, precision)
-        curves['recall'] = (p.confThrs, recall)
-
-        fig, ax = plt.subplots(figsize=(12, 9))
-        ax.plot(p.confThrs, precision, label='precision')
-        ax.plot(p.confThrs, recall, label='recall')
-
+        precision = curveDf.loc['precision', 'y']
+        recall = curveDf.loc['recall', 'y']
         for beta in betas:
-            score = np.divide(
-                        (1 + beta**2) * precision * recall,
-                        (beta**2 * precision) + recall,
-                        out=np.full(precision.shape, 0, np.float64),
-                        where=(precision + recall)!=0)
-
+            score = curveDf.loc[f'F{beta}', 'y']
             maxIdx = np.argmax(score)
-            curves[f'F{beta}'] = (p.confThrs, score)
-            ax.plot(p.confThrs, score, label=f'F{beta}: {score[maxIdx]:0.3f} at {p.confThrs[maxIdx]:0.2f}')
             if classIdx is None:
                 print(f'Best {average} F{beta} for iouThr {iouThr} is {score[maxIdx]:0.3f} at confThr {p.confThrs[maxIdx]:0.2f}: precision {precision[maxIdx]:0.3f}, recall {recall[maxIdx]:0.3f}')
             else:
@@ -1000,15 +1088,34 @@ class COCOeval:
             title = f'{average} Fscores for iouThr={iouThr}'
         else:
             title = f'Fscores for class={className}, iouThr={iouThr}'
-        ax.set_title(title)
-        ax.set_xlabel('confidence threshold')
-        ax.set_ylabel('score')
-        ax.set_xlim(0, 1.0)
-        ax.set_ylim(0, 1.01)
-        ax.grid(True)
-        ax.legend(loc='center left', bbox_to_anchor=(1.02, 0.5), borderaxespad=0)
-        fig.savefig(filename, bbox_inches='tight')
-        plt.close(fig)
+
+        plot_curve_dataframe(curveDf, filename, title=title, xlabel='confidence threshold', ylabel='score')
+        return curveDf
+
+    def computePRCurveData(self, areaRng='all', classIdx=None, average='macro'):
+        '''
+        Compute PR curve data without plotting anything. Useful for collecting
+        per-epoch curve data so it can be averaged before a single plot is
+        produced -- see ``average_curve_dataframes`` / ``plot_curve_dataframe``
+        at module level.
+
+        :param classIdx: to compute for a specific class
+        :param average: averaging method (options: 'micro', 'macro', 'weighted')
+        :return: DataFrame indexed by curve name ('iou=0.50', 'iou=0.55', ...),
+                 with columns 'x' (recall) and 'y' (precision), one row per IoU curve
+        '''
+        if not self.evalFBeta:
+            raise Exception('Please run accumulateFBeta() first')
+
+        p = self.params
+
+        curves = {}  # curve name -> (x, y), x=recall, y=precision
+        for iouThr in p.iouThrs:
+            tpCum, fpCum, fnCum, numGtCum = self._filterCum(iouThr, areaRng, classIdx)
+            precision, recall = self._calculatePrecisionRecall(tpCum, fpCum, fnCum, numGtCum, average=average)
+            precision = np.insert(precision, 0, [0, 0])
+            recall = np.insert(recall, 0, [1, recall[0]+0.01])
+            curves[f'iou={iouThr:0.2f}'] = (recall, precision)
 
         curveDf = pd.DataFrame(
             {'x': [np.asarray(x) for x, y in curves.values()],
@@ -1026,50 +1133,14 @@ class COCOeval:
         :return: DataFrame indexed by curve name ('iou=0.50', 'iou=0.55', ...),
                  with columns 'x' (recall) and 'y' (precision), one row per IoU curve
         '''
-        if not self.evalFBeta:
-            raise Exception('Please run accumulateFBeta() first')
-
-        p = self.params
-
         if classIdx is not None:
-            className = p.catIdsToCatNms[classIdx]
-
-        tpCums = self.evalFBeta['tp']
-        fpCums = self.evalFBeta['fp']
-        fnCums = self.evalFBeta['fn']
-        numGtCum = self.evalFBeta['numGt']
-
-        curves = {}  # curve name -> (x, y), x=recall, y=precision
-
-        fig, ax = plt.subplots(figsize=(12, 9))
-        if classIdx is None:
-            title = f'P-R curve'
-        else:
+            className = self.params.catIdsToCatNms[classIdx]
             title = f'P-R curve for class={className}'
+        else:
+            title = 'P-R curve'
 
-        for iouThr in p.iouThrs:
-            tpCum, fpCum, fnCum, numGtCum = self._filterCum(iouThr, areaRng, classIdx)
-            precision, recall = self._calculatePrecisionRecall(tpCum, fpCum, fnCum, numGtCum, average=average)
-            precision = np.insert(precision, 0, [0, 0])
-            recall = np.insert(recall, 0, [1, recall[0]+0.01])
-            curves[f'iou={iouThr:0.2f}'] = (recall, precision)
-            ax.plot(recall, precision, label=f'iou={iouThr}')
-
-        ax.set_title(title)
-        ax.set_xlabel('recall')
-        ax.set_ylabel('precision')
-        ax.set_xlim(0, 1.0)
-        ax.set_ylim(0, 1.01)
-        ax.grid(True)
-        ax.legend(loc='center left', bbox_to_anchor=(1.02, 0.5), borderaxespad=0)
-        fig.savefig(filename, bbox_inches='tight')
-        plt.close(fig)
-
-        curveDf = pd.DataFrame(
-            {'x': [np.asarray(x) for x, y in curves.values()],
-             'y': [np.asarray(y) for x, y in curves.values()]},
-            index=pd.Index(curves.keys(), name='curve')
-        )
+        curveDf = self.computePRCurveData(areaRng=areaRng, classIdx=classIdx, average=average)
+        plot_curve_dataframe(curveDf, filename, title=title, xlabel='recall', ylabel='precision')
         return curveDf
 
     def getBestFBeta(self, beta=1, iouThr=0.5, areaRng='all', classIdx=None, average='macro'):

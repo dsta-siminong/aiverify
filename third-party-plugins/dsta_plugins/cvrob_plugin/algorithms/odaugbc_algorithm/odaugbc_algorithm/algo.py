@@ -34,7 +34,7 @@ import plotly.graph_objects as go
 from pprint import pprint
 
 from .pycocotools_fdet.coco import COCO
-from .pycocotools_fdet.cocoeval import COCOeval
+from .pycocotools_fdet.cocoeval import COCOeval, average_curve_dataframes, plot_curve_dataframe
 from PIL import ImageDraw, ImageFont
 # =====================================================================================
 # NOTE:
@@ -429,21 +429,8 @@ class Plugin(IAlgorithm):
         display_image = self._get_one_corrupted_image_direct(
             image_paths, ground_truths, aug_class, severity_name, display_idx
         )
-
         image_path = self._save_one_image(display_image, str(corrupted_dir), display_idx)
-
-        image_tensor = torch.tensor(display_image).unsqueeze(0).float()
-        model.eval()
-        with torch.no_grad():
-            outputs = model(image_tensor)
-        output = outputs[0]
-
-        prediction = {
-            "boxes":  output["boxes"].cpu().numpy().tolist(),
-            "labels": output["labels"].cpu().numpy().tolist(),
-            "scores": output["scores"].cpu().numpy().tolist(),
-        }
-
+        prediction = get_prediction_from_image(model, display_image, self._device)
         ground_truth = ground_truths[display_idx]
 
         image_path2, drawn_prediction = self._save_image_with_predictions(
@@ -469,6 +456,7 @@ class Plugin(IAlgorithm):
 
         print("Augmentation methods:", aug_methods)
         print("Class names:", class_names)
+        self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         self._ordered_ground_truth = self._resolve_class_ids(self._ordered_ground_truth, class_names)
 
@@ -515,7 +503,7 @@ class Plugin(IAlgorithm):
                 avg_stats, avg_matrix, avg_map, avg_summary, coco_imgs, coco_dfs = self._run_severity_epochs_coco(
                     model, test_loader, aug_class, severity_name, severity_idx,
                     num_epochs, class_names, 
-                    gt_json, image_paths, self._iou_thres, self._score_thres, save_dir_coco
+                    gt_json, image_paths, save_dir_coco
                 )
 
                 display_info[str(severity_name)] = self._get_display_info_for_severity(
@@ -552,7 +540,7 @@ class Plugin(IAlgorithm):
                 pr_df_list,
                 severities, 
                 Path(aug_name), 
-                aug_name,
+                # aug_name,
                 iou_thres = f"iou={self._iou_thres:.2f}",
                 fbeta_metric = None,
             )
@@ -584,7 +572,7 @@ class Plugin(IAlgorithm):
         """
         rows = []
         for severity, stats in zip(severities, data):
-            map = stats.get("map", None)
+            map_overall = stats.get("map", None)
             if "per_class" in stats:
                 per_class = stats["per_class"]
             else:
@@ -603,6 +591,7 @@ class Plugin(IAlgorithm):
                     "FN":        metrics["FN"],
                     "support":   metrics["support"],
                     "map":       metrics["map"], #map
+                    "map_overall":     map_overall,
                 })
         df = pd.DataFrame(rows)
         df['pred_population']   = df['TP'] + df['FP']
@@ -650,7 +639,7 @@ class Plugin(IAlgorithm):
         plt.xticks(rotation=45)
 
         png_path = save_dir / f"{class_name}_metrics.png"
-        plt.savefig(png_path, bbox_inches="tight")
+        fig.savefig(png_path, bbox_inches="tight")
         plt.close()
 
         # --- plotly ---
@@ -715,7 +704,7 @@ class Plugin(IAlgorithm):
         plt.xticks(rotation=45)
 
         png_path_cm = save_dir / f"{class_name}_counts.png"
-        plt.savefig(png_path_cm, bbox_inches="tight")
+        fig.savefig(png_path_cm, bbox_inches="tight")
         plt.close()
 
         # --- plotly ---
@@ -770,7 +759,7 @@ class Plugin(IAlgorithm):
         ax.set_ylim(-5, y_max + 5)
 
         png_path_pop = save_dir / f"{class_name}_population.png"
-        plt.savefig(png_path_pop, bbox_inches="tight")
+        fig.savefig(png_path_pop, bbox_inches="tight")
         plt.close()
 
         # --- plotly ---
@@ -803,22 +792,22 @@ class Plugin(IAlgorithm):
         aug_name: str,
     ):
         """
-        Plot mAP@50 over severity (matplotlib + plotly).
+        Plot mAP@iouthres over severity (matplotlib + plotly).
 
         Returns:
             (map_png, map_html)
         """
-        map_df = combined_df[["severity", "map"]].drop_duplicates().reset_index(drop=True)
-        map_nan_mask = map_df['map'].isna()
+        map_df = combined_df[["severity", "map_overall"]].drop_duplicates().reset_index(drop=True)
+        map_nan_mask = map_df['map_overall'].isna()
         plot_map_df = map_df.copy()
-        plot_map_df['map'] = plot_map_df['map'].fillna(0)
+        plot_map_df['map_overall'] = plot_map_df['map_overall'].fillna(0)
 
         map_severity_order = plot_map_df['severity'].tolist()
         map_pos_map = {v: i for i, v in enumerate(map_severity_order)}
 
         # --- matplotlib ---
         fig, ax = plt.subplots(figsize=(10, 6))
-        map_line, = ax.plot(plot_map_df['severity'], plot_map_df['map'])
+        map_line, = ax.plot(plot_map_df['severity'], plot_map_df['map_overall'])
         map_color = map_line.get_color()
 
         if map_nan_mask.any():
@@ -826,20 +815,20 @@ class Plugin(IAlgorithm):
             ax.scatter(x_pos, [0] * len(x_pos), marker='x', color=map_color,
                        alpha=0.8, zorder=5, label='map (NaN\u21920)')
 
-        ax.set_title(f"{aug_name} mAP@50")
+        ax.set_title(f"{aug_name} mAP@{self._iou_thres*100}")
         ax.set_xlabel("severity")
-        ax.set_ylabel("mAP@50")
+        ax.set_ylabel(f"mAP@{self._iou_thres*100}")
         ax.set_ylim(-0.1, 1.1)
         ax.legend()
         plt.xticks(rotation=45)
 
         map_png = save_dir / "map.png"
-        plt.savefig(map_png, bbox_inches="tight")
+        fig.savefig(map_png, bbox_inches="tight")
         plt.close()
 
         # --- plotly ---
-        fig_html = px.line(plot_map_df, x='severity', y='map',
-                           title=f"{aug_name} mAP@50")
+        fig_html = px.line(plot_map_df, x='severity', y='map_overall',
+                           title=f"{aug_name} mAP@{self._iou_thres*100}")
         if map_nan_mask.any():
             nan_severities = plot_map_df.loc[map_nan_mask, 'severity'].tolist()
             fig_html.add_trace(go.Scatter(
@@ -918,7 +907,7 @@ class Plugin(IAlgorithm):
         plt.subplots_adjust(left=0.15, right=0.8, top=0.88, bottom=0.3)
 
         plt_path = save_dir / "all_classes_proportions_barchart.png"
-        plt.savefig(plt_path, bbox_inches="tight")
+        fig.savefig(plt_path, bbox_inches="tight")
         plt.close()
 
         # --- plotly ---
@@ -1074,7 +1063,7 @@ class Plugin(IAlgorithm):
         save_dir = self._save_folder / corrupted_dir
         save_dir.mkdir(parents=True, exist_ok=True)
         save_path = save_dir / "detection_matrix.png"
-        plt.savefig(
+        fig.savefig(
             save_path,
             dpi=300,
             bbox_inches="tight"
@@ -1325,8 +1314,6 @@ class Plugin(IAlgorithm):
         class_names: dict,
         gt_json: str,
         image_paths: list,
-        iou_threshold: float,
-        score_threshold: float,
         save_dir_coco: Path,
     ):
         """
@@ -1336,10 +1323,11 @@ class Plugin(IAlgorithm):
         Returns:
             avg_stats  - per-class metrics averaged over epochs
             avg_matrix - detection-matching matrix averaged over epochs
-            avg_map  - scalar mAP@50 averaged over valid epochs (None if none valid)
+            avg_map  - scalar mAP@iouthres averaged over valid epochs (None if none valid)
         """
         pr_json = 'predictions.json'
         all_stats = []; all_matrices = []; all_maps = []; all_summaries = []
+        all_fbeta_dfs = []; all_pr_dfs = []; all_cocopr_dfs = []
 
         for i in range(num_epochs):
             print("NUMEPOCHS", num_epochs)
@@ -1352,8 +1340,8 @@ class Plugin(IAlgorithm):
                 corrupted_loader = aug_class.corr_func_dataloader(test_loader, severity_name)
 
             det_stats = evaluate_detection_and_create_coco_predictions(
-                model, corrupted_loader, None, class_names, image_paths, pr_json,
-                iou_thresh=iou_threshold, score_thresh=score_threshold,
+                model, corrupted_loader, self._device, class_names, image_paths, pr_json,
+                iou_thresh=self._iou_thres, score_thresh=self._score_thres,
                 coco_score_threshold=0.0,  # match original create_coco_predictions default
             )
             
@@ -1363,17 +1351,19 @@ class Plugin(IAlgorithm):
             cocoEval.evaluate()
             cocoEval.accumulateFBeta()
             cocoEval.accumulate()
-            summary = cocoEval.collectSummaryResults(fbeta_betas=(1, 2), fbeta_iou_thrs=(iou_threshold,))
+            summary = cocoEval.collectSummaryResults(fbeta_betas=(1, 2), fbeta_iou_thrs=(self._iou_thres,))
 
-            fbeta_filename = save_dir_coco / "fbeta_curve.png"
-            fbeta_df = cocoEval.plotFBetaCurve(fbeta_filename, betas=[1,2], iouThr=iou_threshold, average='macro')
-            pr_filename = save_dir_coco / "pr_curve.png"
-            pr_df = cocoEval.plotPRCurve(pr_filename, average='macro')
-            cocopr_filename = save_dir_coco / "cocopr_curve.png" #TODO: KIV doing this by class
-            cocoEval.plotCocoPRCurve(cocopr_filename)
+            # Compute (but don't yet plot/save) the curve data for this epoch. Plotting
+            # straight to fbeta_filename/pr_filename/cocopr_filename here would just have
+            # each epoch overwrite the previous one's PNG, so only the last epoch would
+            # ever be reflected on disk. Instead we collect every epoch's curve data and
+            # plot the epoch-averaged curves once, after the loop.
+            fbeta_df = cocoEval.computeFBetaCurveData(betas=[1,2], iouThr=self._iou_thres, average='macro')
+            pr_df = cocoEval.computePRCurveData(average='macro')
+            cocopr_df = cocoEval.computeCocoPRCurveData()  #TODO: KIV doing this by class
             per_class_report = cocoEval.generateReport()
 
-            for k,v in det_stats['per_class'].items():
+            for k in det_stats['per_class']:
                 assert k in per_class_report
                 class_report = per_class_report[k]
                 for k1,v1 in class_report.items():
@@ -1383,6 +1373,9 @@ class Plugin(IAlgorithm):
             all_matrices.append(det_stats["matrix"])
             all_maps.append(det_stats["map"])
             all_summaries.append(summary)
+            all_fbeta_dfs.append(fbeta_df)
+            all_pr_dfs.append(pr_df)
+            all_cocopr_dfs.append(cocopr_df)
 
         avg_stats = average_detection_stats(all_stats)
         avg_matrix = np.mean(all_matrices, axis=0)
@@ -1392,8 +1385,34 @@ class Plugin(IAlgorithm):
             else None
         )
         avg_summary = average_summaries(all_summaries)
+
+        # Average the curve data across epochs, then plot/save each curve exactly once,
+        # so the saved PNGs (and returned DataFrames) reflect all epochs, not just the last.
+        avg_fbeta_df = average_curve_dataframes(all_fbeta_dfs)
+        avg_pr_df = average_curve_dataframes(all_pr_dfs)
+        avg_cocopr_df = average_curve_dataframes(all_cocopr_dfs)
+
+        fbeta_filename = save_dir_coco / "fbeta_curve.png"
+        plot_curve_dataframe(
+            avg_fbeta_df, fbeta_filename,
+            title=f'macro Fscores for iouThr={self._iou_thres} (avg over {num_epochs} epochs)',
+            xlabel='confidence threshold', ylabel='score',
+        )
+        pr_filename = save_dir_coco / "pr_curve.png"
+        plot_curve_dataframe(
+            avg_pr_df, pr_filename,
+            title=f'P-R curve (avg over {num_epochs} epochs)',
+            xlabel='recall', ylabel='precision',
+        )
+        cocopr_filename = save_dir_coco / "cocopr_curve.png"  #TODO: KIV doing this by class
+        plot_curve_dataframe(
+            avg_cocopr_df, cocopr_filename,
+            title=f'COCO P-R curve (avg over {num_epochs} epochs)',
+            xlabel='recall', ylabel='precision',
+        )
+
         coco_filenames = [fbeta_filename, pr_filename, cocopr_filename]
-        coco_dfs = [fbeta_df, pr_df]
+        coco_dfs = [avg_fbeta_df, avg_pr_df]
 
         return avg_stats, avg_matrix, avg_map, avg_summary, coco_filenames, coco_dfs
 
@@ -1403,7 +1422,7 @@ class Plugin(IAlgorithm):
         pr_df_list,
         severities, 
         subfolder_name, 
-        aug_name,
+        # aug_name,
         iou_thres = None,
         fbeta_metric = None,
     ):

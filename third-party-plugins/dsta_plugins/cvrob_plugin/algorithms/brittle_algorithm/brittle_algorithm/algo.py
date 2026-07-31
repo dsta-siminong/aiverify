@@ -27,8 +27,6 @@ from .augmentations_class import make_augmentation_dict, custom_parameter_change
 from .augmentations_brittle import *
 import pandas as pd 
 import json
-import matplotlib.pyplot as plt
-import plotly.express as px 
 from pprint import pprint
 
 
@@ -274,7 +272,7 @@ class Plugin(IAlgorithm):
             if not isinstance(self._ground_truth, str):
                 self.add_to_log(
                     logging.ERROR,
-                    "The algorithm has failed ground truth header validation. \
+                    f"The algorithm has failed ground truth header validation. \
                     Header must be in String and must be present in the dataset: {self._ground_truth}",
                 )
                 raise RuntimeError(
@@ -293,7 +291,7 @@ class Plugin(IAlgorithm):
         if not isinstance(self._base_path, PurePath):
             self.add_to_log(
                 logging.ERROR,
-                "The algorithm has failed validation for the project path. \
+                f"The algorithm has failed validation for the project path. \
                 Ensure that the project path is a valid path: {self._base_path}",
             )
             raise RuntimeError(
@@ -313,7 +311,7 @@ class Plugin(IAlgorithm):
         if not isinstance(self._plugin_type, PluginType):
             self.add_to_log(
                 logging.ERROR,
-                "The algorithm has failed validation for its plugin type. \
+                f"The algorithm has failed validation for its plugin type. \
                 Ensure that PluginType is PluginType.ALGORITHM: {Plugin._plugin_type}",
             )
             raise RuntimeError(
@@ -376,7 +374,7 @@ class Plugin(IAlgorithm):
         self._progress_inst.update(1)
 
     def _brittle_method(self, aug_dict):
-        print("brittle stage 1")
+
         image_paths : list[str] = self._data_instance.get_data()["image_directory"].tolist()
         ground_truths = self._ordered_ground_truth_df[self._ground_truth_label].tolist()
         test_dataset, test_loader = self._load_images(image_paths, ground_truths)
@@ -393,6 +391,7 @@ class Plugin(IAlgorithm):
         class_names_arg = self._input_arguments.get('class_names') or None 
         class_names = handle_class_names_arg(class_names_arg, model)
         print("Class names:", class_names)
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         class_names_int = {int(k): v for k, v in class_names.items()}
 
@@ -401,56 +400,15 @@ class Plugin(IAlgorithm):
             raise ValueError("aug method not valid")
         aug_class = aug_dict[aug_name]
 
-        print("brittle stage 2")
-        severity_before = self._input_arguments.get("severity_before")
-        severity_after = self._input_arguments.get("severity_after")
-        severity_before_idx = self._input_arguments.get("severity_before_idx")
-        severity_after_idx = self._input_arguments.get("severity_after_idx")
-
-        # normalize empty strings to None (important if UI sends "")
-        severity_before = severity_before if severity_before != "" else None
-        severity_after = severity_after if severity_after != "" else None
-
-        # ---- validation ----
-        if (
-            severity_before is None
-            and severity_after is None
-            and severity_before_idx is None
-            and severity_after_idx is None
-        ):
-            raise ValueError(
-                "Must provide either severity_before/after (string) "
-                "or severity_before_idx/after_idx (integer)"
-            )
-
-        # ---- choose strings if provided ----
-        if severity_before is not None or severity_after is not None:
-            if severity_before is None or severity_after is None:
-                raise ValueError(
-                    "Both severity_before and severity_after must be provided together"
-                )
-            severity0 = severity_before
-            severity1 = severity_after
-
-        # ---- otherwise use indices ----
-        else:
-            if severity_before_idx is None or severity_after_idx is None:
-                raise ValueError(
-                    "Both severity_before_idx and severity_after_idx must be provided together"
-                )
-            severity0 = severity_before_idx
-            severity1 = severity_after_idx
-
-        severities = (severity0, severity1)
-        print("SEVERITIES:", severities)
+        severities = self._validate_severities()
         if severities[0] == "None":
             loader_A = test_loader
         else: 
             loader_A = aug_class.corr_func_dataloader(test_loader, severity_idx = severities[0])
         loader_B = aug_class.corr_func_dataloader(test_loader, severity_idx = severities[1])
 
-        imgs_A, probs_A, labels = collect_probs(model, loader_A, None)
-        imgs_B, probs_B, _      = collect_probs(model, loader_B, None)
+        imgs_A, probs_A, labels = collect_probs(model, loader_A, device)
+        imgs_B, probs_B, _      = collect_probs(model, loader_B, device)
 
         N = len(labels)
         idx = torch.arange(N)
@@ -484,8 +442,7 @@ class Plugin(IAlgorithm):
         #KIV: define the top_k value here; if want to make custom then we change this
         TOPK_SAFE = 15
         TOPK = 10
-        
-        display_info = []      
+             
         output_results = brittle_res_to_dict(b_result)
         output_results = {k:v for k,v in output_results.items() if k not in ["imgsA", "imgsB"]}
         results_list = output_results['results']
@@ -499,35 +456,17 @@ class Plugin(IAlgorithm):
         ]
 
         top_k_indices = [item.index for item in results_correctb4][:min(TOPK_SAFE, len(results_list))]
-
-        _, predictions, _ = evaluate(model, test_loader, None)
-        for s_idx in severities:
-            severity = aug_class.determine_severity(s_idx)
-            corrupted_dir = Path(aug_name) / f"severity_{severity}"
-
-            for i,display_idx in enumerate(top_k_indices):
-                display_image = self._get_one_corrupted_image_direct(
-                    image_paths[display_idx],
-                    aug_class,
-                    severity,
-                )
-                image_path = self._save_one_image(display_image, str(corrupted_dir), Path(str(image_paths[display_idx])).name)
-                image = torch.tensor(display_image).unsqueeze(0).float()
-                model = model.float()
-
-                model.eval()
-                with torch.no_grad():
-                    outputs = model(image)
-                    _, prediction = torch.max(outputs, 1)
-                prediction = prediction.item()
-                ground_truth = ground_truths[display_idx]
-
-                random_display = [
-                    str(Path(image_path).relative_to(self._output_folder)),
-                    class_names[str(ground_truth)],
-                    class_names[str(prediction)],
-                ]
-                display_info.append({f"severity_{severity}_number_{i+1}": random_display})
+        display_info = self._loop_for_display_info(
+            model, 
+            severities, 
+            aug_class,
+            image_paths,
+            ground_truths,
+            aug_name,
+            top_k_indices,
+            class_names,
+            device
+        )
 
         output_results.update(
             {"display_info": display_info}
@@ -540,10 +479,7 @@ class Plugin(IAlgorithm):
         plotly_dir.mkdir(parents=True, exist_ok=True)
         mpl_path, mpl_frag_paths = visualize_topk_matplotlib(
             results_correctb4, 
-            b_result.imgsA, 
-            b_result.imgsB, 
-            b_result.probs_A, 
-            b_result.probs_B,  
+            b_result,
             K=min(TOPK, len(results_correctb4)),
             class_names=class_names_int, 
             transform=None,
@@ -552,10 +488,7 @@ class Plugin(IAlgorithm):
         )
         plotly_path = visualize_topk_without_plotly(
             results_correctb4, 
-            b_result.imgsA, 
-            b_result.imgsB, 
-            b_result.probs_A, 
-            b_result.probs_B, 
+            b_result,
             K=min(TOPK, len(results_correctb4)),
             class_names=class_names_int, 
             transform=None,
@@ -564,11 +497,7 @@ class Plugin(IAlgorithm):
         )
         html_path = visualize_in_html(
             results_correctb4_incorrectaft, 
-            b_result.imgsA, 
-            b_result.imgsB, 
-            b_result.probs_A, 
-            b_result.probs_B, 
-            b_result.labels, 
+            b_result, 
             class_names=class_names_int, 
             transform=None,
             directory = plotly_dir,
@@ -612,7 +541,7 @@ class Plugin(IAlgorithm):
         dataset = TensorDataset(image_tensors, label_tensors)
 
         # Create DataLoader
-        loader = DataLoader(dataset, batch_size=128, shuffle=False)
+        loader = DataLoader(dataset, batch_size=16, shuffle=False)
 
         return dataset, loader
 
@@ -625,29 +554,6 @@ class Plugin(IAlgorithm):
         Image.fromarray((image * 255.0).astype(np.uint8)).save(image_path)
 
         return str(image_path)
-
-    # def _get_one_corrupted_image(self, testloader, aug_class, severity, target_idx):
-    #     current_idx = 0
-
-    #     for images, labels in testloader:
-    #         batch_size = images.shape[0]
-
-    #         # Check if target is inside this batch
-    #         if current_idx + batch_size > target_idx:
-    #             local_idx = target_idx - current_idx
-
-    #             images_np = (images * 255).byte().numpy().transpose(0, 2, 3, 1)
-
-    #             if aug_class.name == "None" or severity == "None":
-    #                 corrupted = images_np
-    #             else:
-    #                 corrupted = aug_class.corr_func_arr(images_np, severity)
-
-    #             corrupted = corrupted.transpose(0, 3, 1, 2) / 255.0
-
-    #             return corrupted[local_idx]  # <-- only one image
-
-    #         current_idx += batch_size
 
     def _get_one_corrupted_image_direct(
         self,
@@ -682,3 +588,83 @@ class Plugin(IAlgorithm):
 
         # 4. Normalise to CHW float32 [0, 1]
         return corrupted.transpose(2, 0, 1).astype(np.float32) / 255.0
+    
+    def _loop_for_display_info(
+        self,
+        model, 
+        severities, 
+        aug_class,
+        image_paths,
+        ground_truths,
+        aug_name,
+        top_k_indices,
+        class_names,
+        device=None
+    ):
+        display_info = []
+        for s_idx in severities:
+            severity = aug_class.determine_severity(s_idx)
+            corrupted_dir = Path(aug_name) / f"severity_{severity}"
+
+            for i,display_idx in enumerate(top_k_indices):
+                display_image = self._get_one_corrupted_image_direct(
+                    image_paths[display_idx],
+                    aug_class,
+                    severity,
+                )
+                image_path = self._save_one_image(display_image, str(corrupted_dir), Path(str(image_paths[display_idx])).name)
+                prediction = get_prediction_from_image(model, display_image, device)
+                ground_truth = ground_truths[display_idx]
+
+                random_display = [
+                    str(Path(image_path).relative_to(self._output_folder)),
+                    class_names[str(ground_truth)],
+                    class_names[str(prediction)],
+                ]
+                display_info.append({f"severity_{severity}_number_{i+1}": random_display})
+        
+        return display_info 
+    
+    def _validate_severities(self):
+        severity_before = self._input_arguments.get("severity_before")
+        severity_after = self._input_arguments.get("severity_after")
+        severity_before_idx = self._input_arguments.get("severity_before_idx")
+        severity_after_idx = self._input_arguments.get("severity_after_idx")
+
+        # normalize empty strings to None (important if UI sends "")
+        severity_before = severity_before if severity_before != "" else None
+        severity_after = severity_after if severity_after != "" else None
+
+        # ---- validation ----
+        if (
+            severity_before is None
+            and severity_after is None
+            and severity_before_idx is None
+            and severity_after_idx is None
+        ):
+            raise ValueError(
+                "Must provide either severity_before/after (string) "
+                "or severity_before_idx/after_idx (integer)"
+            )
+
+        # ---- choose strings if provided ----
+        if severity_before is not None or severity_after is not None:
+            if severity_before is None or severity_after is None:
+                raise ValueError(
+                    "Both severity_before and severity_after must be provided together"
+                )
+            severity0 = severity_before
+            severity1 = severity_after
+
+        # ---- otherwise use indices ----
+        else:
+            if severity_before_idx is None or severity_after_idx is None:
+                raise ValueError(
+                    "Both severity_before_idx and severity_after_idx must be provided together"
+                )
+            severity0 = severity_before_idx
+            severity1 = severity_after_idx
+
+        severities = (severity0, severity1)
+        print("SEVERITIES:", severities)
+        return severities

@@ -394,6 +394,7 @@ class Plugin(IAlgorithm):
         class_names_arg = self._input_arguments['class_names'] or None 
         class_names = handle_class_names_arg(class_names_arg, model)
         print("Class names:", class_names)
+        self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self._ordered_ground_truth = self._resolve_class_ids(self._ordered_ground_truth, class_names)
         image_paths : list[str] = self._data_instance.get_data()["image_directory"].tolist()
         ground_truths = self._ordered_ground_truth
@@ -416,8 +417,8 @@ class Plugin(IAlgorithm):
             # print(aug_class.determine_severity(severities[0]))
         loader_B = aug_class.corr_func_dataloader(test_loader, severity_idx = severities[1])
 
-        scores_A = collect_detection_predictions(model, loader_A, None)
-        scores_B = collect_detection_predictions(model, loader_B, None)
+        scores_A = collect_detection_predictions(model, loader_A, self._device)
+        scores_B = collect_detection_predictions(model, loader_B, self._device)
         print("### Collected detection scores~ ###")
 
         brittleness = torch.tensor([
@@ -532,54 +533,40 @@ class Plugin(IAlgorithm):
         class_names
     ):
         display_info = []
-        model.eval()
-        with torch.no_grad():
 
-            for s_idx in severities:
-                s = aug_class.determine_severity(s_idx)
-                corrupted_images = [
-                    self._get_one_corrupted_image_direct(image_paths, ground_truths, aug_class, s, idx)
-                    for idx in top_k_indices
+        for s_idx in severities:
+            s = aug_class.determine_severity(s_idx)
+            corrupted_images = [
+                self._get_one_corrupted_image_direct(image_paths, ground_truths, aug_class, s, idx)
+                for idx in top_k_indices
+            ]
+
+            corrupted_dir = Path(aug_name) / f"severity_{s}"
+
+            for i,display_idx in enumerate(top_k_indices):
+
+                image_path = self._save_one_image(corrupted_images[i], str(corrupted_dir), display_idx)
+                prediction = get_prediction_from_image(model, corrupted_images[i], self._device)
+
+                ground_truth = ground_truths[display_idx]
+
+                image_path2, drawn_prediction = self._save_image_with_predictions(
+                    image=corrupted_images[i],
+                    prediction=prediction,
+                    gt_boxes=ground_truth,        # list of {"bbox": [...], "label": ...}
+                    class_names=class_names,
+                    subfolder_name=str(corrupted_dir),
+                    idx=display_idx,
+                    score_threshold=self._score_thres
+                )
+
+                random_display = [
+                    str(Path(image_path).relative_to(self._output_folder)),
+                    ground_truth,
+                    drawn_prediction,
+                    str(Path(image_path2).relative_to(self._output_folder)),
                 ]
-
-                images_tensor = torch.from_numpy(
-                    np.stack(corrupted_images)
-                ).float()
-                with torch.no_grad():
-                    outputs = model(list(images_tensor))
-
-                corrupted_dir = Path(aug_name) / f"severity_{s}"
-
-                for i,display_idx in enumerate(top_k_indices):
-
-                    image_path = self._save_one_image(corrupted_images[i], str(corrupted_dir), display_idx)
-
-                    output = outputs[i]
-                    prediction = {
-                        "boxes": output["boxes"].cpu().numpy().tolist(),
-                        "labels": output["labels"].cpu().numpy().tolist(),
-                        "scores": output["scores"].cpu().numpy().tolist(),
-                    }
-
-                    ground_truth = ground_truths[display_idx]
-
-                    image_path2, drawn_prediction = self._save_image_with_predictions(
-                        image=corrupted_images[i],
-                        prediction=prediction,
-                        gt_boxes=ground_truth,        # list of {"bbox": [...], "label": ...}
-                        class_names=class_names,
-                        subfolder_name=str(corrupted_dir),
-                        idx=display_idx,
-                        score_threshold=self._score_thres
-                    )
-
-                    random_display = [
-                        str(Path(image_path).relative_to(self._output_folder)),
-                        ground_truth,
-                        drawn_prediction,
-                        str(Path(image_path2).relative_to(self._output_folder)),
-                    ]
-                    display_info.append({f"severity_{s}_number_{i+1}": random_display})
+                display_info.append({f"severity_{s}_number_{i+1}": random_display})
 
         return display_info   
     

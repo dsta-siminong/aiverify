@@ -31,20 +31,11 @@ def test_discover_plugin():
 
 
 # Variables for testing
-# valid_data_path = str(
-#     "/home/bjieyong/aiverify/cvrob/pedestrian/PennFudanPed/PennFudanPed/PNGImages"
-# )
-# valid_model_path = str(
-#     "/home/bjieyong/aiverify/cvrob/pedestrian/PennFudanPed/PennFudanPed/pedModel"
-# )
-# valid_ground_truth_path = str(
-#     "/home/bjieyong/aiverify/cvrob/pedestrian/PennFudanPed/PennFudanPed/pennfudan_detection_gt.csv"
-# )
 valid_data_path = str(
     "/home/bjieyong/aiverify/cvrob/bccd/BCCD/JPEGImages"
 )
 valid_model_path = str(
-    "/home/bjieyong/aiverify/cvrob/bccd/BCCD/bccdModel"
+    "/home/bjieyong/aiverify/cvrob/bccd/bccd_api.json"#"/home/bjieyong/aiverify/cvrob/bccd/BCCD/bccdModel"#
 )
 valid_ground_truth_path = str(
     "/home/bjieyong/aiverify/cvrob/bccd/BCCD/bccd_detection.csv"
@@ -59,7 +50,9 @@ test_dict = {"data_str": "data_str"}
 test_tuple = ("data_str", "data_str")
 test_none = None
 
-
+plugin_type = PluginType.MODEL
+plugin_type_param = "filename"#"pipeline_path"#
+i_type = IModel
 class ObjectTest:
     def __init__(self):
         test_discover_plugin()
@@ -73,7 +66,7 @@ class ObjectTest:
             model_instance,
             model_serializer_instance,
             model_error_message,
-        ) = PluginManager.get_instance(PluginType.PIPELINE, **{"pipeline_path": valid_model_path})
+        ) = PluginManager.get_instance(plugin_type, **{plugin_type_param: valid_model_path})
 
         (
             ground_truth_instance,
@@ -84,13 +77,13 @@ class ObjectTest:
         ground_truth = "label"
         model_type = ModelType.DETECTION
         input_args = {
-            "class_names": None,
+            "class_names": "background,RBC,WBC,Platelets",
             "aug_library": "albumentations",
             'aug_methods': 'Rain',
             'custom_parameters': None,
             "num_epochs": 1,
             "iou_thres": 0.65,
-            "score_thres": 0.65
+            "score_thres": 0.65,
         }
         expected_exception = RuntimeError
         expected_exception_msg = "The algorithm has failed data validation"
@@ -168,7 +161,7 @@ def get_model_instance_and_serializer(request):
         model_instance,
         model_serializer_instance,
         model_error_message,
-    ) = PluginManager.get_instance(PluginType.PIPELINE, **{"pipeline_path": request.param})
+    ) = PluginManager.get_instance(plugin_type, **{plugin_type_param: request.param})
     yield (model_instance, model_serializer_instance)
 
 
@@ -180,7 +173,7 @@ def get_invalid_model_instance(request):
             model_instance,
             model_serializer_instance,
             model_error_message,
-        ) = PluginManager.get_instance(PluginType.PIPELINE, **{"pipeline_path": request.param})
+        ) = PluginManager.get_instance(plugin_type, **{plugin_type_param: request.param})
     return excinfo
 
 
@@ -207,7 +200,7 @@ def test_create_plugin_instance_with_all_valid_input():
     )
 
     assert isinstance(test_plugin._data_instance, IData)
-    assert isinstance(test_plugin._model_instance, IPipeline)
+    assert isinstance(test_plugin._model_instance, i_type)
     assert isinstance(test_plugin._ground_truth_instance, IData)
     assert isinstance(test_plugin._logger, logging.Logger)
     assert isinstance(test_plugin._progress_inst, SimpleProgress)
@@ -338,7 +331,7 @@ def test_init_plugin_instance_with_missing_ground_truth(
     data_instance_and_serializer = get_data_instance_and_serializer
     model_instance_and_serializer = get_model_instance_and_serializer
     ground_truth_instance_and_serializer = get_ground_truth_instance_and_serializer
-    model_type = ModelType.DETECTION
+    model_type = ModelType.CLASSIFICATION
     input_args = {}
     expected_exception = RuntimeError
     expected_exception_msg = "The algorithm has failed ground truth header validation."

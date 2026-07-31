@@ -4,44 +4,37 @@ import pytest
 from odaugvm_algorithm.algo_init import AlgoInit
 from aiverify_test_engine.plugins.enums.model_type import ModelType
 
-detection_pipeline = {
-    # "data_path": str(
-    #     "/home/bjieyong/aiverify/cvrob/pedestrian/PennFudanPed/PennFudanPed/PNGImages"
-    # ),
-    # "model_path": str(
-    #     "/home/bjieyong/aiverify/cvrob/pedestrian/PennFudanPed/PennFudanPed/pedModel"
-    # ),
-    # "ground_truth_path": str(
-    #     "/home/bjieyong/aiverify/cvrob/pedestrian/PennFudanPed/PennFudanPed/pennfudan_detection_gt.csv"
-    # ),
+
+binary_classification_pipeline = {
     "data_path": str(
         "/home/bjieyong/aiverify/cvrob/bccd/BCCD/JPEGImages"
     ),
     "model_path": str(
-        "/home/bjieyong/aiverify/cvrob/bccd/BCCD/bccdModel"
+        "/home/bjieyong/aiverify/cvrob/bccd/bccd_api.json"#"/home/bjieyong/aiverify/cvrob/bccd/BCCD/bccdModel"#
     ),
     "ground_truth_path": str(
         "/home/bjieyong/aiverify/cvrob/bccd/BCCD/bccd_detection.csv"
     ),
-    "run_pipeline": True,
+    "run_pipeline": False,
     "model_type": ModelType.DETECTION,
     "ground_truth": "label",
     "plugin_argument_values": {
-        "class_names": None, 
+        "class_names": "background,RBC,WBC,Platelets",
         "aug_library": 'albumentations',
         'aug_methods': 'Rain',
         'custom_parameters': None,
         "num_epochs": 1,
         "iou_thres": 0.65,
-        "score_thres": 0.65
+        "score_thres": 0.65,
     }
 }
+
 
 @pytest.mark.parametrize(
     "data_set",
     [
         
-        detection_pipeline,
+        binary_classification_pipeline,
         
     ],
 )

@@ -2,11 +2,11 @@ import torch
 import numpy as np
 # import albumentations as A
 # from albumentations.pytorch import ToTensorV2
-import plotly.graph_objects as go
+# import plotly.graph_objects as go
 # from augly.image import blur, brightness, random_noise, contrast, color_jitter, pixelization, sharpen
 # from augly.image import aug_np_wrapper
 # from .cvrob_util import evaluate
-from plotly.subplots import make_subplots
+# from plotly.subplots import make_subplots
 # from imagecorruptions import corrupt
 import matplotlib.pyplot as plt
 import json
@@ -15,7 +15,7 @@ from PIL import Image
 import io
 from pathlib import Path
 from dataclasses import dataclass
-from torchvision import transforms
+# from torchvision import transforms
 from .cvrob_util import delta_detections, delta_detections_labels
 
 @dataclass

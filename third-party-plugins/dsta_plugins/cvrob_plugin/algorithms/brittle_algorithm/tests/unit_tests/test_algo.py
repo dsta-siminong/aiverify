@@ -30,13 +30,12 @@ def test_discover_plugin():
     )
 
 
-
 # Variables for testing
 valid_data_path = str(
     "../../../../../../all_images_all_classes"
 )
 valid_model_path = str(
-    "../../../../../../ship_pipe_sm/ship_pipe_sm"
+    "../../../../../../ship_pipe_sm/ship_pipe_sm"#"../../../../../../api.json"#
 )
 valid_ground_truth_path = str(
     "../../../../../../labels_all_classes.csv"
@@ -51,7 +50,9 @@ test_dict = {"data_str": "data_str"}
 test_tuple = ("data_str", "data_str")
 test_none = None
 
-
+plugin_type = PluginType.PIPELINE
+plugin_type_param = "pipeline_path"#"filename"
+i_type = IPipeline
 class ObjectTest:
     def __init__(self):
         test_discover_plugin()
@@ -65,7 +66,7 @@ class ObjectTest:
             model_instance,
             model_serializer_instance,
             model_error_message,
-        ) = PluginManager.get_instance(PluginType.PIPELINE, **{"pipeline_path": valid_model_path})
+        ) = PluginManager.get_instance(plugin_type, **{plugin_type_param: valid_model_path})
 
         (
             ground_truth_instance,
@@ -154,7 +155,6 @@ def get_invalid_data_instance(request):
         ) = PluginManager.get_instance(PluginType.DATA, **{"filename": request.param})
     return excinfo
 
-
 @pytest.fixture
 def get_model_instance_and_serializer(request):
     test_discover_plugin()
@@ -162,7 +162,7 @@ def get_model_instance_and_serializer(request):
         model_instance,
         model_serializer_instance,
         model_error_message,
-    ) = PluginManager.get_instance(PluginType.PIPELINE, **{"pipeline_path": request.param})
+    ) = PluginManager.get_instance(plugin_type, **{plugin_type_param: request.param})
     yield (model_instance, model_serializer_instance)
 
 
@@ -174,8 +174,9 @@ def get_invalid_model_instance(request):
             model_instance,
             model_serializer_instance,
             model_error_message,
-        ) = PluginManager.get_instance(PluginType.PIPELINE, **{"pipeline_path": request.param})
+        ) = PluginManager.get_instance(plugin_type, **{plugin_type_param: request.param})
     return excinfo
+
 
 @pytest.fixture
 def get_ground_truth_instance_and_serializer(request):
@@ -200,11 +201,10 @@ def test_create_plugin_instance_with_all_valid_input():
     )
 
     assert isinstance(test_plugin._data_instance, IData)
-    assert isinstance(test_plugin._model_instance, IPipeline)
+    assert isinstance(test_plugin._model_instance, i_type)
     assert isinstance(test_plugin._ground_truth_instance, IData)
     assert isinstance(test_plugin._logger, logging.Logger)
     assert isinstance(test_plugin._progress_inst, SimpleProgress)
-
 
 @pytest.mark.parametrize(
     "invalid_data_instance_type",

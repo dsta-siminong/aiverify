@@ -1,18 +1,77 @@
 import requests
-from PIL import Image
-from io import BytesIO
+# from PIL import Image
+import io
 import torch 
 import torch.nn.functional as F 
 import numpy as np
-import matplotlib.pyplot as plt
-import plotly.graph_objects as go
-from tqdm import tqdm
+# import matplotlib.pyplot as plt
+# import plotly.graph_objects as go
+# from tqdm import tqdm
 import torch.nn as nn
-import torchvision.transforms as transforms
-from sklearn.metrics import precision_score, recall_score  , f1_score  , roc_auc_score
-from sklearn.preprocessing import label_binarize
+# import torchvision.transforms as transforms
+# from sklearn.metrics import precision_score, recall_score  , f1_score  , roc_auc_score
+# from sklearn.preprocessing import label_binarize
+
+import time
+import resource
+def mem_mb():
+    return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024 
 
 def evaluate(model, loader, device):
+    if isinstance(model, str):
+        print("STRING MODEL!")
+        print(model)
+        return evaluate_via_api(model, loader)
+    else:
+        print("Direct model")
+        print(type(model), type(model), device)
+        return evaluate_direct(model, loader, device)
+
+def evaluate_via_api(model, loader):
+    API_URL = model
+    correct, total = 0, 0
+    predicted_labels, true_labels = [], []
+
+    session = requests.Session()
+
+    for inputs, targets in loader:
+        batch_np = inputs.numpy()
+
+        buffer = io.BytesIO()
+        np.save(buffer, batch_np)
+        buffer.seek(0)
+        t0 = time.perf_counter()
+        response = session.post(
+            API_URL,
+            files={"file": ("batch.npy", buffer, "application/octet-stream")},
+            timeout=300,
+        )
+        t1 = time.perf_counter()
+        response.raise_for_status()
+
+        result = response.json()
+        t2 = time.perf_counter()
+        print("HTTP round-trip:", t1 - t0)
+        print("JSON decode:", t2 - t1)
+        
+        predicted = np.array(result["predictions"])
+        targets_np = targets.numpy()
+
+        correct += (predicted == targets_np).sum()
+        total += len(targets_np)
+
+        predicted_labels.extend(predicted)
+        true_labels.extend(targets_np)
+
+    session.close()
+
+    return (
+        100 * correct / total,
+        np.array(predicted_labels),
+        np.array(true_labels),
+    )
+
+def evaluate_direct(model, loader, device):
     """
     Evaluate model using data from loader
 
@@ -26,19 +85,51 @@ def evaluate(model, loader, device):
             predicted_labels (np.array): predictions output by label
             true_labels (np.array): ground truth labels
     """
-    model.eval()
+    model.eval(); model.to(device)
     correct, total = 0, 0
     predicted_labels, true_labels = [], []
     with torch.no_grad():
         for inputs, targets in loader:
             inputs, targets = inputs.to(device), targets.to(device)
+            print(f"[mem before model()] {mem_mb():.1f} MB")
             outputs = model(inputs)
+            print(f"[mem after model()] {mem_mb():.1f} MB")
             _, predicted = torch.max(outputs, 1)
             correct += (predicted == targets).sum().item()
             total += targets.size(0)
             predicted_labels.extend(predicted.cpu().numpy())
             true_labels.extend(targets.cpu().numpy())
     return 100 * correct / total, np.array(predicted_labels), np.array(true_labels)
+
+def get_prediction_from_image(model, display_image, device):
+    if isinstance(model, str):
+        return get_prediction_from_image_api(model, display_image)
+    image = torch.tensor(display_image).unsqueeze(0).float()
+    image = image.to(device)
+    model = model.float(); model.to(device)
+
+    model.eval()
+    with torch.no_grad():
+        outputs = model(image)
+        _, prediction = torch.max(outputs, 1)
+    prediction = prediction.item()
+    return prediction
+
+def get_prediction_from_image_api(model, display_image):
+    API_URL = model
+    buffer = io.BytesIO()
+    np.save(buffer, display_image)
+    buffer.seek(0)
+
+    response = requests.post(
+        API_URL,
+        files={"file": ("array.npy", buffer, "application/octet-stream")},
+    )
+    response.raise_for_status()
+    result = response.json()
+
+    prediction = result["prediction"]  # already a plain int, no .item() needed
+    return prediction
 
 def triplets(s):
     """
@@ -60,38 +151,47 @@ def triplets(s):
     assert len(items) % 3 == 0, "Input length must be a multiple of 3"
     return [items[i:i+3] for i in range(0, len(items), 3)]
 
-def collect_probs(model, dataloader, device):
+def collect_probs(model, dataloader, device=None):
     """
-    Collect model predictions, labels, and input images from a DataLoader.
-
-    The function runs the model in evaluation mode over all batches in the dataloader,
-    computes softmax probabilities for each batch, and accumulates the input images,
-    predicted probabilities, and ground truth labels.
-
-    Args:
-        model (nn.Module): A PyTorch model for which predictions are collected.
-        dataloader (DataLoader): PyTorch DataLoader providing input batches (images and labels).
-        device (torch.device): Device to run the model on (e.g., CPU or GPU).
-
-    Returns:
-        Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-            - images: Tensor of all input images concatenated across batches.
-            - probs: Tensor of predicted probabilities for each input.
-            - labels: Tensor of ground truth labels for each input.
+    model can be either:
+      - torch.nn.Module
+      - str (URL of prediction endpoint)
     """
-    model.eval()
 
     probs = []
     labels = []
     images = []
 
+    is_remote = isinstance(model, str)
+
+    if not is_remote:
+        model.eval()
+        model.to(device)
+
     with torch.no_grad():
         for x, y in dataloader:
-            x = x.to(device)
-            y = y.to(device)
 
-            logits = model(x)
-            p = torch.nn.functional.softmax(logits, dim=1)
+            if is_remote:
+                # x is already on CPU from DataLoader
+                buffer = io.BytesIO()
+                np.save(buffer, x.numpy(), allow_pickle=False)
+                buffer.seek(0)
+
+                r = requests.post(
+                    model,
+                    files={"file": ("batch.npy", buffer, "application/octet-stream")},
+                )
+                r.raise_for_status()
+
+                response = r.json()
+
+                logits = torch.tensor(response["raw_scores"])
+                p = torch.softmax(logits, dim=1)
+
+            else:
+                x = x.to(device)
+                logits = model(x)
+                p = torch.softmax(logits, dim=1)
 
             probs.append(p.cpu())
             labels.append(y.cpu())
@@ -102,8 +202,6 @@ def collect_probs(model, dataloader, device):
         torch.cat(probs),
         torch.cat(labels),
     )
-
-    return torch.cat(probs), torch.cat(labels)
 
 def get_num_classes(model: nn.Module) -> int:   
     """
@@ -174,7 +272,8 @@ def handle_class_names_arg(class_names_arg, model):
         ValueError: If a single provided value is not a valid integer.
     """
     if class_names_arg is None or str(class_names_arg).strip() == "":
-        
+        if isinstance(model, str): #API
+            raise ValueError("class_names must be specified if calling model as API")
         print("# fallback: infer from model")
         num_classes = get_num_classes(model)
         class_names = {str(i): f"class_{i}" for i in range(num_classes)}
@@ -197,266 +296,3 @@ def handle_class_names_arg(class_names_arg, model):
             class_names = {str(i): name for i, name in enumerate(class_names_arr)}
 
     return class_names
-
-# ==== OTHER FUNCTIONS THAT ARE NOT USED FOR THIS WHOLE ALGO BUT I DON'T WANT TO DELETE THEM YET ====
-
-class SimpleCNN(nn.Module):
-    def __init__(self):
-        super(SimpleCNN, self).__init__()
-        self.conv1 = nn.Conv2d(3, 32, kernel_size=3, padding=1)
-        self.conv2 = nn.Conv2d(32, 64, kernel_size=3, padding=1)
-        self.fc1 = nn.Linear(64*8*8, 128)
-        self.fc2 = nn.Linear(128, 10)
-        self.pool = nn.MaxPool2d(2, 2)
-        self.relu = nn.ReLU()
-
-    def forward(self, x):
-        x = self.pool(self.relu(self.conv1(x)))
-        x = self.pool(self.relu(self.conv2(x)))
-        x = x.view(x.size(0), -1)
-        x = self.relu(self.fc1(x))
-        x = self.fc2(x)
-        return x
-
-def get_image_from_url(image_url):
-    """
-    Downloads an image from a URL and converts it to a NumPy array.
-
-    Args:
-        image_url (str): The URL pointing to the image.
-
-    Returns:
-        np.ndarray: The image as a NumPy array.
-    """
-    response = requests.get(image_url)
-    image = Image.open(BytesIO(response.content))
-    image_array = np.array(image)
-    return image_array
-
-def get_image_from_path(image_path):
-    """
-    Loads an image from a local file path and converts it to a NumPy array.
-
-    Args:
-        image_path (str): The path to the image file.
-
-    Returns:
-        np.ndarray: The image as a NumPy array.
-    """
-    image = Image.open(image_path)
-    image_np = np.array(image)
-    return image_np
-
-def get_logits(model, dataloader, device):
-    """
-    Get the features, or the inputs before the last layer
-
-    Args:
-        test_loader (torch.Dataloader): data loader for test data
-        model (torch.nn.Module): torch model
-        device (torch.device): device model is on
-
-    Returns: 
-        logits (np.array): array of outputs just before they pass through the softmax/max/last layer for prediction
-    """
-    labels = np.empty((0,))
-
-    model.eval()  # Ensure the model is in evaluation mode
-    with torch.no_grad():
-        with tqdm(dataloader) as progress:
-            for batch_idx, (data, label) in enumerate(progress):
-                data, label = data, label.long()  # No need to move to GPU, stay on CPU
-                data = data.to(device)
-                label = label.to(device)
-                feature = model(data)  # Forward pass
-
-                labels = np.concatenate((labels, label.cpu()))  # Ensure labels are on CPU
-                if batch_idx == 0:
-                    features = feature.detach().cpu()  # Ensure features are on CPU
-                else:
-                    features = np.concatenate((features, feature.detach().cpu()), axis=0)
-    
-    return features, labels
-
-def plot_accuracy_vs_severity(accuracies, severities=None, graph_lib='matplotlib'):
-    """Plots the accuracy/performance of model changes against severities (of data augmentation)
-
-    Args:
-        accuracies (list): list of accuracies or performances
-        severities (list, optional): list of integers representing severities. Defaults to None.
-        graph_lib (str, optional): graphing library in python. Defaults to 'matplotlib'.
-
-    Raises:
-        ValueError: For invalid graphing library given
-
-    Returns:
-        figure: resultant graph
-    """
-    if graph_lib == 'matplotlib':
-        return plot_accuracy_vs_severity_mpl(accuracies, severities)
-    elif graph_lib == 'plotly':
-        return plot_accuracy_vs_severity_plotly(accuracies, severities)
-    else:
-        raise ValueError('not valid graphing library')
-
-def plot_accuracy_vs_severity_mpl(accuracies, severities=None):
-    """Plots the accuracy/performance of model changes against severities in matplotlib
-
-    Args:
-        accuracies (list): list of accuracies or performances
-        severities (list, optional): list of integers representing severities. Defaults to None.
-
-    Returns:
-        figure: resultant graph
-    """
-    if severities is None:
-        severities = list(range(len(accuracies)))
-
-    fig, ax = plt.subplots(figsize=(8, 5))
-    ax.plot(severities, accuracies, marker='o', linestyle='-', color='b')
-    ax.set_xlabel("Severity")
-    ax.set_ylabel("Accuracy")
-    ax.set_title("Model Accuracy vs Severity")
-    ax.set_xticks(severities)
-    ax.grid(True)
-    
-    plt.show()
-    return fig
-
-def plot_accuracy_vs_severity_plotly(accuracies, severities=None):
-    """Plots the accuracy/performance of model changes against severities in plotly
-
-    Args:
-        accuracies (list): list of accuracies or performances
-        severities (list, optional): list of integers representing severities. Defaults to None.
-
-    Returns:
-        figure: resultant graph
-    """
-    if severities is None:
-        severities = list(range(len(accuracies)))
-
-    fig = go.Figure()
-
-    # Add line plot with markers
-    fig.add_trace(go.Scatter(
-        x=severities,
-        y=accuracies,
-        mode='lines+markers',
-        line=dict(color='blue'),
-        marker=dict(size=8),
-        name='Accuracy'
-    ))
-
-    # Update layout
-    fig.update_layout(
-        title='Model Accuracy vs Severity',
-        xaxis_title='Severity',
-        yaxis_title='Accuracy',
-        xaxis=dict(tickmode='array', tickvals=severities),
-        yaxis=dict(range=[0, 1] if max(accuracies) <= 1 else None),
-        width=800,
-        height=500,
-        template='simple_white'
-    )
-
-    fig.show()
-    return fig
-
-def best_fit_gradient(x_values, y_values):
-    """
-    Calculate the gradient (slope) of the best-fit line using the least squares method.
-    
-    Args:
-        x_values (list or array): Independent variable values.
-        y_values (list or array): Dependent variable values.
-    
-    Returns:
-        loat: Slope of the best-fit line.
-    """
-    x_mean = np.mean(x_values)
-    y_mean = np.mean(y_values)
-    
-    numerator = np.sum((x_values - x_mean) * (y_values - y_mean))
-    denominator = np.sum((x_values - x_mean) ** 2)
-    
-    return numerator / denominator
-
-def evaluate_1img(model, device, img_array):
-    """
-    Evaluate a single image using a PyTorch model and return predicted probabilities and label.
-
-    Args:
-        model (nn.Module): A PyTorch model for image classification.
-        device (torch.device): Device to run the model on (CPU or GPU).
-        img_array (numpy.ndarray or PIL.Image.Image): Input image as a NumPy array or PIL Image.
-
-    Returns:
-        Tuple[numpy.ndarray, int]:
-            - probs: Softmax probabilities for each class as a NumPy array.
-            - label: Predicted class index as an integer.
-    """
-    img_tensor = transforms.ToTensor()(img_array).unsqueeze(0)
-    model.eval()
-    with torch.no_grad():
-        output = model(img_tensor.to(device)).cpu()
-        probs = torch.softmax(output, 1).numpy()[0]
-        label = torch.max(output, 1)[1][0].item()
-
-    return probs, label
-
-def get_metric_dict():
-    d = {
-        "accuracy": get_accuracy,
-        "correct_class_proba": get_correct_class_proba,
-        "max_proba": get_max_proba,
-        "f1": get_f1,
-        "recall": get_recall,
-        "precision": get_precision,
-        "auc": get_auc,
-        "ece": get_ece
-    }
-    return d
-
-def get_accuracy(base_acc, y_pred, y_true, features, labels, pred_probs):
-    return base_acc/100
-
-def get_precision(base_acc, y_pred, y_true, features, labels, pred_probs):
-    return precision_score(y_true, y_pred, average='macro', zero_division=np.nan)
-
-def get_recall(base_acc, y_pred, y_true, features, labels, pred_probs):
-    return recall_score(y_true, y_pred, average='macro', zero_division=np.nan)
-
-def get_f1(base_acc, y_pred, y_true, features, labels, pred_probs):
-    return f1_score(y_true, y_pred, average='macro')
-
-def get_auc(base_acc, y_pred, y_true, features, labels, pred_probs):
-    y_true_bin = label_binarize(y_true, classes=np.unique(y_true))
-    y_pred_proba_filtered = pred_probs[:, np.unique(y_true)]
-    return roc_auc_score(y_true_bin, y_pred_proba_filtered, average='macro', multi_class='ovr')
-
-def get_correct_class_proba(base_acc, y_pred, y_true, features, labels, pred_probs):
-    return np.array([x[labels[i]] for i,x in enumerate(pred_probs)]).mean()
-
-def get_max_proba(base_acc, y_pred, y_true, features, labels, pred_probs):
-    return np.array([max(x) for i,x in enumerate(pred_probs)]).mean()
-
-def get_f1(base_acc, y_pred, y_true, features, labels, pred_probs):
-    return f1_score(y_true, y_pred, average='macro')
-
-def get_ece(base_acc, y_pred, y_true, features, labels, pred_probs, n_bins=20):
-    accs = y_pred == y_true
-    bin_boundaries = np.linspace(0,1,n_bins+1)
-    confs = np.max(pred_probs, axis=1)
-    ece = 0
-    for i in range(n_bins):
-        bin_l, bin_u = bin_boundaries[i], bin_boundaries[i+1]
-        in_bin = (confs > bin_l) & (confs <= bin_u)
-        if in_bin.any():
-            bin_acc = accs[in_bin].mean()
-            bin_conf = confs[in_bin].mean()
-            ece += np.abs(bin_acc - bin_conf) * in_bin.mean()
-
-    return float(ece)
-
-

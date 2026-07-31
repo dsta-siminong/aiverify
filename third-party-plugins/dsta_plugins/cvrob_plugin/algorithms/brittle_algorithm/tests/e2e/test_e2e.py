@@ -10,7 +10,7 @@ binary_classification_pipeline = {
         "../../../../../../all_images_all_classes"
     ),
     "model_path": str(
-        "../../../../../../ship_pipe_sm/ship_pipe_sm"
+        "../../../../../../ship_pipe_sm/ship_pipe_sm"#"../../../../../../api.json"#
     ),
     "ground_truth_path": str(
         "../../../../../../labels_all_classes.csv"
@@ -29,8 +29,6 @@ binary_classification_pipeline = {
         "custom_parameters": "GaussianBlur sigma_limit 1.6,2.6,3.6",
     }
 }
-
-
 
 
 @pytest.mark.parametrize(
