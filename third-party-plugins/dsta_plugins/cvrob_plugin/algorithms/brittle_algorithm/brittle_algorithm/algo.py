@@ -23,7 +23,7 @@ import torchvision.transforms as transforms
 import torch
 from torch.utils.data import DataLoader, TensorDataset
 from .cvrob_util import *
-from .augmentations_class import make_augmentation_dict, custom_parameter_change
+from .augmentations_class import make_augmentation_dict, custom_parameter_change, handle_url_algos
 from .augmentations_brittle import *
 import pandas as pd 
 import json
@@ -396,8 +396,9 @@ class Plugin(IAlgorithm):
         class_names_int = {int(k): v for k, v in class_names.items()}
 
         aug_name = self._input_arguments['aug_method']
-        if aug_name not in aug_dict:
-            raise ValueError("aug method not valid")
+        if 'url' in aug_dict:
+            if 'http' in aug_dict['url']:
+                handle_url_algos(aug_dict, aug_methods)
         aug_class = aug_dict[aug_name]
 
         severities = self._validate_severities()

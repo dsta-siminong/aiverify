@@ -6,7 +6,7 @@
     "maxW": 12,
     "maxH": 36
   },
-  "name": "Augmentations By Class Widget for Confusion Matrix Plots",
+  "name": "[2a2] Augmentations By Class Widget for Confusion Matrix Plots",
   "description": "Augmentations By Class Widget for Confusion Matrix Plots",
   "dynamicHeight": true,
   "dependencies": [

@@ -1,12 +1,6 @@
-<div style={{
-  width: "100%",
-  padding: "16px",
-  marginBottom: "24px",
-  border: "1px solid #e5e7eb",
-  borderRadius: "8px",
-  backgroundColor: "#fafafa",
-  boxSizing: "border-box"
-}}>
+import InfoBox from "./InfoBox";
+
+<InfoBox>
   <h3>Corruption Progression Visualization</h3>
 
   <span>
@@ -23,17 +17,9 @@
     <span style={{ color: "green", fontWeight: "bold" }}>green</span> border appears
     when the prediction is correct.
   </span>
-</div>
+</InfoBox>
 
-<div style={{
-  width: "100%",
-  padding: "16px",
-  marginBottom: "24px",
-  border: "1px solid #e5e7eb",
-  borderRadius: "8px",
-  backgroundColor: "#fafafa",
-  boxSizing: "border-box"
-}}>
+<InfoBox>
   <h4>
     <b>How to read?</b>
   </h4>
@@ -53,4 +39,4 @@
     <li>The model’s predicted class for the corrupted image</li>
     <li>The ground truth class (actual label) of the image</li>
   </ul>
-</div>
+</InfoBox>

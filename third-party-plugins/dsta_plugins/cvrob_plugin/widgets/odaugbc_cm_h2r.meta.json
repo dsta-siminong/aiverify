@@ -1,12 +1,12 @@
 {
-  "cid": "odabc_cm_h2r",
+  "cid": "odaugbc_cm_h2r",
   "widgetSize": {
     "minW": 2,
     "minH": 2,
     "maxW": 12,
     "maxH": 36
   },
-  "name": "How2Read OD Augmentations by Class Confusion Matrix Plots",
+  "name": "[5a1] How2Read OD Augmentations by Class Confusion Matrix Plots",
   "description": "How to read the object detection augmentations by class algo's confusion matrix stats widget",
   "dynamicHeight": true
 }

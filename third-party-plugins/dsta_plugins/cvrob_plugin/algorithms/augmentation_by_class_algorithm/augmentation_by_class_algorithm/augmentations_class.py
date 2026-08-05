@@ -5,15 +5,152 @@ os.environ['NO_ALBUMENTATIONS_UPDATE'] = '1'
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
 import inspect
+import io
+import requests
+import ast
+# from nrtk.impls.perturb_image.optical import RadialDistortionPerturber
+from nrtk.impls.perturb_image.optical.otf import CircularAperturePerturber, DefocusPerturber, DetectorPerturber, JitterPerturber, TurbulenceAperturePerturber
+# from nrtk.impls.perturb_image.photometric.enhance import SharpnessPerturber, BrightnessPerturber
+from nrtk.impls.perturb_image.environment import WaterDropletPerturber, HazePerturber
+
+DETERMINISTIC = {"None", "BrightnessUp", "BrightnessDown", "GaussianBlur", "ScaleUp", "ScaleDown", "Compression"}
+_NRTK_PERTURBER_CACHE = {}
+
+def _make_hashable(value):
+    """
+    Recursively convert dicts and lists into hashable tuples for cache keys.
+
+    Dicts become sorted key-value tuples and lists/tuples become tuples; other
+    values are returned unchanged.
+
+    Args:
+        value: The value to make hashable.
+
+    Returns:
+        A hashable representation of ``value``.
+    """
+    if isinstance(value, dict):
+        return tuple(sorted((k, _make_hashable(v)) for k, v in value.items()))
+    if isinstance(value, (list, tuple)):
+        return tuple(_make_hashable(v) for v in value)
+    return value
+
+def parse_parameters(s):
+    """
+    Parse a parameter string into a list of tuples, floats, or strings.
+
+    Tries, in order: literal tuples (when ``(`` is present), a comma-separated
+    list of floats, then a comma-separated list of trimmed strings.
+
+    Args:
+        s (str): Comma-separated parameter values, optionally with tuples.
+
+    Returns:
+        list: Parsed values as tuples, floats, or strings depending on content.
+    """
+    s = s.strip()
+    # Case 1: tuples present
+    if "(" in s:
+        try:
+            return ast.literal_eval(f"[{s}]")
+        except (ValueError, SyntaxError):
+            pass
+    # Case 2: try numeric list
+    try:
+        return [float(x) for x in s.split(",")]
+    except ValueError:
+        # Case 3: fallback to strings
+        return [x.strip() for x in s.split(",")]
+
+def custom_parameter_change(aug_dict, aug_name, param_name, parameters_in_string):
+    """
+    Rebuild one augmentation in the dict using user-supplied parameter values.
+
+    Parses the value string, constructs a per-severity ``param_dict`` for the
+    named parameter (with a special ``Erasing``/``scale`` case), and replaces the
+    matching augmentation with a fresh ``Augmentation`` built from it.
+
+    Args:
+        aug_dict (dict): Mapping of augmentation name to ``Augmentation`` instance.
+        aug_name (str): Name of the augmentation to override.
+        param_name (str): Name of the parameter to set.
+        parameters_in_string (str): Comma-separated parameter values to apply.
+
+    Returns:
+        dict: The updated augmentation dict (mutated in place).
+    """
+    parameters_in_num = parse_parameters(parameters_in_string)
+    param_dict = {}
+    if aug_name == "Erasing" and param_name == "scale":
+        for tup in parameters_in_num:
+            temp = {
+                'num_holes_range': (1,1),
+                'hole_height_range': tup,
+                'hole_width_range': tup,
+                'p':1.0
+            }  
+            param_dict[f"{param_name}_{tup[0]}"] = temp
+    else: 
+        for param in parameters_in_num:
+            temp = {
+                param_name: param,
+                'p':1.0
+            }  
+            val = param if type(param) != tuple else param[0]
+            param_dict[f"{param_name}_{val}"] = temp
+
+    for key in aug_dict:
+        if key == aug_name:
+            aug_class = aug_dict[key]
+            aug_func = aug_class.aug_func ; rand_seed = aug_class.random_seed
+            new_aug_class = Augmentation(aug_name, param_dict, aug_func)
+            if rand_seed is not None: 
+                aug_class.set_seed(rand_seed)
+            aug_dict[key] = new_aug_class
+
+    return aug_dict
+
+# ===============================================================================
 
 def make_augmentation_dict(lib_name):
+    """
+    Build the augmentation dictionary for the requested backend.
+
+    Dispatches to the albumentations, NRTK, or URL-based builder based on
+    ``lib_name``.
+
+    Args:
+        lib_name (str): Backend selector — ``"album"``/``"albumentations"``,
+            ``"nrtk"``, or a URL containing ``"http"``.
+
+    Returns:
+        Optional[dict]: Mapping of augmentation name to instance, or None if the
+            backend is unrecognised.
+    """
     if lib_name in ['album', 'albumentations']:
         return make_augmentation_dict_album2()
     elif lib_name in ['nrtk']:
         return make_augmentation_dict_nrtk()
+    elif "http" in lib_name:
+        return make_augmentation_dict_from_url(lib_name)
     return None
 
 def check_module(module):
+    """
+    Select the corruption function matching an augmentation callable's library.
+
+    Inspects the string form of ``module`` to route NRTK and albumentations
+    callables to their respective corruption helpers.
+
+    Args:
+        module: The augmentation callable (or ``"None"``) to inspect.
+
+    Returns:
+        The matching corruption function, or the string ``"None"``.
+
+    Raises:
+        ValueError: If the library cannot be identified.
+    """
     s = str(module)
     if s == "None":
         return "None"
@@ -29,6 +166,20 @@ def check_module(module):
         raise ValueError('not valid library name')
 
 def corrupt_func_album_reduced(images_np, aug_func, aug_params):
+    """
+    Apply an albumentations transform to a batch of images.
+
+    Composes ``aug_func`` with ``ToTensorV2`` and applies it per image, advancing
+    the random seed by the image index so each image is perturbed independently.
+
+    Args:
+        images_np (np.ndarray): Batch of HWC images.
+        aug_func: Albumentations transform class to instantiate.
+        aug_params (dict): Transform kwargs; ``"random_seed"`` is consumed here.
+
+    Returns:
+        np.ndarray: Batch of corrupted HWC images.
+    """
     rseed = aug_params.get("random_seed", 42)
     aug_params = {k:v for k,v in aug_params.items() if k != "random_seed"}
 
@@ -46,18 +197,21 @@ def corrupt_func_album_reduced(images_np, aug_func, aug_params):
 #     corrupted_imgs = np.array([aug_np_wrapper(img, aug_func, **aug_params) for img in images_np])
 #     return corrupted_imgs
 
-_NRTK_PERTURBER_CACHE = {}
- 
- 
-def _make_hashable(value):
-    """Recursively convert dict/list values into hashable tuples for use as a cache key."""
-    if isinstance(value, dict):
-        return tuple(sorted((k, _make_hashable(v)) for k, v in value.items()))
-    if isinstance(value, (list, tuple)):
-        return tuple(_make_hashable(v) for v in value)
-    return value
-
 def corrupt_func_nrtk_reduced(images_np, aug_func, aug_params):
+    """
+    Apply an NRTK perturber to a batch of images, caching the perturber.
+
+    Splits out ``img_gsd``/``random_seed``, injects ``seed`` when the perturber
+    accepts it, and reuses a cached perturber keyed on the callable and params.
+
+    Args:
+        images_np (np.ndarray): Batch of HWC images.
+        aug_func: NRTK perturber class to instantiate.
+        aug_params (dict): Perturber kwargs, possibly with ``img_gsd``/``random_seed``.
+
+    Returns:
+        np.ndarray: Batch of perturbed images.
+    """
     def apply(img):
         if img_gsd is not None:
             return perturber(image=img, img_gsd=img_gsd)[0]
@@ -84,93 +238,144 @@ def corrupt_func_nrtk_reduced(images_np, aug_func, aug_params):
 #     corrupted_imgs = np.array([ corrupt(img.astype(np.uint8), corruption_name=aug_params['corrname'], severity=aug_params['severity']) for img in images_np ])
 #     return corrupted_imgs
 
-def make_augmentation_dict_album():
-    augmentations_album, aug_names_album = get_album_augmentations_list()
-    augmentations_album2 = []
-    for a in augmentations_album:
-        td = {"None": "None"}
-        aug_func = a[0]
-        for severity in range(1,6):
-            aug_params = {k: (v(severity) if callable(v) else v) for k, v in a[1].items()}
-            td[f"severity_{severity}"] = aug_params
-        augmentations_album2.append((aug_func, td))
-    d = {}
-    for aug_tuple, aug_name in zip(augmentations_album2, aug_names_album):
-        # print(aug_tuple[1], aug_tuple[0])
-        new_aug = Augmentation(aug_name, aug_tuple[1], aug_tuple[0])
-        d[aug_name] = new_aug 
-    return d 
+# ===============================================================================
 
-def get_album_augmentations_list():
+def make_augmentation_dict_from_url(url):
     """
-    Get the augmentation list and string for albumentations.
+    Build the initial augmentation dict for a remote URL backend.
+
+    Seeds the dict with the backend URL and the no-op ``"None"`` augmentation;
+    concrete augmentations are added later by ``handle_url_algos``.
 
     Args:
-        None.
+        url (str): Base URL of the remote augmentation service.
 
     Returns:
-        augmentation_list (list): list of two-length tuples 
-        augmentation_str (list): list of names of the given libraries
+        dict: Mapping with the ``"url"`` entry and a ``"None"`` augmentation.
     """
-    augmentations_album = [
-        (A.RandomRain, {'slant_range': (0, 30), 
-                        'drop_length': lambda s: 2*s, 
-                        'drop_width': lambda s: s, 
-                        'drop_color': (200, 200, 200), 
-                        'blur_value': lambda s: 3 + s, 
-                        'brightness_coefficient': lambda s: 1 - 0.1*s, 
-                        'rain_type': 'drizzle', 
-                        'p': 1.0}),
-        (A.RandomSnow, {'snow_point_range': lambda s: (0.3+0.1 * s, 0.5 + 0.1* s), 
-                        'brightness_coeff': lambda s: 1.0+0.35*s, 
-                        'p': 1.0}),
-        (A.ColorJitter, {'brightness': lambda s: (0.85+0.4*s, 1+0.4*s),
-                        # 'contrast': (1,1),
-                        # 'saturation': (1,1),
-                        # 'hue': (0,0),
-                        'p':1}),
-        (A.GaussianBlur, {'blur_limit': lambda s: (9 + 6*s, 13 + 6*s), 
-                        'sigma_limit':lambda s: (0.25 + 0.25*s, 1.0 + 0.25*s),
-                        'p': 1.0}),
-        # (A.GlassBlur, {'sigma': lambda s: s*2, 'p': 1.0}),
-        # (A.Defocus, {'radius': lambda s: (3*s,3*s+1), 'alias_blur': lambda s: 2*s, 'p': 1.0}),
-        # (A.MotionBlur, {'blur_limit': lambda s: (5+8*s, 7+12*s), 'p': 1.0}),
-        # (A.ZoomBlur, {'max_factor': lambda s: 1 + 0.25 * s, 'p': 1.0}),
-        (A.Affine, {'shear': lambda s: (-10*s, 10*s), 'p': 1.0}),
-        (A.Affine, {'translate_percent': lambda s: (-0.1*s, 0.1*s), 'p': 1.0}),
-        (A.Affine, {'scale': lambda s: (1/(1+0.75*s) , (1+0.75*s) ), 'p': 1.0}),
-        (A.ColorJitter, {'contrast': lambda s:  (1+0.75*s,1+0.75*s),'p':1}),
-        (A.GaussNoise, {'std_range':  lambda s: (0,0.05*s), 'mean_range': lambda s:  (0,0.05*s),'p':1}),
-        (A.Perspective, {'scale':  lambda s: 0.3*s,'p':1}),
-        # (A.Erasing, {'scale': lambda s: (0.10*s, 0.10*s), 'ratio': (0.5, 2),'p':1}),
-        (A.CoarseDropout, {'hole_height_range': lambda s: (0.1*s, 0.1*s),
-                           'hole_width_range': lambda s: (0.1*s, 0.1*s), 
-                           'p': 1.0}),
-        (A.ImageCompression, {'quality_range': lambda s: (100-19*s, 100-19*s)}),
-        (A.Rotate, {'limit': lambda s: 25*s,'p':1}),
-    ]
-    aug_names_album = [
-        "Random Rain", 
-        "Random Snow", 
-        "Brightness", 
-        "Gaussian Blur", 
-        # "Glass Blur", 
-        # "Defocus Blur", 
-        # "Motion Blur", 
-        # "Zoom Blur",
-        "Shear", 
-        "Translate",
-        "Scale",
-        "Contrast",
-        "Gaussian Noise",
-        "Perspective",
-        "Erasing",
-        "Compression",
-        "Rotation"
-    ]
-    return augmentations_album, aug_names_album
+    d = {"url": url, "None": AugmentationUrl(url, "None")}
+    return d
+
+def handle_url_algos(aug_dict, aug_algos):
+    """
+    Populate the URL-backed augmentation dict with remote augmentations.
+
+    When ``aug_algos`` is ``["all"]``, the available augmentations are fetched
+    from the service's ``/health`` endpoint; each is added as an ``AugmentationUrl``.
+
+    Args:
+        aug_dict (dict): URL-backed augmentation dict containing a ``"url"`` entry.
+        aug_algos (list[str]): Augmentation names to add, or ``["all"]``.
+
+    Returns:
+        dict: The updated augmentation dict (mutated in place).
+
+    Raises:
+        requests.HTTPError: If the ``/health`` request fails.
+    """
+    if aug_algos == ["all"]:
+        r = requests.get(f"{aug_dict['url']}/health", timeout=10)
+        aug_algos = r.json()['available_augmentations']
+    for algo in aug_algos:
+        aug_dict[algo] = AugmentationUrl(aug_dict['url'], algo)
+    return aug_dict
+
+# def make_augmentation_dict_album():
+#     augmentations_album, aug_names_album = get_album_augmentations_list()
+#     augmentations_album2 = []
+#     for a in augmentations_album:
+#         td = {"None": "None"}
+#         aug_func = a[0]
+#         for severity in range(1,6):
+#             aug_params = {k: (v(severity) if callable(v) else v) for k, v in a[1].items()}
+#             td[f"severity_{severity}"] = aug_params
+#         augmentations_album2.append((aug_func, td))
+#     d = {}
+#     for aug_tuple, aug_name in zip(augmentations_album2, aug_names_album):
+#         # print(aug_tuple[1], aug_tuple[0])
+#         new_aug = Augmentation(aug_name, aug_tuple[1], aug_tuple[0])
+#         d[aug_name] = new_aug 
+#     return d 
+
+# def get_album_augmentations_list():
+#     """
+#     Get the augmentation list and string for albumentations.
+
+#     Args:
+#         None.
+
+#     Returns:
+#         augmentation_list (list): list of two-length tuples 
+#         augmentation_str (list): list of names of the given libraries
+#     """
+#     augmentations_album = [
+#         (A.RandomRain, {'slant_range': (0, 30), 
+#                         'drop_length': lambda s: 2*s, 
+#                         'drop_width': lambda s: s, 
+#                         'drop_color': (200, 200, 200), 
+#                         'blur_value': lambda s: 3 + s, 
+#                         'brightness_coefficient': lambda s: 1 - 0.1*s, 
+#                         'rain_type': 'drizzle', 
+#                         'p': 1.0}),
+#         (A.RandomSnow, {'snow_point_range': lambda s: (0.3+0.1 * s, 0.5 + 0.1* s), 
+#                         'brightness_coeff': lambda s: 1.0+0.35*s, 
+#                         'p': 1.0}),
+#         (A.ColorJitter, {'brightness': lambda s: (0.85+0.4*s, 1+0.4*s),
+#                         # 'contrast': (1,1),
+#                         # 'saturation': (1,1),
+#                         # 'hue': (0,0),
+#                         'p':1}),
+#         (A.GaussianBlur, {'blur_limit': lambda s: (9 + 6*s, 13 + 6*s), 
+#                         'sigma_limit':lambda s: (0.25 + 0.25*s, 1.0 + 0.25*s),
+#                         'p': 1.0}),
+#         # (A.GlassBlur, {'sigma': lambda s: s*2, 'p': 1.0}),
+#         # (A.Defocus, {'radius': lambda s: (3*s,3*s+1), 'alias_blur': lambda s: 2*s, 'p': 1.0}),
+#         # (A.MotionBlur, {'blur_limit': lambda s: (5+8*s, 7+12*s), 'p': 1.0}),
+#         # (A.ZoomBlur, {'max_factor': lambda s: 1 + 0.25 * s, 'p': 1.0}),
+#         (A.Affine, {'shear': lambda s: (-10*s, 10*s), 'p': 1.0}),
+#         (A.Affine, {'translate_percent': lambda s: (-0.1*s, 0.1*s), 'p': 1.0}),
+#         (A.Affine, {'scale': lambda s: (1/(1+0.75*s) , (1+0.75*s) ), 'p': 1.0}),
+#         (A.ColorJitter, {'contrast': lambda s:  (1+0.75*s,1+0.75*s),'p':1}),
+#         (A.GaussNoise, {'std_range':  lambda s: (0,0.05*s), 'mean_range': lambda s:  (0,0.05*s),'p':1}),
+#         (A.Perspective, {'scale':  lambda s: 0.3*s,'p':1}),
+#         # (A.Erasing, {'scale': lambda s: (0.10*s, 0.10*s), 'ratio': (0.5, 2),'p':1}),
+#         (A.CoarseDropout, {'hole_height_range': lambda s: (0.1*s, 0.1*s),
+#                            'hole_width_range': lambda s: (0.1*s, 0.1*s), 
+#                            'p': 1.0}),
+#         (A.ImageCompression, {'quality_range': lambda s: (100-19*s, 100-19*s)}),
+#         (A.Rotate, {'limit': lambda s: 25*s,'p':1}),
+#     ]
+#     aug_names_album = [
+#         "Random Rain", 
+#         "Random Snow", 
+#         "Brightness", 
+#         "Gaussian Blur", 
+#         # "Glass Blur", 
+#         # "Defocus Blur", 
+#         # "Motion Blur", 
+#         # "Zoom Blur",
+#         "Shear", 
+#         "Translate",
+#         "Scale",
+#         "Contrast",
+#         "Gaussian Noise",
+#         "Perspective",
+#         "Erasing",
+#         "Compression",
+#         "Rotation"
+#     ]
+#     return augmentations_album, aug_names_album
 
 def get_augmentation_dict_album_header():
+    """
+    Build the albumentations augmentation specification table.
+
+    Returns a nested mapping of augmentation name to per-severity entries, each a
+    ``(transform_class, params)`` tuple defining the transform at that severity.
+
+    Returns:
+        dict: Augmentation name -> {severity_label: (transform_class, params)}.
+    """
     rng = np.random.default_rng(42)
     d = {
         "None":
@@ -245,13 +450,40 @@ def get_augmentation_dict_album_header():
 
     return d
 
-# from nrtk.impls.perturb_image.optical import RadialDistortionPerturber
-from nrtk.impls.perturb_image.optical.otf import CircularAperturePerturber, DefocusPerturber, DetectorPerturber, JitterPerturber, TurbulenceAperturePerturber
-# from nrtk.impls.perturb_image.photometric.enhance import SharpnessPerturber, BrightnessPerturber
-from nrtk.impls.perturb_image.environment import WaterDropletPerturber, HazePerturber
+def make_augmentation_dict_album2():
+    """
+    Build the albumentations augmentation dict of ``Augmentation`` instances.
+
+    Reads the spec table, injects a fixed ``random_seed`` into each non-``None``
+    severity's params, and wraps each augmentation as an ``Augmentation``.
+
+    Returns:
+        dict: Mapping of augmentation name to ``Augmentation`` instance.
+    """
+    old_d = get_augmentation_dict_album_header()
+    d = {}
+    for k,v in old_d.items():
+        param_dict = {k1:v1[1] for k1,v1 in v.items()}
+        for k1,v1 in param_dict.items():
+            if k1 != "None":
+                print(k1, v1)
+                v1['random_seed'] = 42
+        aug_func = v[list(v.keys())[0]][0]
+        print(aug_func , "aug_func")
+        new_aug = Augmentation(k, param_dict, aug_func)
+        d[k] = new_aug 
+    return d 
 
 def get_augmentation_dict_nrtk_headers():
+    """
+    Build the NRTK perturber-class and per-severity parameter tables.
 
+    Returns two parallel mappings keyed by augmentation name: one to the NRTK
+    perturber class and one to its per-severity parameter dicts.
+
+    Returns:
+        Tuple[dict, dict]: (name -> perturber class, name -> {severity: params}).
+    """
     nrtk_rain = [
         ['light', [0.0,0.5], 5, 0.05],
         ['medium', [0.5,1.0], 10, 0.5],
@@ -321,6 +553,19 @@ def get_augmentation_dict_nrtk_headers():
     return d_func, d_params
 
 def make_augmentation_dict_nrtk():
+    """
+    Build the NRTK augmentation dict of ``Augmentation`` instances.
+
+    Pairs each perturber class with its parameters, injects a fixed
+    ``random_seed`` into every non-``None`` severity, and wraps each as an
+    ``Augmentation``.
+
+    Returns:
+        dict: Mapping of augmentation name to ``Augmentation`` instance.
+
+    Raises:
+        AssertionError: If the func and param tables have mismatched keys.
+    """
     d_func, d_params = get_augmentation_dict_nrtk_headers()
     assert d_func.keys() == d_params.keys()
     d = {}
@@ -335,74 +580,6 @@ def make_augmentation_dict_nrtk():
         new_aug = Augmentation(key, param_dict, func)
         d[key] = new_aug 
     return d
-
-DETERMINISTIC = {"None", "BrightnessUp", "BrightnessDown", "GaussianBlur", "ScaleUp", "ScaleDown", "Compression"}
-
-import ast
-
-def parse_parameters(s):
-    s = s.strip()
-
-    # Case 1: tuples present
-    if "(" in s:
-        try:
-            return ast.literal_eval(f"[{s}]")
-        except (ValueError, SyntaxError):
-            pass
-
-    # Case 2: try numeric list
-    try:
-        return [float(x) for x in s.split(",")]
-    except ValueError:
-        # Case 3: fallback to strings
-        return [x.strip() for x in s.split(",")]
-
-def custom_parameter_change(aug_dict, aug_name, param_name, parameters_in_string):
-    parameters_in_num = parse_parameters(parameters_in_string)
-    param_dict = {}
-    if aug_name == "Erasing" and param_name == "scale":
-        for tup in parameters_in_num:
-            temp = {
-                'num_holes_range': (1,1),
-                'hole_height_range': tup,
-                'hole_width_range': tup,
-                'p':1.0
-            }  
-            param_dict[f"{param_name}_{tup[0]}"] = temp
-    else: 
-        for param in parameters_in_num:
-            temp = {
-                param_name: param,
-                'p':1.0
-            }  
-            val = param if type(param) != tuple else param[0]
-            param_dict[f"{param_name}_{val}"] = temp
-
-    for key in aug_dict:
-        if key == aug_name:
-            aug_class = aug_dict[key]
-            aug_func = aug_class.aug_func ; rand_seed = aug_class.random_seed
-            new_aug_class = Augmentation(aug_name, param_dict, aug_func)
-            if rand_seed is not None: 
-                aug_class.set_seed(rand_seed)
-            aug_dict[key] = new_aug_class
-
-    return aug_dict
-
-def make_augmentation_dict_album2():
-    old_d = get_augmentation_dict_album_header()
-    d = {}
-    for k,v in old_d.items():
-        param_dict = {k1:v1[1] for k1,v1 in v.items()}
-        for k1,v1 in param_dict.items():
-            if k1 != "None":
-                print(k1, v1)
-                v1['random_seed'] = 42
-        aug_func = v[list(v.keys())[0]][0]
-        print(aug_func , "aug_func")
-        new_aug = Augmentation(k, param_dict, aug_func)
-        d[k] = new_aug 
-    return d 
 
 # def make_augmentation_dict_imagecorrupt():
 #     augmentations = [
@@ -426,9 +603,121 @@ def make_augmentation_dict_album2():
 #         d[aug_name] = new_aug 
 #     return d
 
-class Augmentation:
+# ===============================================================================
+
+class BaseAugmentation:
+    """Shared behaviour for augmentation backends.
+
+    Subclasses (local-library `Augmentation`, remote `AugmentationUrl`) must
+    define ``self.name``, ``self.severities`` and ``self.random_seed``, and
+    implement their own ``corr_func_arr`` and ``set_seed``. The severity
+    resolution and corrupted-dataloader construction are identical across
+    backends, so they live here.
+    """
+
+    def determine_severity(self, severity_idx):
+        """
+        Resolve a severity index into its severity label.
+
+        Integer indices map into ``["None"] + self.severities``; non-integer
+        values are assumed to be labels already and returned unchanged.
+
+        Args:
+            severity_idx (int | str): Severity index or label.
+
+        Returns:
+            str: The resolved severity label.
+        """
+        if isinstance(severity_idx, int):
+            all_severities = ["None"] + self.severities
+            return all_severities[severity_idx]
+        return severity_idx
+
+    def corr_func_arr(self, arr, severity_idx):
+        """
+        Corrupt a batch of images at the given severity (implemented by subclass).
+
+        Args:
+            arr (np.ndarray): Batch of images to corrupt.
+            severity_idx (int | str): Severity index or label.
+
+        Returns:
+            np.ndarray: The corrupted batch.
+
+        Raises:
+            NotImplementedError: Always; subclasses must override this.
+        """
+        raise NotImplementedError
+
+    def set_seed(self, x):
+        """
+        Set the random seed for the augmentation (implemented by subclass).
+
+        Args:
+            x (int): Seed value.
+
+        Raises:
+            NotImplementedError: Always; subclasses must override this.
+        """
+        raise NotImplementedError
+
+    def corr_func_dataloader(self, testloader, severity_idx):
+        """
+        Wrap a loader so its images are corrupted at the given severity.
+
+        Returns the original loader unchanged for ``None`` augmentation/severity;
+        otherwise wraps the dataset in ``CorruptedDataset`` behind a new loader
+        that mirrors the source loader's batch size and collate function.
+
+        Args:
+            testloader (torch.utils.data.DataLoader): Source loader of clean images.
+            severity_idx (int | str): Severity index or label to apply.
+
+        Returns:
+            torch.utils.data.DataLoader: A loader yielding corrupted images.
+        """
+        severity = self.determine_severity(severity_idx)
+        if self.name in ["None", None] or severity in ["None", None]:
+            return testloader
+
+        dataset = CorruptedDataset(
+            testloader.dataset,
+            self.corr_func_arr,
+            severity_idx,
+        )
+
+        pin_memory = False  # torch.cuda.is_available()
+        return torch.utils.data.DataLoader(
+            dataset,
+            batch_size=testloader.batch_size,
+            shuffle=False,
+            num_workers=0,
+            pin_memory=pin_memory,
+            collate_fn=testloader.collate_fn,
+        )
+
+
+class Augmentation(BaseAugmentation):
+    """
+    Local-library augmentation backed by an albumentations/NRTK callable.
+
+    Holds the per-severity parameters and the corruption function selected for
+    the callable's library, and marks whether the augmentation is deterministic.
+    """
+
     def __init__(self, name, param_dict, aug_func):
-        self.name = name 
+        """
+        Initialise the augmentation and resolve its corruption function.
+
+        De-duplicates repeated severity labels, selects the corruption function
+        via ``check_module``, and flags determinism based on ``DETERMINISTIC``.
+
+        Args:
+            name (str): Augmentation name.
+            param_dict (dict): Mapping of severity label to parameter dict.
+            aug_func: The albumentations/NRTK callable (or ``"None"``).
+        """
+        self.name = name
         self.severities = list(param_dict.keys())
         if len(set(self.severities)) == 1 and len(self.severities) != 1:
             self.severities = [f"{x}_{i}" for i,x in enumerate(self.severities)]
@@ -442,6 +731,12 @@ class Augmentation:
         self.deterministic = True if name in DETERMINISTIC else False 
 
     def set_seed(self, x):
+        """
+        Set the random seed on every non-``None`` severity's parameters.
+
+        Args:
+            x (int): Seed value to store and inject into each severity's params.
+        """
         self.random_seed = x
         if self.name != "None":
             for k in self.param_dict:
@@ -450,19 +745,21 @@ class Augmentation:
                     "random_seed": x
                 }
 
-    def determine_severity(self, severity_idx):
-        if type(severity_idx) == int:
-            # print(f"Index is integer value {severity_idx}")
-            all_severities = ["None"] + self.severities 
-            severity = all_severities[severity_idx]
-            # print(f"Which corresponds to value {severity}")
-        else:
-            # print(f"Severity is directly referenced as {severity_idx}")
-            severity = severity_idx
-        return severity
-
     def corr_func_one_img(self, img, severity_idx):
-        if type(severity_idx) == int:
+        """
+        Corrupt a single image at the given severity.
+
+        Resolves the severity (index or label) and applies the corruption
+        function; the ``None`` augmentation returns the image unchanged.
+
+        Args:
+            img (np.ndarray): The image to corrupt.
+            severity_idx (int | str): Severity index or label.
+
+        Returns:
+            np.ndarray: The corrupted image.
+        """
+        if isinstance(severity_idx, int):
             severity = self.severities[severity_idx]
         else:
             severity = severity_idx
@@ -474,51 +771,74 @@ class Augmentation:
         return corrupted_image[0]
 
     def corr_func_arr(self, arr, severity_idx):
-        if type(severity_idx) == int:
+        """
+        Corrupt a batch of images at the given severity.
+
+        Resolves the severity (index or label) and applies the corruption
+        function; ``None`` augmentation/severity returns the batch unchanged.
+
+        Args:
+            arr (np.ndarray): Batch of images to corrupt.
+            severity_idx (int | str): Severity index or label.
+
+        Returns:
+            np.ndarray: The corrupted batch.
+        """
+        if isinstance(severity_idx, int):
             # print(self.severities, "SEV", severity_idx)
             severity = self.severities[severity_idx]
         else:
             severity = severity_idx
-        if self.name not in ["None", None]:
-            corrupted_images = self.corrupt_func(arr, self.aug_func, self.param_dict[severity])
-        else:
+        if self.name in ["None", None] or severity in ["None", None]:
             corrupted_images = arr
+        else:
+            corrupted_images = self.corrupt_func(arr, self.aug_func, self.param_dict[severity])
 
         return corrupted_images
-    
-    def corr_func_dataloader(self, testloader, severity_idx):
-        severity = self.determine_severity(severity_idx)
-        if self.name in ["None", None] or severity in ["None", None]:
-            return testloader
-
-        dataset = CorruptedDataset(
-            testloader.dataset,
-            self.corr_func_arr,
-            severity_idx,
-        )
-
-        pin_memory = False#torch.cuda.is_available()
-        return torch.utils.data.DataLoader(
-            dataset,
-            batch_size=testloader.batch_size,
-            shuffle=False,
-            num_workers=0,
-            pin_memory=pin_memory,
-            collate_fn=testloader.collate_fn,
-        )
 
 class CorruptedDataset(torch.utils.data.Dataset):
+    """
+    Dataset wrapper that corrupts each source image on access.
+
+    Delegates to an inner dataset and applies a corruption function at a fixed
+    severity, converting to/from the HWC uint8 form the corruptor expects.
+    """
 
     def __init__(self, dataset, corr_func, severity_idx):
+        """
+        Store the inner dataset, corruption function, and severity.
+
+        Args:
+            dataset (torch.utils.data.Dataset): Source dataset of clean images.
+            corr_func (Callable): Batch corruption function ``(arr, severity_idx)``.
+            severity_idx (int | str): Severity index or label to apply.
+        """
         self.dataset = dataset
         self.corr_func = corr_func
         self.severity_idx = severity_idx
 
     def __len__(self):
+        """
+        Return the number of items in the underlying dataset.
+
+        Returns:
+            int: Length of the source dataset.
+        """
         return len(self.dataset)
 
     def __getitem__(self, idx):
+        """
+        Fetch and corrupt the image at ``idx``.
 
+        Converts the source tensor to HWC uint8, corrupts it via ``corr_func``,
+        then converts back to a CHW float tensor in [0, 1].
+
+        Args:
+            idx (int): Index of the item to fetch.
+
+        Returns:
+            Tuple[torch.Tensor, Any]: The corrupted image tensor and its label.
+        """
         image, label = self.dataset[idx]
 
         image_np = (
@@ -546,3 +866,118 @@ class CorruptedDataset(torch.utils.data.Dataset):
         ).float().div_(255.0)
 
         return corrupted, label
+
+class AugmentationUrl(BaseAugmentation):
+    """
+    Remote augmentation backed by an HTTP augmentation service.
+
+    Queries the service for determinism and severities on construction, and
+    delegates corruption to the service's ``/corrupt`` endpoint.
+    """
+
+    def __init__(self, url, aug_name):
+        """
+        Initialise the remote augmentation and fetch its metadata.
+
+        Queries the service for whether the augmentation is deterministic and for
+        its list of severities.
+
+        Args:
+            url (str): Base URL of the remote augmentation service.
+            aug_name (str): Name of the augmentation on the service.
+        """
+        self.url = url
+        self.name = aug_name
+        self.random_seed = None
+        self.deterministic = self.determine_deterministic()
+        self.severities = self.get_severities()
+
+    def determine_deterministic(self):
+        """
+        Query the service for whether this augmentation is deterministic.
+
+        The ``None`` augmentation is deterministic without a request.
+
+        Returns:
+            bool: True if the augmentation is deterministic.
+
+        Raises:
+            requests.HTTPError: If the service request fails.
+        """
+        if self.name in ["None", None]:
+            return True
+        r = requests.get(f"{self.url}/deterministic", params={"aug_name": self.name}, timeout=10)
+        r.raise_for_status()
+        return r.json()["deterministic"]
+
+    def get_severities(self):
+        """
+        Query the service for this augmentation's list of severities.
+
+        The ``None`` augmentation returns ``["None"]`` without a request.
+
+        Returns:
+            list: Severity labels supported by the augmentation.
+
+        Raises:
+            requests.HTTPError: If the service request fails.
+        """
+        if self.name in ["None", None]:
+            return ["None"]
+        r = requests.get(f"{self.url}/severities", params={"aug_name": self.name}, timeout=10)
+        r.raise_for_status()
+        return r.json()["severities"]
+
+    def set_seed(self, x):
+        """
+        Set the augmentation's random seed on the remote service.
+
+        No request is made for the ``None`` augmentation.
+
+        Args:
+            x (int): Seed value to store and send to the service.
+
+        Raises:
+            requests.HTTPError: If the service request fails.
+        """
+        self.random_seed = x
+        if self.name in ["None", None]:
+            return
+        r = requests.post(f"{self.url}/seed", json={"aug_name": self.name, "seed": x}, timeout=10)
+        r.raise_for_status()
+
+    def corr_func_arr(self, image_arr, severity_idx):
+        """
+        Corrupt a batch of images via the service's ``/corrupt`` endpoint.
+
+        Resolves the severity, then POSTs the batch as ``.npy`` and returns the
+        decoded response; ``None`` augmentation/severity returns the batch as-is.
+
+        Args:
+            image_arr (np.ndarray): Batch of images to corrupt.
+            severity_idx (int | str): Severity index or label.
+
+        Returns:
+            np.ndarray: The corrupted batch.
+
+        Raises:
+            requests.HTTPError: If the service request fails.
+        """
+        if isinstance(severity_idx, int):
+            severity = self.severities[severity_idx]
+        else:
+            severity = severity_idx
+        if self.name in ["None", None] or severity in ["None", None]:
+            return image_arr
+        else:
+            buf = io.BytesIO()
+            np.save(buf, image_arr)
+            buf.seek(0)
+
+            files = {"file": ("images.npy", buf, "application/octet-stream")}
+            data = {"aug_name": self.name, "severity": severity}
+
+            r = requests.post(f"{self.url}/corrupt", files=files, data=data, timeout=60)
+            r.raise_for_status()
+
+            return np.load(io.BytesIO(r.content))

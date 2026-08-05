@@ -35,7 +35,7 @@ valid_data_path = str(
     "/home/bjieyong/aiverify/cvrob/bccd/BCCD/JPEGImages"
 )
 valid_model_path = str(
-    "/home/bjieyong/aiverify/cvrob/bccd/bccd_api.json"#"/home/bjieyong/aiverify/cvrob/bccd/BCCD/bccdModel"#
+    "/home/bjieyong/aiverify/cvrob/bccd/BCCD/bccdModel"#"/home/bjieyong/aiverify/cvrob/bccd/bccd_api.json"#
 )
 valid_ground_truth_path = str(
     "/home/bjieyong/aiverify/cvrob/bccd/BCCD/bccd_detection.csv"
@@ -50,9 +50,9 @@ test_dict = {"data_str": "data_str"}
 test_tuple = ("data_str", "data_str")
 test_none = None
 
-plugin_type = PluginType.MODEL
-plugin_type_param = "filename"#"pipeline_path"#
-i_type = IModel
+plugin_type = PluginType.PIPELINE
+plugin_type_param = "pipeline_path"#"filename"#
+i_type = IPipeline
 class ObjectTest:
     def __init__(self):
         test_discover_plugin()
@@ -78,7 +78,7 @@ class ObjectTest:
         model_type = ModelType.DETECTION
         input_args = {
             "class_names": "background,RBC,WBC,Platelets",
-            "aug_library": "albumentations",
+            "aug_library": 'http://localhost:8100',
             'aug_methods': 'Rain',
             'custom_parameters': None,
             "num_epochs": 1,

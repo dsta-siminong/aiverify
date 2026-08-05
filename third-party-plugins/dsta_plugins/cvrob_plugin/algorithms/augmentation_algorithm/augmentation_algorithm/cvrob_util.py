@@ -11,8 +11,35 @@ from pathlib import Path
 from torch.utils.data import Dataset
 from torchvision import transforms
 import time
+import resource
+def mem_mb():
+    """
+    Report the peak resident memory of this process.
+
+    Reads the process's maximum RSS from ``resource.getrusage`` and converts it
+    from kilobytes to megabytes.
+
+    Returns:
+        float: Peak resident set size in megabytes.
+    """
+    return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024
 
 def evaluate(model, loader, device):
+    """
+    Evaluate a model over a loader, dispatching by model kind.
+
+    A string ``model`` is treated as an API URL and evaluated remotely; anything
+    else is evaluated locally on ``device``.
+
+    Args:
+        model: A torch model, or an API URL string for remote evaluation.
+        loader (torch.utils.data.DataLoader): Data loader to evaluate over.
+        device (torch.device): Device the local model runs on.
+
+    Returns:
+        Tuple[float, np.ndarray, np.ndarray]: Accuracy (percent), predicted
+            labels, and true labels.
+    """
     if isinstance(model, str):
         print("STRING MODEL!")
         print(model)
@@ -23,6 +50,23 @@ def evaluate(model, loader, device):
         return evaluate_direct(model, loader, device)
 
 def evaluate_via_api(model, loader):
+    """
+    Evaluate a model served behind an HTTP API over a data loader.
+
+    Each batch is serialised to ``.npy`` and POSTed to the API URL; predictions
+    from the JSON response are compared against the batch targets.
+
+    Args:
+        model (str): API URL that accepts a ``.npy`` batch and returns predictions.
+        loader (torch.utils.data.DataLoader): Data loader to evaluate over.
+
+    Returns:
+        Tuple[float, np.ndarray, np.ndarray]: Accuracy (percent), predicted
+            labels, and true labels.
+
+    Raises:
+        requests.HTTPError: If any API request returns an error status.
+    """
     API_URL = model
     correct, total = 0, 0
     predicted_labels, true_labels = [], []
@@ -97,6 +141,20 @@ def evaluate_direct(model, loader, device):
     return 100 * correct / total, np.array(predicted_labels), np.array(true_labels)
 
 def get_prediction_from_image(model, display_image, device):
+    """
+    Predict the class of a single image, dispatching by model kind.
+
+    A string ``model`` is treated as an API URL; otherwise the image is run
+    through the local model on ``device``.
+
+    Args:
+        model: A torch model, or an API URL string for remote prediction.
+        display_image (np.ndarray): CHW image array to classify.
+        device (torch.device): Device the local model runs on.
+
+    Returns:
+        int: The predicted class index.
+    """
     if isinstance(model, str):
         return get_prediction_from_image_api(model, display_image)
     image = torch.tensor(display_image).unsqueeze(0).float()
@@ -111,6 +169,22 @@ def get_prediction_from_image(model, display_image, device):
     return prediction
 
 def get_prediction_from_image_api(model, display_image):
+    """
+    Predict the class of a single image via an HTTP API.
+
+    Serialises the image to ``.npy``, POSTs it to the API URL, and returns the
+    predicted class from the JSON response.
+
+    Args:
+        model (str): API URL that accepts a ``.npy`` image and returns a prediction.
+        display_image (np.ndarray): Image array to classify.
+
+    Returns:
+        int: The predicted class index.
+
+    Raises:
+        requests.HTTPError: If the API request returns an error status.
+    """
     API_URL = model
     buffer = io.BytesIO()
     np.save(buffer, display_image)
@@ -145,10 +219,6 @@ def triplets(s):
     items = s.split()
     assert len(items) % 3 == 0, "Input length must be a multiple of 3"
     return [items[i:i+3] for i in range(0, len(items), 3)]
-
-import resource
-def mem_mb():
-    return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024 
     
 def augmentation_gradient(model, test_loader, device, aug_class, plot_graphs=False, directory=Path(), num_epochs=1):
     """
@@ -173,7 +243,6 @@ def augmentation_gradient(model, test_loader, device, aug_class, plot_graphs=Fal
 
     print(f"[mem at the start of augmentation_gradient stuff] {mem_mb():.1f} MB")
     num_epochs = 1 if num_epochs is None else num_epochs
-    # num_epochs = num_epochs if severity_name != "None" else 1 
     num_epochs = 1 if aug_class.deterministic else num_epochs
     print("===")
     print("Aug name", aug_class.name)
@@ -203,12 +272,12 @@ def augmentation_gradient(model, test_loader, device, aug_class, plot_graphs=Fal
         print(f"Accuracy at severity {severity}: {final_acc:.4f}")
 
     # Plot results
+    fig_path = directory / f"accuracy_vs_severity_{aug_class.name}.png"
     fig = None
     if plot_graphs is not False:
         fig = plot_accuracy_vs_severity(accuracies, ["None"]+severities, plot_graphs)  
-    fig_path = directory / f"accuracy_vs_severity_{aug_class.name}.png"
-    fig.savefig(fig_path)
-    plt.close()
+        fig.savefig(fig_path)
+        plt.close()
     return best_fit_gradient(list(range(len(severities)+1)), accuracies), accuracies, fig_path
 
 def get_num_classes(model: nn.Module) -> int:
@@ -414,21 +483,67 @@ def best_fit_gradient(x_values, y_values):
     return numerator / denominator
 
 class ImageDataset(Dataset):
+    """
+    Lazy image dataset that decodes each image from disk on access.
+
+    Stores only file paths and labels, decoding and transforming an image only
+    when indexed, so memory stays proportional to the batch rather than the set.
+    """
+
     def __init__(self, image_paths, labels):
+        """
+        Store the image paths and labels for lazy loading.
+
+        Args:
+            image_paths (list[str]): Image file paths.
+            labels (list): Label per image, aligned with ``image_paths``.
+        """
         self.image_paths = image_paths
         self.labels = labels
         self.transform = transforms.ToTensor()
 
     def __len__(self):
+        """
+        Return the number of images in the dataset.
+
+        Returns:
+            int: Count of image paths.
+        """
         return len(self.image_paths)
 
     def __getitem__(self, idx):
+        """
+        Load, transform, and return the image and label at ``idx``.
+
+        Opens the image as RGB and applies ``self.transform`` to produce a
+        (3, H, W) tensor.
+
+        Args:
+            idx (int): Index of the item to fetch.
+
+        Returns:
+            Tuple[torch.Tensor, Any]: The transformed image tensor and its label.
+        """
         image = Image.open(self.image_paths[idx]).convert("RGB")
         image = self.transform(image)  # (3, H, W)
         label = self.labels[idx]
         return image, label
 
 def pad_collate(batch):
+    """
+    Collate variable-sized images into a batch by zero-padding.
+
+    Pads every image on the bottom and right up to the batch's maximum height and
+    width, then stacks them with their labels into tensors.
+
+    Args:
+        batch (list): Sequence of ``(image_tensor, label)`` pairs, where each
+            image is a (C, H, W) tensor.
+
+    Returns:
+        Tuple[torch.Tensor, torch.Tensor]: Stacked padded images and a long
+            tensor of labels.
+    """
     images, labels = zip(*batch)
 
     max_h = max(img.shape[1] for img in images)

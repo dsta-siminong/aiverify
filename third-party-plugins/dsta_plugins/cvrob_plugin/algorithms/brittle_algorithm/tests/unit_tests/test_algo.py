@@ -78,7 +78,7 @@ class ObjectTest:
         model_type = ModelType.CLASSIFICATION
         input_args = {
             "class_names": "Barge,CG-P,ContainerShip,Cruise,Dredger,Ferry,LNG-LPG,RORO,Sampan,Trawler-FishingVessel,Tugboat,Warship,Yacht",
-            "aug_library": "albumentations",
+            "aug_library": "http://localhost:8100",
             "aug_method": "GaussianBlur",
             "severity_before": None,
             "severity_after": None,

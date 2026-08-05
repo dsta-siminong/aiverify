@@ -6,7 +6,7 @@
     "maxW": 12,
     "maxH": 36
   },
-  "name": "Augmentations By Class Widget for Confusion Matrix line graphs",
+  "name": "[2a4.5] Augmentations By Class Widget for Confusion Matrix line graphs",
   "description": "Augmentations By Class Widget for Confusion Matrix line graphs",
   "dynamicHeight": true,
   "dependencies": [

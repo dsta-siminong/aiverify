@@ -11,9 +11,33 @@ import torch.nn as nn
 import time
 import resource
 def mem_mb():
-    return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024 
+    """
+    Report the peak resident memory of this process.
+
+    Reads the process's maximum RSS from ``resource.getrusage`` and converts it
+    from kilobytes to megabytes.
+
+    Returns:
+        float: Peak resident set size in megabytes.
+    """
+    return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024
 
 def evaluate(model, loader, device):
+    """
+    Evaluate a model over a loader, dispatching by model kind.
+
+    A string ``model`` is treated as an API URL and evaluated remotely; anything
+    else is evaluated locally on ``device``.
+
+    Args:
+        model: A torch model, or an API URL string for remote evaluation.
+        loader (torch.utils.data.DataLoader): Data loader to evaluate over.
+        device (torch.device): Device the local model runs on.
+
+    Returns:
+        Tuple[float, np.ndarray, np.ndarray]: Accuracy (percent), predicted
+            labels, and true labels.
+    """
     if isinstance(model, str):
         print("STRING MODEL!")
         print(model)
@@ -24,6 +48,23 @@ def evaluate(model, loader, device):
         return evaluate_direct(model, loader, device)
 
 def evaluate_via_api(model, loader):
+    """
+    Evaluate a model served behind an HTTP API over a data loader.
+
+    Each batch is serialised to ``.npy`` and POSTed to the API URL; predictions
+    from the JSON response are compared against the batch targets.
+
+    Args:
+        model (str): API URL that accepts a ``.npy`` batch and returns predictions.
+        loader (torch.utils.data.DataLoader): Data loader to evaluate over.
+
+    Returns:
+        Tuple[float, np.ndarray, np.ndarray]: Accuracy (percent), predicted
+            labels, and true labels.
+
+    Raises:
+        requests.HTTPError: If any API request returns an error status.
+    """
     API_URL = model
     correct, total = 0, 0
     predicted_labels, true_labels = [], []
@@ -98,6 +139,20 @@ def evaluate_direct(model, loader, device):
     return 100 * correct / total, np.array(predicted_labels), np.array(true_labels)
 
 def get_prediction_from_image(model, display_image, device):
+    """
+    Predict the class of a single image, dispatching by model kind.
+
+    A string ``model`` is treated as an API URL; otherwise the image is run
+    through the local model on ``device``.
+
+    Args:
+        model: A torch model, or an API URL string for remote prediction.
+        display_image (np.ndarray): CHW image array to classify.
+        device (torch.device): Device the local model runs on.
+
+    Returns:
+        int: The predicted class index.
+    """
     if isinstance(model, str):
         return get_prediction_from_image_api(model, display_image)
     image = torch.tensor(display_image).unsqueeze(0).float()
@@ -112,6 +167,22 @@ def get_prediction_from_image(model, display_image, device):
     return prediction
 
 def get_prediction_from_image_api(model, display_image):
+    """
+    Predict the class of a single image via an HTTP API.
+
+    Serialises the image to ``.npy``, POSTs it to the API URL, and returns the
+    predicted class from the JSON response.
+
+    Args:
+        model (str): API URL that accepts a ``.npy`` image and returns a prediction.
+        display_image (np.ndarray): Image array to classify.
+
+    Returns:
+        int: The predicted class index.
+
+    Raises:
+        requests.HTTPError: If the API request returns an error status.
+    """
     API_URL = model
     buffer = io.BytesIO()
     np.save(buffer, display_image)
@@ -129,8 +200,7 @@ def get_prediction_from_image_api(model, display_image):
 
 def triplets(s):
     """
-    Split a whitespace-separated string provided by the custom parameters argument into groups of three items.
-    This is for the future customization of the augmentation dictionary
+    Split a whitespace-separated string into groups of three items.
 
     Args:
         s (str): Input string containing whitespace-separated tokens. The number
@@ -147,7 +217,7 @@ def triplets(s):
     items = s.split()
     assert len(items) % 3 == 0, "Input length must be a multiple of 3"
     return [items[i:i+3] for i in range(0, len(items), 3)]
-
+       
 def average_all_reports(reports):
     """
     Compute the element-wise average of sklearn classification report dictionaries.
@@ -227,9 +297,9 @@ def handle_class_names_arg(class_names_arg, model):
     Parse class names input and return a mapping from class index to name.
 
     The function supports three input modes:
-    1. None or empty string: infer number of classes from the model, then does (2)
+    1. None or empty string: infer number of classes from the model.
     2. Single integer: generate default class names using that count.
-    3. Comma-separated names: use provided class names directly.
+    3. Comma-separated names: use provided class names.
 
     Args:
         class_names_arg (Optional[str]): Class names specification. Can be:

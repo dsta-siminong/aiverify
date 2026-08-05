@@ -6,7 +6,7 @@
     "maxW": 12,
     "maxH": 36
   },
-  "name": "OD Brittleness Carousel Widget",
+  "name": "[6.2] OD Brittleness Carousel Widget",
   "description": "Brittle Images displayed in a carousel (object detection)",
   "dynamicHeight": true,
   "dependencies": [

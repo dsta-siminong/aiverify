@@ -6,7 +6,7 @@
     "maxW": 12,
     "maxH": 36
   },
-  "name": "OD Augmentations By Class Model Performance Widget",
+  "name": "[5c2] OD Augmentations By Class Model Performance Widget",
   "description": "Object Detections Augmentations By Class Model Performance",
   "dynamicHeight": true,
   "dependencies": [

@@ -6,7 +6,7 @@
     "maxW": 12,
     "maxH": 36
   },
-  "name": "OD Augmentations By Class Widget for Confusion Matrix Plots",
+  "name": "[5a2] OD Augmentations By Class Widget for Confusion Matrix Plots",
   "description": "OD Augmentations By Class Widget for Confusion Matrix Plots",
   "dynamicHeight": true,
   "dependencies": [

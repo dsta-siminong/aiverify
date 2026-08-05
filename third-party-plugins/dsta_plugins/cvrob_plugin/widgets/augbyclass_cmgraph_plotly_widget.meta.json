@@ -6,7 +6,7 @@
     "maxW": 12,
     "maxH": 36
   },
-  "name": "Augmentations By Class Widget for Confusion Matrix Line Graphs (FOR PLOTLY)",
+  "name": "[2a4] Augmentations By Class Widget for Confusion Matrix Line Graphs (FOR PLOTLY)",
   "description": "Augmentations By Class Widget for Confusion Matrix Line Graphs (plotly)",
   "dynamicHeight": true,
   "dependencies": [

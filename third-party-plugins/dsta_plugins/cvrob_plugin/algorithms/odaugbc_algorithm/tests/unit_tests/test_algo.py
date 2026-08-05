@@ -78,7 +78,7 @@ class ObjectTest:
         model_type = ModelType.DETECTION
         input_args = {
             "class_names": "background,RBC,WBC,Platelets",
-            "aug_library": "albumentations",
+            "aug_library": "http://localhost:8100",
             'aug_methods': 'Rain',
             'custom_parameters': None,
             "num_epochs": 1,

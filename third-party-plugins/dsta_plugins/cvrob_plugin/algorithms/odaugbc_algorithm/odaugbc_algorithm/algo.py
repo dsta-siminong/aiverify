@@ -23,7 +23,7 @@ import torchvision.transforms as transforms
 import torch
 from torch.utils.data import DataLoader, TensorDataset
 from .cvrob_util import *
-from .augmentations_class import make_augmentation_dict, custom_parameter_change
+from .augmentations_class import make_augmentation_dict, custom_parameter_change, handle_url_algos
 # from sklearn.metrics import classification_report, confusion_matrix, ConfusionMatrixDisplay
 
 import pandas as pd 
@@ -369,6 +369,8 @@ class Plugin(IAlgorithm):
         # Apply user defined parameters to default parameters
         aug_library = self._input_arguments.get('aug_library') or "albumentations"
         aug_dict = make_augmentation_dict(aug_library)
+        if aug_dict is None:
+            raise ValueError("Invalid augmentation library provided. Did you get the URL wrong or misspell the library name?")
         self._iou_thres = self._input_arguments.get('iou_thres') or 0.5
         self._score_thres = self._input_arguments.get('score_thres') or 0.5
 
@@ -455,6 +457,10 @@ class Plugin(IAlgorithm):
         class_names = self._resolve_class_names(model)
 
         print("Augmentation methods:", aug_methods)
+        if 'url' in aug_dict:
+            if 'http' in aug_dict['url']:
+                handle_url_algos(aug_dict, aug_methods)
+
         print("Class names:", class_names)
         self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -474,6 +480,8 @@ class Plugin(IAlgorithm):
 
         for aug_name, aug_class in aug_dict.items():
             if aug_name not in aug_methods and aug_methods != ["all"]:
+                continue
+            if aug_name == 'url':
                 continue
 
             individual_results = {"Augmentation": aug_name}

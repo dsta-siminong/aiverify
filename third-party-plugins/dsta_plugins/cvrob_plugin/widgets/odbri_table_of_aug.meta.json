@@ -6,7 +6,7 @@
     "maxW": 12,
     "maxH": 36
   },
-  "name": "Table of Augmentations for OD Brittleness algo",
+  "name": "[6.t] Table of Augmentations for OD Brittleness algo",
   "description": "Table of augmentations with details and possible real life manifestation",
   "dynamicHeight": true,
   "dependencies": [

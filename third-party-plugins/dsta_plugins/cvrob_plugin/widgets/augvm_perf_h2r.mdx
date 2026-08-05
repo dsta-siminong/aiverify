@@ -1,12 +1,6 @@
-<div style={{
-  width: "100%",
-  padding: "16px",
-  marginBottom: "24px",
-  border: "1px solid #e5e7eb",
-  borderRadius: "8px",
-  backgroundColor: "#fafafa",
-  boxSizing: "border-box"
-}}>
+import InfoBox from "./InfoBox";
+
+<InfoBox>
   <h3>Accuracy Under Corruption</h3>
 
   <span>
@@ -14,17 +8,9 @@
     is affected for each specified corruption algorithm as the severity of the corruption
     increases.
   </span>
-</div>
+</InfoBox>
 
-<div style={{
-  width: "100%",
-  padding: "16px",
-  marginBottom: "24px",
-  border: "1px solid #e5e7eb",
-  borderRadius: "8px",
-  backgroundColor: "#fafafa",
-  boxSizing: "border-box"
-}}>
+<InfoBox>
   <h4>
     <b>How to read?</b>
   </h4>
@@ -41,9 +27,9 @@
     increases, the model’s predictive performance — and therefore its accuracy — is expected
     to decline.
   </p>
-</div>
+</InfoBox>
 
-<div>
+<InfoBox>
   <span>
     <b>Interpretation</b>
   </span>
@@ -64,4 +50,4 @@
     overfitted to this corruption type during training. In this case, retraining with
     fewer augmented samples of this corruption type is recommended.
   </span>
-</div>
+</InfoBox>

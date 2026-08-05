@@ -78,11 +78,10 @@ class ObjectTest:
         model_type = ModelType.CLASSIFICATION
         input_args = {
             "class_names": "Barge,CG-P,ContainerShip,Cruise,Dredger,Ferry,LNG-LPG,RORO,Sampan,Trawler-FishingVessel,Tugboat,Warship,Yacht",
-            "aug_library": 'http://127.0.0.1:44627',
+            "aug_library": 'http://127.0.0.1:8100',
             'aug_methods': 'Rain',
             'custom_parameters': None,
             "num_epochs": 1,
-            # "model_api_url": "http://localhost:8000/predict_array",
         }
         expected_exception = RuntimeError
         expected_exception_msg = "The algorithm has failed data validation"

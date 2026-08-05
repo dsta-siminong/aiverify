@@ -20,7 +20,7 @@ binary_classification_pipeline = {
     "ground_truth": "label",
     "plugin_argument_values": {
         "class_names": "background,RBC,WBC,platelets", 
-        "aug_library": "albumentations",
+        "aug_library": "http://localhost:8100",
         "aug_method": "GaussianBlur",
         "severity_before": None,
         "severity_after": None,

@@ -6,7 +6,7 @@
     "maxW": 12,
     "maxH": 36
   },
-  "name": "OD Augmentations By Class Widget for Graphs for COCO visualization Plots",
+  "name": "[5b2] OD Augmentations By Class Widget for Graphs for COCO visualization Plots",
   "description": "OD Augmentations By Class Widget for Graphs for COCO visualization Plots",
   "dynamicHeight": true,
   "dependencies": [

@@ -1,12 +1,6 @@
-<div style={{
-  width: "100%",
-  padding: "16px",
-  marginBottom: "24px",
-  border: "1px solid #e5e7eb",
-  borderRadius: "8px",
-  backgroundColor: "#fafafa",
-  boxSizing: "border-box"
-}}>
+import InfoBox from "./InfoBox";
+
+<InfoBox>
   <h3>Confusion Matrix Statistics</h3>
 
   <span>
@@ -18,18 +12,9 @@
     For each specified corruption algorithm and severity level, a confusion 
     matrix is displayed, summarizing the model's predictions for every class.
   </span>
+</InfoBox>
 
-</div>
-
-<div style={{
-  width: "100%",
-  padding: "16px",
-  marginBottom: "24px",
-  border: "1px solid #e5e7eb",
-  borderRadius: "8px",
-  backgroundColor: "#fafafa",
-  boxSizing: "border-box"
-}}>
+<InfoBox>
   <h4>
     <b>How to read?</b>
   </h4>
@@ -56,17 +41,9 @@
     patterns (for example, Class X increasingly being predicted as Class Y as
     corruption severity increases).
   </p>
-</div>
+</InfoBox>
 
-<div style={{
-  width: "100%",
-  padding: "16px",
-  marginBottom: "24px",
-  border: "1px solid #e5e7eb",
-  borderRadius: "8px",
-  backgroundColor: "#fafafa",
-  boxSizing: "border-box"
-}}>
+<InfoBox>
   <span>
     <b>Interpretation</b>
   </span>
@@ -113,4 +90,4 @@
     If the confusion matrix remains largely unchanged across corruption severities,
     the model can be considered robust to the given perturbation.
   </span>
-</div>
+</InfoBox>

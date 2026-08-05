@@ -23,7 +23,7 @@ import torchvision.transforms as transforms
 import torch
 from torch.utils.data import DataLoader, TensorDataset
 from .cvrob_util import evaluate, triplets, average_all_reports, handle_class_names_arg, get_prediction_from_image
-from .augmentations_class import make_augmentation_dict, custom_parameter_change
+from .augmentations_class import make_augmentation_dict, custom_parameter_change, handle_url_algos
 from sklearn.metrics import classification_report, confusion_matrix, ConfusionMatrixDisplay
 
 import pandas as pd 
@@ -349,11 +349,9 @@ class Plugin(IAlgorithm):
         """
         # Retrieve data information
         self._data = self._data_instance.get_data()
-        print('data')
-        print(self._data_instance.get_data())
+
         file_names = [Path(i).name for i in self._data_instance.get_data()["image_directory"]]
         df: pd.DataFrame = self._ground_truth_instance.get_data()
-
         self._file_name_label = "file_name" #self._input_arguments["file_name_label"]
         self._ordered_ground_truth_df = df.set_index(self._file_name_label).reindex(file_names) 
 
@@ -362,52 +360,44 @@ class Plugin(IAlgorithm):
             shutil.rmtree(self._save_folder)
         self._save_folder.mkdir(parents=True, exist_ok=True)
 
-        # Apply user defined parameters to default parameters
-        aug_library = self._input_arguments.get('aug_library') or "albumentations"
-        aug_dict = make_augmentation_dict(aug_library)
-
-        custom_parameters = None
-        try:
-            custom_parameters = self._input_arguments.get('custom_parameters') or None
-            custom_parameters = triplets(custom_parameters)
-            for sublist in custom_parameters:
-                aug_name, param_name, parameters_in_string = sublist
-                aug_dict = custom_parameter_change(aug_dict, aug_name, param_name, parameters_in_string)
-        except Exception as e:
-            print("No custom parameter_change")
-            print(f"Custom parameters exception: {e} , {custom_parameters}")
-            print()
-
+        aug_dict = self._resolve_aug_dict()
         self._augmentation_bc_method(aug_dict)
         # Update progress (For 100% completion)
-        self._progress_inst.update(1)
+        # Progress is now advanced per-augmentation inside _augmentation_method,
+        # so this final tick is no longer needed (it would push completed past total).
+        # self._progress_inst.update(1)
 
     def _augmentation_bc_method(self, aug_dict):
         image_paths : list[str] = self._data_instance.get_data()["image_directory"].tolist()
         ground_truths = self._ordered_ground_truth_df[self._ground_truth_label].tolist()
         test_dataset, test_loader = self._load_images(image_paths, ground_truths)
         #KIV: set a random seed here manually; if we want to manually set it then we'll need to change this
-        np.random.seed(42) 
-        display_idx = np.random.choice(len(image_paths))
+        seed = self._input_arguments.get('random_seed', 42)   # configurable, 42 default
+        display_rng = np.random.default_rng(seed)
+        display_idx = display_rng.integers(len(image_paths))
+
         output_results = dict()
 
-        if "_model" in dir(self._model_instance):
-            model = self._model_instance._model
-        elif "_pipeline" in dir(self._model_instance):
-            model = self._model_instance._pipeline
-        else:
-            raise ValueError("idk what the", type(self._model_instance),"model instance is supposed to be ", dir(self._model_instance))
+        model = self._unwrap_model()
+        combined_results = []
 
-        combined_results = []#; combined_results2 = []
-
-        aug_methods = self._input_arguments.get('aug_methods') or 'all'
-        aug_methods = [x.strip() for x in aug_methods.split(",") if x.strip()]
+        aug_methods = self._get_aug_methods()
         print("Augmentation methods:", aug_methods)
+        if 'url' in aug_dict:
+            if 'http' in aug_dict['url']:
+                handle_url_algos(aug_dict, aug_methods)
 
         class_names_arg = self._input_arguments.get('class_names') or None 
         class_names = handle_class_names_arg(class_names_arg, model)
         print("Class names:", class_names)
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+        # Register total work units (one per augmentation that will actually run)
+        # so progress advances incrementally instead of jumping 0 -> 100%.
+        num_augs_to_run = sum(
+            1 for aug_name in aug_dict if self._should_run_aug(aug_name, aug_methods)
+        )
+        self._progress_inst.add_total(num_augs_to_run)
 
         # labels = [k for k in class_names]
         target_names = [class_names[k] for k in class_names]
@@ -415,7 +405,9 @@ class Plugin(IAlgorithm):
         for aug_name, aug_class in aug_dict.items():
             if aug_name not in aug_methods and aug_methods != ["all"]:
                 continue
-
+            if aug_name == 'url':
+                continue
+            
             individual_results = dict() ; display_info = dict(); cm_dict = dict() 
             crs = []; cms = []
             individual_results.update({"Augmentation": aug_name})
@@ -521,31 +513,115 @@ class Plugin(IAlgorithm):
 
         self._results = output_results
 
-    def _load_images(self, image_paths: list[str], labels) -> list[np.ndarray]:
+    def _resolve_aug_dict(self):
         """
-        Load a list of numpy images from file paths.
+        Build the augmentation dict and apply any custom parameter overrides.
 
-        Args:
-            image_paths (list[str]): A list of image file paths
+        Uses the ``aug_library`` input (default ``"albumentations"``) for the
+        defaults, then applies any ``custom_parameters`` parsed as
+        ``(aug_name, param_name, value)`` triplets; absent input keeps defaults.
 
         Returns:
-            np.ndarray: A list of numpy images
+            Dict[str, Any]: Mapping of augmentation name to its augmentation
+                instance, with any overrides applied.
+
+        Raises:
+            RuntimeError: If ``custom_parameters`` are provided but malformed
+                (e.g. wrong token count, unknown augmentation/parameter name, or
+                an unparseable value).
         """
-        transform = transforms.Compose([
-            transforms.Resize((240, 320)),  # H, W
+        # Apply user defined parameters to default parameters
+        aug_library = self._input_arguments.get('aug_library') or "albumentations"
+        aug_dict = make_augmentation_dict(aug_library)
+
+        # Empty/absent input is the normal case: nothing to override, carry on.
+        custom_parameters = self._input_arguments.get('custom_parameters') or None
+        if custom_parameters:
+            # The user explicitly asked for overrides, so a malformed value is a
+            # real error: fail loudly rather than silently running with defaults.
+            try:
+                for aug_name, param_name, parameters_in_string in triplets(custom_parameters):
+                    aug_dict = custom_parameter_change(
+                        aug_dict, aug_name, param_name, parameters_in_string
+                    )
+            except Exception as e:
+                self.add_to_log(
+                    logging.ERROR,
+                    f"Failed to apply custom_parameters '{custom_parameters}': {e}",
+                )
+                raise RuntimeError(
+                    f"Invalid custom_parameters '{custom_parameters}': {e}"
+                ) from e
+        else:
+            print("~~ No custom parameters provided, let's use the default ones! n_n ~~")
+
+        print('aug dict', aug_dict)
+        return aug_dict
+
+    def _unwrap_model(self):
+        """
+        Return the underlying torch model/pipeline from the wrapped instance.
+
+        Returns the ``_model`` attribute for a plain model or ``_pipeline`` for a
+        pipeline, whichever the wrapped instance exposes.
+
+        Returns:
+            Any: The underlying model or pipeline object.
+
+        Raises:
+            ValueError: If the wrapped instance exposes neither ``_model`` nor
+                ``_pipeline``.
+        """
+        if "_model" in dir(self._model_instance):
+            return self._model_instance._model
+        elif "_pipeline" in dir(self._model_instance):
+            return self._model_instance._pipeline
+        raise ValueError(
+            "idk what the", type(self._model_instance),
+            "model instance is supposed to be ", dir(self._model_instance),
+        )
+
+    def _get_aug_methods(self):
+        """
+        Parse the ``aug_methods`` input into a list of augmentation names.
+
+        Splits the comma-separated input, stripping whitespace and dropping empty
+        tokens; defaults to ``["all"]`` (select every augmentation) when unset.
+
+        Returns:
+            List[str]: The requested augmentation names, or ``["all"]`` for all.
+        """
+        aug_methods = self._input_arguments.get('aug_methods') or 'all'
+        return [x.strip() for x in aug_methods.split(",") if x.strip()]
+
+    def _load_images(self, image_paths: list[str], labels) -> list[np.ndarray]:
+        """
+        Wrap the image paths in a lazy dataset and batching loader.
+
+        Builds an ``ImageDataset`` that decodes and resizes images to (500, 700)
+        on access, so only one batch is held in memory at a time, and returns it
+        together with a non-shuffling ``DataLoader``.
+
+        Args:
+            image_paths (list[str]): Image file paths to load lazily.
+            labels: Ground-truth label per image, aligned with ``image_paths``.
+
+        Returns:
+            Tuple[ImageDataset, DataLoader]: The dataset and its batching loader.
+        """
+        from .cvrob_util import ImageDataset  # or wherever it's imported from
+        dataset = ImageDataset(image_paths, labels)
+        dataset.transform = transforms.Compose([
+            transforms.Resize((500, 700)),  # H, W
             transforms.ToTensor()
         ])
-
-        # Load all images into a tensor
-        image_tensors = torch.stack([transform(Image.open(p).convert("RGB")) for p in image_paths])
-
-        # Convert labels to tensor
-        label_tensors = torch.tensor(labels, dtype=torch.long)
-
-        # Create TensorDataset
-        dataset = TensorDataset(image_tensors, label_tensors)
-
-        # Create DataLoader
+        # transform = transforms.Compose([
+        #     transforms.Resize((500, 700)),  # H, W
+        #     transforms.ToTensor()
+        # ])
+        # image_tensors = torch.stack([transform(Image.open(p).convert("RGB")) for p in image_paths])
+        # label_tensors = torch.tensor(labels, dtype=torch.long)
+        # dataset = TensorDataset(image_tensors, label_tensors)
         loader = DataLoader(dataset, batch_size=16, shuffle=False)
 
         return dataset, loader

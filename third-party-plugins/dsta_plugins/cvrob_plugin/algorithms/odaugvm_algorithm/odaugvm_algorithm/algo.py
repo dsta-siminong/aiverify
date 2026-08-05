@@ -24,7 +24,7 @@ import torchvision.transforms as transforms
 import torch
 from torch.utils.data import DataLoader, TensorDataset
 from .cvrob_util import get_prediction_from_image, triplets, augmentation_gradient_det, handle_class_names_arg, DetectionDataset
-from .augmentations_class import make_augmentation_dict, custom_parameter_change
+from .augmentations_class import make_augmentation_dict, custom_parameter_change, handle_url_algos
 from pathlib import Path
 import pandas as pd
 from PIL import ImageDraw, ImageFont
@@ -363,6 +363,8 @@ class Plugin(IAlgorithm):
         # Apply user defined parameters to default parameters
         aug_library = self._input_arguments.get('aug_library') or "albumentations"
         aug_dict = make_augmentation_dict(aug_library)
+        if aug_dict is None:
+            raise ValueError("Invalid augmentation library provided. Did you get the URL wrong or misspell the library name?")
         self._iou_thres = self._input_arguments.get('iou_thres') or 0.5
         self._score_thres = self._input_arguments.get('score_thres') or 0.5
 
@@ -396,6 +398,9 @@ class Plugin(IAlgorithm):
         aug_methods = self._input_arguments.get('aug_methods') or 'all'
         aug_methods = [x.strip() for x in aug_methods.split(",") if x.strip()]
         print("Augmentation methods:", aug_methods)
+        if 'url' in aug_dict:
+            if 'http' in aug_dict['url']:
+                handle_url_algos(aug_dict, aug_methods)
 
         class_names_arg = self._input_arguments['class_names'] or None 
         class_names = handle_class_names_arg(class_names_arg, model)
@@ -415,6 +420,9 @@ class Plugin(IAlgorithm):
             
             if aug_name not in aug_methods and aug_methods != ["all"]:
                 continue
+            if aug_name == 'url':
+                continue
+
             individual_results = dict() 
             individual_results.update({"Augmentation": aug_name})
 

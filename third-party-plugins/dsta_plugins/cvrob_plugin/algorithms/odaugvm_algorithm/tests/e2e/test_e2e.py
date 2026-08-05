@@ -10,17 +10,17 @@ binary_classification_pipeline = {
         "/home/bjieyong/aiverify/cvrob/bccd/BCCD/JPEGImages"
     ),
     "model_path": str(
-        "/home/bjieyong/aiverify/cvrob/bccd/bccd_api.json"#"/home/bjieyong/aiverify/cvrob/bccd/BCCD/bccdModel"#
+        "/home/bjieyong/aiverify/cvrob/bccd/BCCD/bccdModel"#"/home/bjieyong/aiverify/cvrob/bccd/bccd_api.json"
     ),
     "ground_truth_path": str(
         "/home/bjieyong/aiverify/cvrob/bccd/BCCD/bccd_detection.csv"
     ),
-    "run_pipeline": False,
+    "run_pipeline": True,
     "model_type": ModelType.DETECTION,
     "ground_truth": "label",
     "plugin_argument_values": {
         "class_names": "background,RBC,WBC,Platelets",
-        "aug_library": 'albumentations',
+        "aug_library": 'http://localhost:8100',
         'aug_methods': 'Rain',
         'custom_parameters': None,
         "num_epochs": 1,

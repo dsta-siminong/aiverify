@@ -16,7 +16,6 @@ from aiverify_test_engine.plugins.metadata.plugin_metadata import PluginMetadata
 from aiverify_test_engine.utils.json_utils import load_schema_file, validate_json
 from aiverify_test_engine.utils.simple_progress import SimpleProgress
 
-import numpy as np
 from PIL import Image
 import inspect
 import numpy as np
@@ -87,7 +86,7 @@ class Plugin(IAlgorithm):
         # Look for kwargs values for log_instance, progress_callback and base path
         self._logger = kwargs.get("logger", None)
         self._progress_inst = SimpleProgress(
-            1, 0, kwargs.get("progress_callback", None)
+            0, 0, kwargs.get("progress_callback", None)
         )
 
         # Check if data and model are tuples and if the tuples contain 2 items
@@ -356,159 +355,325 @@ class Plugin(IAlgorithm):
             shutil.rmtree(self._save_folder)
         self._save_folder.mkdir(parents=True, exist_ok=True)
 
-        # Apply user defined parameters to default parameters
-        aug_library = self._input_arguments.get('aug_library') or "albumentations"
-        aug_dict = make_augmentation_dict(aug_library)
-
-        custom_parameters = None
-        try:
-            custom_parameters = self._input_arguments.get('custom_parameters') or None
-            custom_parameters = triplets(custom_parameters)
-            for sublist in custom_parameters:
-                aug_name, param_name, parameters_in_string = sublist
-                aug_dict = custom_parameter_change(aug_dict, aug_name, param_name, parameters_in_string)
-        except Exception as e:
-            print("No custom parameter_change")
-            print(f"Custom parameters exception: {e} , {custom_parameters}")
-            print()
-
-        print('aug dict', aug_dict)
+        aug_dict = self._resolve_aug_dict()
         self._augmentation_method(aug_dict)
 
         # Update progress (For 100% completion)
-        self._progress_inst.update(1)
+        # Progress is now advanced per-augmentation inside _augmentation_method,
+        # so this final tick is no longer needed (it would push completed past total).
+        # self._progress_inst.update(1)
 
     def _augmentation_method(self, aug_dict):
+        """
+        Evaluate the model against every selected augmentation.
+
+        Loads images, unwraps the model, resolves which augmentations to run,
+        then accumulates per-augmentation results, gradients, and first-drop
+        values into ``self._results``.
+
+        Args:
+            aug_dict (Dict[str, Any]): Mapping of augmentation name to its
+                ``Augmentation``/``AugmentationUrl`` instance (may also contain a
+                ``"url"`` entry for remote backends).
+
+        Returns:
+            None
+        """
         print(f"[mem at the start of _augmentation_method] {mem_mb():.1f} MB")
         image_paths: list[str] = self._data_instance.get_data()["image_directory"].tolist()
         ground_truths = self._ordered_ground_truth_df[self._ground_truth_label].tolist()
         test_dataset, test_loader = self._load_images(image_paths, ground_truths)
         #KIV: set a random seed here manually; if we want to manually set it then we'll need to change this
-        np.random.seed(42) 
-        display_idx = np.random.choice(len(image_paths))
-        output_results = dict()
+        seed = self._input_arguments.get('random_seed', 42)   # configurable, 42 default
+        display_rng = np.random.default_rng(seed)
+        display_idx = display_rng.integers(len(image_paths))
 
-        # model_api_url = self._input_arguments.get("model_api_url") or None
-        # if model_api_url:
-        #     model = model_api_url
-        if "_model" in dir(self._model_instance):
-            model = self._model_instance._model
-        elif "_pipeline" in dir(self._model_instance):
-            model = self._model_instance._pipeline
-        else:
-            raise ValueError("idk what the", type(self._model_instance),"model instance is supposed to be ", dir(self._model_instance))
+        model = self._unwrap_model()
 
-        combined_results = []; gradients = []; first_drops = []
-
-        aug_methods = self._input_arguments.get('aug_methods') or 'all'
-        aug_methods = [x.strip() for x in aug_methods.split(",") if x.strip()]
+        aug_methods = self._get_aug_methods()
         print("Augmentation methods:", aug_methods)
-        if 'http' in aug_dict['url']:
+        if 'url' in aug_dict and 'http' in aug_dict['url']:
             handle_url_algos(aug_dict, aug_methods)
 
-        class_names_arg = self._input_arguments['class_names'] or None 
-        # if model_api_url and not class_names_arg:
-        #     raise ValueError("class_names must be explicitly provided when using model_api_url, since class count can't be inferred from a remote API")
-
+        class_names_arg = self._input_arguments['class_names'] or None
         class_names = handle_class_names_arg(class_names_arg, model)
         print("Class names:", class_names)
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+        # Register total work units (one per augmentation that will actually run)
+        # so progress advances incrementally instead of jumping 0 -> 100%.
+        num_augs_to_run = sum(
+            1 for aug_name in aug_dict if self._should_run_aug(aug_name, aug_methods)
+        )
+        self._progress_inst.add_total(num_augs_to_run)
+
+        combined_results = []; gradients = []; first_drops = []
         for aug_name, aug_class in aug_dict.items():
-            print(f"{aug_name}: [mem at the start of aug_dict.items stuff] {mem_mb():.1f} MB")
-                      
-            if aug_name not in aug_methods and aug_methods != ["all"]:
-                continue
-            if aug_name == 'url':
+            if not self._should_run_aug(aug_name, aug_methods):
                 continue
 
-            print(f"{aug_name}: [mem at the start of aug_dict.items stuff] {mem_mb():.1f} MB")
-            individual_results = dict() 
-            individual_results.update({"Augmentation": aug_name})
-
-            display_info = dict()
-            aug_dir =  self._output_folder / aug_name
-            os.makedirs(aug_dir, exist_ok=True)
-
-            num_epochs = self._input_arguments.get('num_epochs') or 1
-            # loader1 = torch.utils.data.DataLoader(test_dataset, batch_size=1, shuffle=False)
-            # print(f"[mem before 1-image batch] {mem_mb():.1f} MB")
-            # acc, _, _ = evaluate(model, loader1, None)  # will run 100 forward passes but each on a single image
-            # print(f"[mem after 1-image batch loop] {mem_mb():.1f} MB")    
-            gradient, accuracies, fig_path = augmentation_gradient(model, test_loader, device, aug_class, 'matplotlib', aug_dir, num_epochs)
-            first_drop = accuracies[1] - accuracies[0]
-            severities = ["None"] + aug_class.severities
-            for severity_idx, severity in enumerate(severities):
-                corrupted_dir = Path(aug_name) / f"severity{severity}"
-                display_image = self._get_one_corrupted_image_direct(
-                    image_paths[display_idx],
-                    aug_class,
-                    severity,
-                )
-                image_path = self._save_one_image(display_image, str(corrupted_dir), Path(str(image_paths[display_idx])).name)
-                prediction = get_prediction_from_image(model, display_image, device)
-                ground_truth = ground_truths[display_idx]
-
-                random_display = [
-                    str(Path(image_path).relative_to(self._output_folder)),
-                    class_names[str(ground_truth)],
-                    class_names[str(prediction)],
-                ]
-                display_info.update({str(severity): random_display})
-                
-            print(accuracies, first_drop)
-            accuracies_dict = {k:v for k,v in zip(severities, accuracies)}
-            print(aug_name, 'augmentation method gradient:', gradient)
-            individual_results.update(
-                {"display_info": display_info, 
-                "accuracies": accuracies_dict, 
-                "fig_img": str(fig_path.relative_to(self._output_folder))}
+            individual_results, gradient, first_drop = self._process_augmentation(
+                aug_name, aug_class, model, test_loader,
+                image_paths, ground_truths, class_names, display_idx, device,
             )
             combined_results.append(individual_results)
             gradients.append(gradient)
             first_drops.append(first_drop)
+
+            # One augmentation finished; advance the progress bar.
+            self._progress_inst.update(1)
             print()
 
-        output_results.update({
+        self._results = {
             "results": combined_results,
             "gradients": gradients,
             "first_drops": first_drops,
             "augmentation_names": [x["Augmentation"] for x in combined_results],
             "dataset_size": len(image_paths),
-            "class_names": class_names
-        })
+            "class_names": class_names,
+        }
 
-        self._results = output_results
+    def _resolve_aug_dict(self):
+        """
+        Build the augmentation dict and apply any custom parameter overrides.
+
+        Uses the ``aug_library`` input (default ``"albumentations"``) for the
+        defaults, then applies any ``custom_parameters`` parsed as
+        ``(aug_name, param_name, value)`` triplets; absent input keeps defaults.
+
+        Returns:
+            Dict[str, Any]: Mapping of augmentation name to its augmentation
+                instance, with any overrides applied.
+
+        Raises:
+            RuntimeError: If ``custom_parameters`` are provided but malformed
+                (e.g. wrong token count, unknown augmentation/parameter name, or
+                an unparseable value).
+        """
+        # Apply user defined parameters to default parameters
+        aug_library = self._input_arguments.get('aug_library') or "albumentations"
+        aug_dict = make_augmentation_dict(aug_library)
+
+        # Empty/absent input is the normal case: nothing to override, carry on.
+        custom_parameters = self._input_arguments.get('custom_parameters') or None
+        if custom_parameters:
+            # The user explicitly asked for overrides, so a malformed value is a
+            # real error: fail loudly rather than silently running with defaults.
+            try:
+                for aug_name, param_name, parameters_in_string in triplets(custom_parameters):
+                    aug_dict = custom_parameter_change(
+                        aug_dict, aug_name, param_name, parameters_in_string
+                    )
+            except Exception as e:
+                self.add_to_log(
+                    logging.ERROR,
+                    f"Failed to apply custom_parameters '{custom_parameters}': {e}",
+                )
+                raise RuntimeError(
+                    f"Invalid custom_parameters '{custom_parameters}': {e}"
+                ) from e
+        else:
+            print("~~ No custom parameters provided, let's use the default ones! n_n ~~")
+
+        print('aug dict', aug_dict)
+        return aug_dict
+
+    def _unwrap_model(self):
+        """
+        Return the underlying torch model/pipeline from the wrapped instance.
+
+        Returns the ``_model`` attribute for a plain model or ``_pipeline`` for a
+        pipeline, whichever the wrapped instance exposes.
+
+        Returns:
+            Any: The underlying model or pipeline object.
+
+        Raises:
+            ValueError: If the wrapped instance exposes neither ``_model`` nor
+                ``_pipeline``.
+        """
+        if "_model" in dir(self._model_instance):
+            return self._model_instance._model
+        elif "_pipeline" in dir(self._model_instance):
+            return self._model_instance._pipeline
+        raise ValueError(
+            "idk what the", type(self._model_instance),
+            "model instance is supposed to be ", dir(self._model_instance),
+        )
+
+    def _get_aug_methods(self):
+        """
+        Parse the ``aug_methods`` input into a list of augmentation names.
+
+        Splits the comma-separated input, stripping whitespace and dropping empty
+        tokens; defaults to ``["all"]`` (select every augmentation) when unset.
+
+        Returns:
+            List[str]: The requested augmentation names, or ``["all"]`` for all.
+        """
+        aug_methods = self._input_arguments.get('aug_methods') or 'all'
+        return [x.strip() for x in aug_methods.split(",") if x.strip()]
+
+    def _should_run_aug(self, aug_name, aug_methods):
+        """
+        Decide whether the named augmentation is in scope for this run.
+
+        The ``"url"`` entry is always skipped; any other name runs when it is
+        listed in ``aug_methods`` or when ``aug_methods`` is exactly ``["all"]``.
+
+        Args:
+            aug_name (str): Name of the augmentation being considered.
+            aug_methods (List[str]): Selected augmentation names, or ``["all"]``.
+
+        Returns:
+            bool: True if the augmentation should be evaluated, else False.
+        """
+        if aug_name == 'url':
+            return False
+        return aug_name in aug_methods or aug_methods == ["all"]
+
+    def _build_display_info(self, aug_name, aug_class, model, image_paths,
+                            ground_truths, class_names, display_idx, device):
+        """
+        Build the per-severity display samples for one augmentation.
+
+        For the chosen sample image, corrupts it at each severity (plus
+        ``"None"``), saves the result, and records the saved path alongside the
+        ground-truth and predicted class names.
+
+        Args:
+            aug_name (str): Name of the augmentation.
+            aug_class: The ``Augmentation`` instance providing severities/corruption.
+            model: Underlying model (or API URL string) used for prediction.
+            image_paths (List[str]): All image file paths.
+            ground_truths (List): Ground-truth label per image.
+            class_names (Dict[str, str]): Mapping from class index to display name.
+            display_idx (int): Index of the sample image to display.
+            device (torch.device): Device the model runs on.
+
+        Returns:
+            Dict[str, List[str]]: Mapping of severity (as string) to
+                ``[relative_image_path, ground_truth_name, predicted_name]``.
+        """
+        display_info = dict()
+        severities = ["None"] + aug_class.severities
+        for severity in severities:
+            corrupted_dir = Path(aug_name) / f"severity{severity}"
+            display_image = self._get_one_corrupted_image_direct(
+                image_paths[display_idx],
+                aug_class,
+                severity,
+            )
+            image_path = self._save_one_image(
+                display_image, str(corrupted_dir), Path(str(image_paths[display_idx])).name
+            )
+            prediction = get_prediction_from_image(model, display_image, device)
+            ground_truth = ground_truths[display_idx]
+
+            display_info[str(severity)] = [
+                str(Path(image_path).relative_to(self._output_folder)),
+                class_names[str(ground_truth)],
+                class_names[str(prediction)],
+            ]
+        return display_info
+
+    def _process_augmentation(self, aug_name, aug_class, model, test_loader,
+                              image_paths, ground_truths, class_names, display_idx, device):
+        """
+        Evaluate one augmentation across its severities and assemble its results.
+
+        Computes the accuracy-vs-severity gradient and first-severity drop, builds
+        the per-severity display samples, and packages everything (including the
+        saved plot path) into a single results dict.
+
+        Args:
+            aug_name (str): Name of the augmentation.
+            aug_class: The ``Augmentation`` instance to evaluate.
+            model: Underlying model (or API URL string).
+            test_loader (DataLoader): Loader over the (uncorrupted) test images.
+            image_paths (List[str]): All image file paths.
+            ground_truths (List): Ground-truth label per image.
+            class_names (Dict[str, str]): Mapping from class index to display name.
+            display_idx (int): Index of the sample image to display.
+            device (torch.device): Device the model runs on.
+
+        Returns:
+            Tuple[Dict[str, Any], float, float]: The per-augmentation results dict,
+                the best-fit gradient, and the first-severity accuracy drop.
+        """
+        print(f"{aug_name}: [mem at the start of aug_dict.items stuff] {mem_mb():.1f} MB")
+        aug_dir = self._output_folder / aug_name
+        os.makedirs(aug_dir, exist_ok=True)
+
+        num_epochs = self._input_arguments.get('num_epochs') or 1
+        gradient, accuracies, fig_path = augmentation_gradient(
+            model, test_loader, device, aug_class, 'matplotlib', aug_dir, num_epochs
+        )
+        first_drop = accuracies[1] - accuracies[0]
+        severities = ["None"] + aug_class.severities
+
+        display_info = self._build_display_info(
+            aug_name, aug_class, model, image_paths,
+            ground_truths, class_names, display_idx, device,
+        )
+
+        print(accuracies, first_drop)
+        print(aug_name, 'augmentation method gradient:', gradient)
+        individual_results = {
+            "Augmentation": aug_name,
+            "display_info": display_info,
+            "accuracies": {k: v for k, v in zip(severities, accuracies)},
+            "fig_img": str(fig_path.relative_to(self._output_folder)),
+        }
+        return individual_results, gradient, first_drop
 
     def _load_images(self, image_paths: list[str], labels) -> list[np.ndarray]:
         """
-        Load a list of numpy images from file paths.
+        Wrap the image paths in a lazy dataset and batching loader.
+
+        Builds an ``ImageDataset`` that decodes and resizes images to (500, 700)
+        on access, so only one batch is held in memory at a time, and returns it
+        together with a non-shuffling ``DataLoader``.
 
         Args:
-            image_paths (list[str]): A list of image file paths
+            image_paths (list[str]): Image file paths to load lazily.
+            labels: Ground-truth label per image, aligned with ``image_paths``.
 
         Returns:
-            np.ndarray: A list of numpy images
+            Tuple[ImageDataset, DataLoader]: The dataset and its batching loader.
         """
-        # from .cvrob_util import ImageDataset  # or wherever it's imported from
-        # dataset = ImageDataset(image_paths, labels)
-        # dataset.transform = transforms.Compose([
-        #     transforms.Resize((500, 700)),  # H, W
-        #     transforms.ToTensor()
-        # ])
-        transform = transforms.Compose([
+        from .cvrob_util import ImageDataset  # or wherever it's imported from
+        dataset = ImageDataset(image_paths, labels)
+        dataset.transform = transforms.Compose([
             transforms.Resize((500, 700)),  # H, W
             transforms.ToTensor()
         ])
-        image_tensors = torch.stack([transform(Image.open(p).convert("RGB")) for p in image_paths])
-        label_tensors = torch.tensor(labels, dtype=torch.long)
-        dataset = TensorDataset(image_tensors, label_tensors)
+        # transform = transforms.Compose([
+        #     transforms.Resize((500, 700)),  # H, W
+        #     transforms.ToTensor()
+        # ])
+        # image_tensors = torch.stack([transform(Image.open(p).convert("RGB")) for p in image_paths])
+        # label_tensors = torch.tensor(labels, dtype=torch.long)
+        # dataset = TensorDataset(image_tensors, label_tensors)
         loader = DataLoader(dataset, batch_size=16, shuffle=False)
 
         return dataset, loader
 
     def _save_one_image(self, image: np.ndarray, subfolder_name, image_path_original):
+        """
+        Write a single CHW image array to disk under the save folder.
 
+        Converts CHW to HWC, scales [0, 1] floats to 0-255 when needed, clips to
+        uint8, and saves as an image inside ``save_folder/subfolder_name``.
+
+        Args:
+            image (np.ndarray): CHW image array (float in [0, 1] or already 0-255).
+            subfolder_name (str): Sub-path under the save folder to write into.
+            image_path_original (str): File name to save the image as.
+
+        Returns:
+            str: Absolute path of the written image file.
+        """
         save_dir = self._save_folder / subfolder_name
         save_dir.mkdir(parents=True, exist_ok=True)
 
@@ -533,11 +698,20 @@ class Plugin(IAlgorithm):
         resize: tuple[int, int] = (500, 700),  # (H, W) — match _load_images
     ) -> np.ndarray:
         """
-        Fetch and corrupt a single image directly from disk.
-        Matches the pipeline of _load_images + _get_one_corrupted_image exactly,
-        but without loading any other images.
+        Load and corrupt a single image directly from disk.
 
-        Returns: CHW float32 numpy array in [0, 1]
+        Mirrors the ``_load_images`` transform (resize, then corrupt) for one
+        image without loading any others; ``"None"`` severity or a ``"None"``
+        augmentation returns the resized image uncorrupted.
+
+        Args:
+            image_path (str): Path to the source image.
+            aug_class: The ``Augmentation`` instance providing the corruption.
+            severity (str): Severity level to apply, or ``"None"`` for no corruption.
+            resize (tuple[int, int]): Target (H, W) size, matching ``_load_images``.
+
+        Returns:
+            np.ndarray: CHW float32 array normalised to [0, 1].
         """
         # 1. Load and resize — identical to _load_images transform
         image = Image.open(image_path).convert("RGB")

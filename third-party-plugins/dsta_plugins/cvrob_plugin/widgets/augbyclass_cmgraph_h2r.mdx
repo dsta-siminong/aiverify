@@ -1,12 +1,6 @@
-<div style={{
-  width: "100%",
-  padding: "16px",
-  marginBottom: "24px",
-  border: "1px solid #e5e7eb",
-  borderRadius: "8px",
-  backgroundColor: "#fafafa",
-  boxSizing: "border-box"
-}}>
+import InfoBox from "./InfoBox";
+
+<InfoBox>
   <h3>Confusion Matrix Statistics</h3>
 
   <span>
@@ -27,17 +21,9 @@
       <li>False Negatives (FN)</li>
     </ul>
   </span>
-</div>
+</InfoBox>
 
-<div style={{
-  width: "100%",
-  padding: "16px",
-  marginBottom: "24px",
-  border: "1px solid #e5e7eb",
-  borderRadius: "8px",
-  backgroundColor: "#fafafa",
-  boxSizing: "border-box"
-}}>
+<InfoBox>
   <h4>
     <b>How to read?</b>
   </h4>
@@ -67,18 +53,9 @@
     As severity increases, model performance is expected to degrade, meaning TP and TN decrease
     while FP and FN increase.
   </p>
+</InfoBox>
 
-</div>
-
-<div style={{
-  width: "100%",
-  padding: "16px",
-  marginBottom: "24px",
-  border: "1px solid #e5e7eb",
-  borderRadius: "8px",
-  backgroundColor: "#fafafa",
-  boxSizing: "border-box"
-}}>
+<InfoBox>
   <span>
     <b>Interpretation</b>
   </span>
@@ -131,4 +108,4 @@
     this may indicate the model has overfitted to this specific corruption type during training.
     In this case, retraining with fewer augmentation samples of this corruption type is recommended.
   </span>
-</div>
+</InfoBox>

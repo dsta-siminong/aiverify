@@ -1,13 +1,13 @@
 {
-  "cid": "bri_widget_alpa",
+  "cid": "brittle_table_of_aug",
   "widgetSize": {
     "minW": 12,
     "minH": 1,
     "maxW": 12,
     "maxH": 36
   },
-  "name": "Brittleness Widget - ALGO PARAMS",
-  "description": "Brittleness widget - ALGO PARAMS",
+  "name": "[3.t] Table of Augmentations for Brittleness algo",
+  "description": "Table of augmentations with details and possible real life manifestation",
   "dynamicHeight": true,
   "dependencies": [
     {
@@ -24,8 +24,8 @@
   "properties": [
     {
       "key": "title",
-      "helper": "Set the widget title (default \"Brittleness Widget Title\")",
-      "default": "Brittleness Widget Title"
+      "helper": "Set the widget title (default \"Augmentations Table\")",
+      "default": "Augmentations Table"
     }
   ]
 }

@@ -6,7 +6,7 @@
     "maxW": 12,
     "maxH": 36
   },
-  "name": "Augmentations Widget - ALGO PARAMS",
+  "name": "[1p] Augmentations Widget - ALGO PARAMS",
   "description": "Augmentations widget - ALGO PARAMS",
   "dynamicHeight": true,
   "dependencies": [
