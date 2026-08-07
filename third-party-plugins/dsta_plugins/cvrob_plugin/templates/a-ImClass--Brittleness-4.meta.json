@@ -1,0 +1,5 @@
+{
+  "cid": "a-ImClass--Brittleness-4",
+  "name": "[ImClass] Brittleness",
+  "description": "Highlights the images whose model confidence dropped the most within an interval of a given augmentation's severities applied to the data"
+}

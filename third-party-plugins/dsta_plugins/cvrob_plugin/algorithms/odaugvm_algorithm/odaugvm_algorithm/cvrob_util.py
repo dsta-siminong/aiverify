@@ -9,16 +9,45 @@ import plotly.graph_objects as go
 import torch.nn as nn
 from pathlib import Path
 from torchmetrics.detection.mean_ap import MeanAveragePrecision
-import gc
+
 import time
 import resource
 def mem_mb():
-    return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024 
+    """
+    Report the peak resident memory of this process.
+
+    Reads the process's maximum RSS from ``resource.getrusage`` and converts it
+    from kilobytes to megabytes.
+
+    Returns:
+        float: Peak resident set size in megabytes.
+    """
+    return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024
 
 def evaluate_detection(model, loader, device, iou_threshold=0.5):
+    """
+    Evaluate a model over a loader, dispatching by model kind.
+
+    A string ``model`` is treated as an API URL and evaluated remotely; anything
+    else is evaluated locally on ``device``.
+
+    Args:
+        model: A torch model, or an API URL string for remote evaluation.
+        loader (torch.utils.data.DataLoader): Data loader to evaluate over.
+        device (torch.device): Device the local model runs on.
+        iou_threshold (float): threshold for intersection over union (iou) calcs
+
+    Returns:
+        Tuple[float, np.ndarray, np.ndarray]: Accuracy (percent), predicted
+            labels, and true labels.
+    """
     if isinstance(model, str):
+        print("STRING MODEL!")
+        print(model)
         return evaluate_detection_api(model, loader, iou_threshold)
     else:
+        print("Direct model")
+        print(type(model), type(model), device)
         return evaluate_detection_direct(model, loader, device, iou_threshold)
 
 def evaluate_detection_direct(model, loader, device, iou_threshold=0.5):
@@ -74,6 +103,22 @@ def evaluate_detection_direct(model, loader, device, iou_threshold=0.5):
     return result["map"].item() #generalize in future
 
 def evaluate_detection_api(model, loader, iou_threshold=0.5):
+    """
+    Evaluate a model served behind an HTTP API over a data loader.
+
+    Each batch is serialised to ``.npy`` and POSTed to the API URL; predictions
+    from the JSON response are compared against the batch targets.
+
+    Args:
+        model (str): API URL that accepts a ``.npy`` batch and returns predictions.
+        loader (torch.utils.data.DataLoader): Data loader to evaluate over.
+
+    Returns:
+        float: mean Average Precision (mAP)
+
+    Raises:
+        requests.HTTPError: If any API request returns an error status.
+    """
     API_URL = model
     metric = MeanAveragePrecision(iou_thresholds=[iou_threshold])
 
@@ -114,8 +159,22 @@ def evaluate_detection_api(model, loader, iou_threshold=0.5):
     metric.reset()
     return result["map"].item() #generalize in future
 
-
 def get_prediction_from_image(model, display_image, device):
+    """
+    Predict the class of a single image, dispatching by model kind.
+
+    A string ``model`` is treated as an API URL; otherwise the image is run
+    through the local model on ``device``.
+
+    Args:
+        model: A torch model, or an API URL string for remote prediction.
+        display_image (np.ndarray): CHW image array to classify.
+        device (torch.device): Device the local model runs on.
+
+    Returns:
+        dict: prediction of the image represented by the bounding boxes of detection, 
+        labels for classes of the boxes, and the scores of each detection
+    """
     if isinstance(model, str):
         return get_prediction_from_image_api(model, display_image)
     image = torch.tensor(display_image).unsqueeze(0).float()
@@ -134,6 +193,23 @@ def get_prediction_from_image(model, display_image, device):
     return prediction
 
 def get_prediction_from_image_api(model, display_image):
+    """
+    Predict the class of a single image via an HTTP API.
+
+    Serialises the image to ``.npy``, POSTs it to the API URL, and returns the
+    predicted class from the JSON response.
+
+    Args:
+        model (str): API URL that accepts a ``.npy`` image and returns a prediction.
+        display_image (np.ndarray): Image array to classify.
+
+    Returns:
+        dict: prediction of the image represented by the bounding boxes of detection, 
+        labels for classes of the boxes, and the scores of each detection
+
+    Raises:
+        requests.HTTPError: If the API request returns an error status.
+    """
     API_URL = model
 
     # display_image: (C, H, W)
@@ -186,6 +262,32 @@ def augmentation_gradient_det(
     num_epochs=1,
     iou_threshold=0.5,
 ):
+    """
+    Measure how detection mAP degrades as augmentation severity increases.
+
+    Evaluates the clean loader (severity "None") and each of the augmentation's
+    severities, averaging over ``num_epochs`` reseeded runs per severity for
+    non-deterministic augmentations (forced to 1 epoch when deterministic), then
+    fits a line through the mAP-vs-severity points to summarize the trend.
+
+    Args:
+        model: Detection model, or an API URL string (routed to the API path).
+        test_loader (DataLoader): Clean loader yielding ``(images, targets)``.
+        device (torch.device): Device inference runs on.
+        aug_class: The ``Augmentation`` instance (severities, seeding, corruption).
+        plot_graphs (str | bool, optional): Graphing library (e.g. ``'matplotlib'``)
+            to render the figure with, or ``False`` to skip plotting. Defaults to
+            ``False``.
+        directory (Path, optional): Directory to save the figure into. Defaults to
+            the current directory.
+        num_epochs (int, optional): Reseeded repeats per severity for
+            non-deterministic augmentations. ``None`` is treated as 1. Defaults to 1.
+        iou_threshold (float, optional): IoU threshold for mAP. Defaults to ``0.5``.
+
+    Returns:
+        Tuple[float, List[float], Path]: The best-fit gradient of mAP vs severity,
+            the mAP per severity (clean first), and the saved figure path.
+    """
     num_epochs = 1 if num_epochs is None else num_epochs
     num_epochs = 1 if aug_class.deterministic else num_epochs
     print("===")
@@ -201,30 +303,41 @@ def augmentation_gradient_det(
         for i in range(num_epochs):
             seed = 1000*i + severity_idx 
             aug_class.set_seed(seed)
-            corrupted_loader = aug_class.corr_func_dataloader(test_loader, severity_idx=severity) #TO BE FIXED
+            corrupted_loader = aug_class.corr_func_dataloader(test_loader, severity_idx=severity)
             corr_map = evaluate_detection(model, corrupted_loader, device, iou_threshold)
             all_map.append(corr_map)
             print(f"epoch {i+1}: {corr_map}")
-
             del corrupted_loader
-            torch.cuda.empty_cache()
-            gc.collect()
+
         final_map = sum(all_map)/len(all_map)
         maps.append(final_map)
         print(f"mAP at severity {severity}: {final_map:.4f}")
 
     # Plot results
+    fig_path = directory / f"accuracy_vs_severity_{aug_class.name}.png"
     fig = None
     if plot_graphs is not False:
         fig = plot_accuracy_vs_severity(maps, ["None"]+severities, plot_graphs)  
-    fig_path = directory / f"accuracy_vs_severity_{aug_class.name}.png"
-    fig.savefig(fig_path)
-    plt.close()
+        fig.savefig(fig_path)
+        plt.close()
     return best_fit_gradient(list(range(len(severities)+1)), maps), maps, fig_path
 
 def get_num_classes(model: nn.Module) -> int:
     """
-    Infer number of classes from classification OR detection models.
+    Infer the number of output classes from a PyTorch classification model.
+
+    The function attempts to determine the number of classes by inspecting the
+    final Linear or Conv2d layer, or common classifier attributes such as
+    'fc', 'classifier', 'head', or 'heads'.
+
+    Args:
+        model (nn.Module): A PyTorch model assumed to be used for classification.
+
+    Returns:
+        int: The inferred number of output classes.
+
+    Raises:
+        RuntimeError: If the number of classes cannot be determined from the model.
     """
 
     # =========================
@@ -420,7 +533,7 @@ def best_fit_gradient(x_values, y_values):
         y_values (list or array): Dependent variable values.
     
     Returns:
-        loat: Slope of the best-fit line.
+        float: Slope of the best-fit line.
     """
     x_mean = np.mean(x_values)
     y_mean = np.mean(y_values)
@@ -431,6 +544,22 @@ def best_fit_gradient(x_values, y_values):
     return numerator / denominator
 
 class DetectionDataset(torch.utils.data.Dataset):
+    """
+    Lazy image dataset for object detection.
+
+    Loads each image on demand, upscaling it (with its boxes) so the shorter side
+    is at least ``min_size`` while preserving aspect ratio, then applies the
+    optional transform. Each item is ``(image, {"boxes", "labels"})``, where
+    ``boxes`` are ``[x1, y1, x2, y2]`` in pixel coordinates and ``labels`` are
+    integer class ids; images with no annotations yield empty box/label tensors.
+
+    Attributes:
+        image_paths (List[str]): Image file paths, one per sample.
+        targets (List[List[dict]]): Per-image ``{"bbox", "label"}`` annotations.
+        transform (callable | None): Optional image transform (e.g. ``ToTensor``),
+            applied after resizing.
+        min_size (int): Minimum shorter-side length; smaller images are upscaled.
+    """
     def __init__(self, image_paths, targets, transform=None, min_size=500):
         self.image_paths = image_paths
         self.targets = targets

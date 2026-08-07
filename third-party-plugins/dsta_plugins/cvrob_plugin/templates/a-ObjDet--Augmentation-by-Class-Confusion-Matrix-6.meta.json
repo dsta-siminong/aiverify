@@ -1,0 +1,5 @@
+{
+  "cid": "a-ObjDet--Augmentation-by-Class-Confusion-Matrix-6",
+  "name": "[ObjDet] Augmentation by Class Confusion Matrix",
+  "description": "Tracks confusion matrix statistics per class for model prediction across severities of augmentations"
+}

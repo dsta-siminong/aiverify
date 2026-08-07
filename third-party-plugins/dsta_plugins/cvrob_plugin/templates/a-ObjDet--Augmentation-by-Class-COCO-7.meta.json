@@ -1,0 +1,5 @@
+{
+  "cid": "a-ObjDet--Augmentation-by-Class-COCO-7",
+  "name": "[ObjDet] Augmentation by Class COCO",
+  "description": "Displays COCO statistics and graphs detailed by class across severities of augmentations."
+}

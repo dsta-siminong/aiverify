@@ -9,6 +9,11 @@ import ast
 import io
 import base64
 import requests
+import ast 
+# from nrtk.impls.perturb_image.optical import RadialDistortionPerturber
+from nrtk.impls.perturb_image.optical.otf import CircularAperturePerturber, DefocusPerturber, DetectorPerturber, JitterPerturber, TurbulenceAperturePerturber
+# from nrtk.impls.perturb_image.photometric.enhance import SharpnessPerturber, BrightnessPerturber
+from nrtk.impls.perturb_image.environment import WaterDropletPerturber, HazePerturber
 
 GEOMETRIC = {"Rotate", "Shear", "Translate", "Perspective", "ScaleUp", "ScaleDown"}
 DETERMINISTIC = {"None", "BrightnessUp", "BrightnessDown", "GaussianBlur", "ScaleUp", "ScaleDown", "Compression"}
@@ -465,15 +470,17 @@ class Augmentation:
                     "random_seed": x
                 }
 
-    def determine_severity(self, severity_idx):
-        if type(severity_idx) == int:
-            # print(f"Index is integer value {severity_idx}")
+    def determine_severity(self, severity_idx_or_str):
+        if isinstance(severity_idx_or_str, (int, np.integer)) and not isinstance(severity_idx_or_str, bool):
+            # print(f"Index is integer value {severity_idx_or_str}")
             all_severities = ["None"] + self.severities 
-            severity = all_severities[severity_idx]
+            severity = all_severities[severity_idx_or_str]
             # print(f"Which corresponds to value {severity}")
-        else:
+        elif isinstance(severity_idx_or_str, str):
             # print(f"Severity is directly referenced as {severity_idx}")
-            severity = severity_idx
+            severity = severity_idx_or_str
+        else:
+            raise ValueError(f"Parameter passed into determine_severity is invalid type {type(severity_idx_or_str)}")
         return severity
     
     def corr_func_dataloader(self, testloader, severity_idx):

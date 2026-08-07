@@ -15,15 +15,11 @@ from aiverify_test_engine.plugins.metadata.plugin_metadata import PluginMetadata
 from aiverify_test_engine.utils.json_utils import load_schema_file, validate_json
 from aiverify_test_engine.utils.simple_progress import SimpleProgress
 
-# from . import augmentations
 import numpy as np
-from PIL import Image
-import inspect
-import torchvision.transforms as transforms
 import torch
-from torch.utils.data import DataLoader, TensorDataset
-from .cvrob_util import evaluate, triplets, average_all_reports, handle_class_names_arg, get_prediction_from_image
-from .augmentations_class import make_augmentation_dict, custom_parameter_change, handle_url_algos
+from .cvrob_util import evaluate, average_all_reports, handle_class_names_arg
+from .augmentations_class import handle_url_algos
+from .cvrob_algo_common import BasePlugin
 from sklearn.metrics import classification_report, confusion_matrix, ConfusionMatrixDisplay
 
 import pandas as pd 
@@ -43,305 +39,25 @@ import matplotlib.lines as mlines
 #    requirements individually.
 # 3. Do not modify the class name, else the plugin cannot be read by the system.
 # =====================================================================================
-class Plugin(IAlgorithm):
+class Plugin(BasePlugin):
     """
     # TODO: Update the plugin description below
-    The Plugin(Augmentation v Metric Algorithm) class specifies methods in generating results for algorithm
+    The Plugin(Augmentation by Class Algorithm) class specifies methods in generating results for algorithm
     """
 
     # Some information on plugin
-    _name: str = "Augmentation v Metric Algorithm"
-    _description: str = "This algorithm shows the relationship between certain augmentations and the model's performance metrics"
+    _name: str = "Augmentation by Class Algorithm"
+    _description: str = "This algorithm shows the relationship between certain augmentations and the class statistics produced by the model"
     _version: str = "0.1.0"
     _metadata: PluginMetadata = PluginMetadata(_name, _description, _version)
     _plugin_type: PluginType = PluginType.ALGORITHM
     _requires_ground_truth: bool = True
     _supported_algorithm_model_type: List = [ModelType.CLASSIFICATION]
 
-    @staticmethod
-    def get_metadata() -> PluginMetadata:
-        """
-        A method to return the metadata for this plugin
-
-        Returns:
-            PluginMetadata: Metadata of this plugin
-        """
-        return Plugin._metadata
-
-    @staticmethod
-    def get_plugin_type() -> PluginType:
-        """
-        A method to return the type for this plugin
-
-        Returns:
-            PluginType: Type of this plugin
-        """
-        return Plugin._plugin_type
-
-    def __init__(
-        self,
-        data_instance_and_serializer: Tuple[IData, ISerializer],
-        model_instance_and_serializer: Tuple[IModel, ISerializer],
-        ground_truth_instance_and_serializer: Tuple[IData, ISerializer],
-        initial_data_instance: Union[IData, None],
-        initial_model_instance: Union[IModel, IPipeline, None],
-        **kwargs,
-    ):
-
-        self._initial_data_instance = initial_data_instance
-        self._initial_model_instance = initial_model_instance
-
-        # Look for kwargs values for log_instance, progress_callback and base path
-        self._logger = kwargs.get("logger", None)
-        self._progress_inst = SimpleProgress(
-            1, 0, kwargs.get("progress_callback", None)
-        )
-
-        # Check if data and model are tuples and if the tuples contain 2 items
-        if (
-            not isinstance(data_instance_and_serializer, Tuple)
-            or len(data_instance_and_serializer) != 2
-        ):
-            self.add_to_log(
-                logging.ERROR,
-                f"The algorithm has failed data validation: {data_instance_and_serializer}",
-            )
-            raise RuntimeError("The algorithm has failed data validation")
-
-        if (
-            not isinstance(model_instance_and_serializer, Tuple)
-            or len(model_instance_and_serializer) != 2
-        ):
-            self.add_to_log(
-                logging.ERROR,
-                f"The algorithm has failed model validation: {model_instance_and_serializer}",
-            )
-            raise RuntimeError("The algorithm has failed model validation")
-
-        self._data_instance = data_instance_and_serializer[0]
-        self._model_instance = model_instance_and_serializer[0]
-        self._model_type = kwargs.get("model_type")
-        self._ground_truth_label = kwargs.get("ground_truth")
-
-        if Plugin._requires_ground_truth:
-            # Check if ground truth instance is tuple and if the tuple contains 2 items
-            if (
-                not isinstance(ground_truth_instance_and_serializer, Tuple)
-                or len(ground_truth_instance_and_serializer) != 2
-            ):
-                self.add_to_log(
-                    logging.ERROR,
-                    f"The algorithm has failed ground truth data validation: \
-                        {ground_truth_instance_and_serializer}",
-                )
-                raise RuntimeError(
-                    "The algorithm has failed ground truth data validation"
-                )
-            self._requires_ground_truth = True
-            self._ground_truth_instance = ground_truth_instance_and_serializer[0]
-            self._ground_truth_serializer = ground_truth_instance_and_serializer[1]
-            self._ground_truth = kwargs.get("ground_truth")
-
-        else:
-            self._ground_truth_instance = None
-            self._ground_truth = ""
-
-        self._base_path = kwargs.get("project_base_path", Path().absolute())
-
-        # Other variables
-        self._data = None
-        self._results = {"results": [0]}
-
-        # Perform setup for this plug-in
-        self.setup()
-
-        # Write all output to the output folder
-        self._output_folder = Path.cwd() / "output"
-        self._output_folder.mkdir(parents=True, exist_ok=True)
-        self._save_folder = self._output_folder / "images"
-
-        # TODO: Update the input json schema in input.schema.json
-        # Algorithm input schema defined in input.schema.json
-        # By defining the input schema, it allows the front-end to know what algorithm input params is
-        # required by this plugin. This allows this algorithm plug-in to receive the arguments values it requires.
-        
-        current_file_dir = Path(__file__).parent
-        
-        self._input_schema = load_schema_file(
-            str(current_file_dir / "input.schema.json")
-        )
-
-        # TODO: Update the output json schema in output.schema.json
-        # Algorithm output schema defined in output.schema.json
-        # By defining the output schema, this plug-in validates the result with the output schema.
-        # This allows the result to be validated against the schema before passing it to the front-end for display.
-        self._output_schema = load_schema_file(
-            str(current_file_dir / "output.schema.json")
-        )
-
-        # Retrieve the input parameters defined in the input schema and store them
-        self._input_arguments = dict()
-        for key in self._input_schema.get("properties").keys():
-            self._input_arguments.update({key: kwargs.get(key)})
-
-        # Perform validation on input argument schema
-        if not validate_json(self._input_arguments, self._input_schema):
-            self.add_to_log(
-                logging.ERROR,
-                f"The algorithm has failed input schema validation. \
-                    The input must adhere to the schema in input.schema.json: {self._input_arguments}",
-            )
-            raise RuntimeError("The algorithm has failed input schema validation. \
-                               The input must adhere to the schema in input.schema.json")
-
-    def add_to_log(self, log_level: int, log_message: str) -> None:
-        """
-        A helper method to log messages to store events occurred
-
-        Args:
-            log_level (int): The logging level
-            log_message (str): The logging message
-        """
-        if self._logger is not None:
-            if not isinstance(log_level, int) or not isinstance(log_message, str):
-                raise RuntimeError(
-                    "The algorithm has invalid log level or message. The log level should be a \
-                        logging level(i.e. logging.DEBUG) and log message should be in String format"
-                )        
-        if self._logger is not None:
-            if log_level is logging.DEBUG:
-                self._logger.debug(log_message)
-            elif log_level is logging.INFO:
-                self._logger.info(log_message)
-            elif log_level is logging.WARNING:
-                self._logger.warning(log_message)
-            elif log_level is logging.ERROR:
-                self._logger.error(log_message)
-            elif log_level is logging.CRITICAL:
-                self._logger.critical(log_message)
-            else:
-                pass  # Invalid log level
-        else:
-            pass  # No log instance
-
-    def setup(self) -> None:
-        """
-        A method to perform setup for this algorithm plugin
-        """
-        # Perform validation on logger
-        if self._logger:
-            if not isinstance(self._logger, logging.Logger):
-                raise RuntimeError(
-                    "The algorithm has failed to set up logger. The logger type is invalid"
-                )
-
-        # Perform validation on model type
-        if self._model_type not in Plugin._supported_algorithm_model_type:
-            self.add_to_log(
-                logging.ERROR,
-                f"The algorithm has failed validation for model type: {self._model_type}",
-            )
-            raise RuntimeError("The algorithm has failed validation for model type")
-
-        # Perform validation on data instance
-        if not isinstance(self._data_instance, IData):
-            self.add_to_log(
-                logging.ERROR,
-                f"The algorithm has failed data validation: {self._data_instance}",
-            )
-            raise RuntimeError("The algorithm has failed data validation")
-
-        # Perform validation on model instance
-        if not isinstance(self._model_instance, IModel) and not isinstance(
-            self._model_instance, IPipeline
-        ):
-            self.add_to_log(
-                logging.ERROR,
-                f"The algorithm has failed model validation: {self._model_instance}",
-            )
-            raise RuntimeError("The algorithm has failed model validation")
-
-        # Perform validation on ground truth instance
-        if self._requires_ground_truth:
-            if not isinstance(self._ground_truth_instance, IData):
-                self.add_to_log(
-                    logging.ERROR,
-                    f"The algorithm has failed ground truth data validation: {self._ground_truth_instance}",
-                )
-                raise RuntimeError(
-                    "The algorithm has failed ground truth data validation"
-                )
-
-            # Perform validation on ground truth header
-            if not isinstance(self._ground_truth, str):
-                self.add_to_log(
-                    logging.ERROR,
-                    f"The algorithm has failed ground truth header validation. \
-                    Header must be in String and must be present in the dataset: {self._ground_truth}",
-                )
-                raise RuntimeError(
-                    "The algorithm has failed ground truth header validation. \
-                    Header must be in String and must be present in the dataset"
-                )
-
-        # Perform validation on progress_inst
-        if self._progress_inst:
-            if not isinstance(self._progress_inst, SimpleProgress):
-                raise RuntimeError(
-                    "The algorithm has failed validation for the progress bar"
-                )
-
-        # Perform validation on project_base_path
-        if not isinstance(self._base_path, PurePath):
-            self.add_to_log(
-                logging.ERROR,
-                f"The algorithm has failed validation for the project path. \
-                Ensure that the project path is a valid path: {self._base_path}",
-            )
-            raise RuntimeError(
-                "The algorithm has failed validation for the project path. \
-                Ensure that the project path is a valid path"
-            )
-
-        # Perform validation on metadata
-        if not isinstance(self._metadata, PluginMetadata):
-            self.add_to_log(
-                logging.ERROR,
-                f"The algorithm has failed validation for its metadata: {Plugin._metadata}",
-            )
-            raise RuntimeError("The algorithm has failed validation for its metadata")
-
-        # Perform validation on plugin type
-        if not isinstance(self._plugin_type, PluginType):
-            self.add_to_log(
-                logging.ERROR,
-                f"The algorithm has failed validation for its plugin type. \
-                Ensure that PluginType is PluginType.ALGORITHM: {Plugin._plugin_type}",
-            )
-            raise RuntimeError(
-                "The algorithm has failed validation for its plugin type. \
-                Ensure that PluginType is PluginType.ALGORITHM"
-            )
-        # Perform logging
-        self.add_to_log(logging.INFO, "Setup completed")
-
-    def get_progress(self) -> int:
-        """
-        A method to return the current progress for this plugin
-
-        Returns:
-            int: Completion Progress
-        """
-        return self._progress_inst.get_progress()
-
-    def get_results(self) -> Dict:
-        """
-        A method to return generated results for this plugin
-
-        Returns:
-            Dict: The results to be returned for display
-        """
-        return self._results
+    # Column groups for the per-class plots, shared by both plotting backends.
+    _METRIC_COLS = ['precision', 'recall', 'f1-score']
+    _CM_COLS = ['TP', 'FP', 'FN', 'TN']
+    _POP_COLS = ['preds_population', 'actual_population']
 
     def generate(self) -> None:
         """
@@ -368,26 +84,32 @@ class Plugin(IAlgorithm):
         # self._progress_inst.update(1)
 
     def _augmentation_bc_method(self, aug_dict):
-        image_paths : list[str] = self._data_instance.get_data()["image_directory"].tolist()
+        """
+        Evaluate every selected augmentation per class and assemble the results.
+
+        Loads the images once, evaluates the shared clean baseline once, then
+        delegates each augmentation to ``_process_augmentation`` and packages the
+        combined per-class results, augmentation names, class names and size.
+
+        Args:
+            aug_dict (Dict[str, Any]): Mapping of augmentation name to instance.
+        """
+        image_paths: list[str] = self._data_instance.get_data()["image_directory"].tolist()
         ground_truths = self._ordered_ground_truth_df[self._ground_truth_label].tolist()
         test_dataset, test_loader = self._load_images(image_paths, ground_truths)
-        #KIV: set a random seed here manually; if we want to manually set it then we'll need to change this
+        # KIV: set a random seed here manually; if we want to manually set it then we'll need to change this
         seed = self._input_arguments.get('random_seed', 42)   # configurable, 42 default
         display_rng = np.random.default_rng(seed)
         display_idx = display_rng.integers(len(image_paths))
 
-        output_results = dict()
-
         model = self._unwrap_model()
-        combined_results = []
 
         aug_methods = self._get_aug_methods()
         print("Augmentation methods:", aug_methods)
-        if 'url' in aug_dict:
-            if 'http' in aug_dict['url']:
-                handle_url_algos(aug_dict, aug_methods)
+        if 'url' in aug_dict and 'http' in aug_dict['url']:
+            handle_url_algos(aug_dict, aug_methods)
 
-        class_names_arg = self._input_arguments.get('class_names') or None 
+        class_names_arg = self._input_arguments.get('class_names') or None
         class_names = handle_class_names_arg(class_names_arg, model)
         print("Class names:", class_names)
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -399,234 +121,281 @@ class Plugin(IAlgorithm):
         )
         self._progress_inst.add_total(num_augs_to_run)
 
-        # labels = [k for k in class_names]
         target_names = [class_names[k] for k in class_names]
 
+        # The clean-severity ("None") baseline is identical for every augmentation:
+        # an untouched test_loader yields the same predictions regardless of
+        # aug_class. Evaluate it once here and reuse it below, saving num_augs - 1
+        # full evaluate() passes over the dataset.
+        baseline = self._evaluate_baseline(model, test_loader, test_dataset, target_names, device)
+
+        combined_results = []
         for aug_name, aug_class in aug_dict.items():
-            if aug_name not in aug_methods and aug_methods != ["all"]:
+            if not self._should_run_aug(aug_name, aug_methods):
                 continue
-            if aug_name == 'url':
-                continue
-            
-            individual_results = dict() ; display_info = dict(); cm_dict = dict() 
-            crs = []; cms = []
-            individual_results.update({"Augmentation": aug_name})
-            severities = ["None"] + aug_class.severities
-            if aug_name == "None":
-                severities = ["None"]
-            for severity_idx, severity_name in enumerate(severities):
-                print('severity idx', severity_idx, 'severity_name', severity_name)
-                num_epochs = self._input_arguments.get('num_epochs') or 1
-                num_epochs = num_epochs if severity_name != "None" else 1 
-                num_epochs = 1 if num_epochs is None else num_epochs
-                num_epochs = 1 if aug_class.deterministic else num_epochs
-                all_reports = []; all_cm = []
-                for i in range(num_epochs):
 
-                    print("NUMEPOCHS", num_epochs)
-                    seed = 1000*severity_idx + i 
-                    aug_class.set_seed(seed)
+            combined_results.append(self._process_augmentation(
+                aug_name, aug_class, model, test_loader,
+                image_paths, ground_truths, class_names, target_names,
+                display_idx, device, baseline,
+            ))
 
-                    if severity_name == "None":
-                        corrupted_loader = test_loader
-                    else:
-                        corrupted_loader = aug_class.corr_func_dataloader(test_loader, severity_name)
-                    _, y_pred, y_true = evaluate(model, corrupted_loader, device)
-                    report = classification_report(
-                        y_true, 
-                        y_pred, 
-                        labels=list(range(len(target_names))),  
-                        target_names=target_names, 
-                        output_dict=True, 
-                        zero_division=np.nan
-                    )
-
-                    cm = confusion_matrix(y_true, y_pred, labels=list(range(len(target_names))))
-                    all_reports.append(report); all_cm.append(cm)
-
-                avg_report = average_all_reports(all_reports)
-                avg_cm = np.mean(all_cm, axis=0)
-                TP = np.diag(avg_cm); FP = avg_cm.sum(axis=0) - TP; FN = avg_cm.sum(axis=1) - TP
-                TN = avg_cm.sum() - (TP+FP+FN)#; N = avg_cm.sum()
-                if avg_cm.sum() == 0:
-                    cm_stats = {
-                        label: {
-                            "TP": 0.0, "FP": 0.0, 
-                            "FN": 0.0, "TN": 0.0
-                        } for label in target_names
-                    }
-                else:
-                    cm_stats = {
-                        label: {
-                            "TP": float(TP[i]), "FP": float(FP[i]),
-                            "FN": float(FN[i]), "TN": float(TN[i])
-                        } for i, label in enumerate(target_names)
-                    }
-
-                corrupted_dir = Path(aug_name) / f"severity_{severity_name}"
-
-                display_image = self._get_one_corrupted_image_direct(
-                    image_paths[display_idx],
-                    aug_class,
-                    severity_name,
-                )
-
-                image_path = self._save_one_image(display_image, str(corrupted_dir), Path(str(image_paths[display_idx])).name)
-                prediction = get_prediction_from_image(model, display_image, device)
-                ground_truth = ground_truths[display_idx]
-
-                random_display = [
-                    str(Path(image_path).relative_to(self._output_folder)),
-                    class_names[str(ground_truth)],
-                    class_names[str(prediction)],
-                ]
-                display_info.update({str(severity_name): random_display})
-
-                cm_path, cm_path1 = self._save_cm_path(avg_cm, target_names,  corrupted_dir)
-                cm_dict.update({str(severity_name): [
-                    str(Path(cm_path).relative_to(self._output_folder)),
-                    str(Path(cm_path1).relative_to(self._output_folder))
-                ]})
-                crs.append(avg_report) ; cms.append(cm_stats)
-
-            path_dict = self._sklearn_method(crs, cms, severities, class_names, Path(aug_name), aug_name)
-            individual_results.update(
-                {
-                    "display_info": display_info, 
-                    "classification_report": crs ,
-                    "conf_matrix": cms,
-                    "plot_paths": path_dict,
-                    "confusion_matrix": cm_dict
-                }
-            )
-
-            combined_results.append(individual_results)
-
+            # One augmentation finished; advance the progress bar.
+            self._progress_inst.update(1)
             print()
 
-        output_results.update({
+        self._results = {
             "results": combined_results,
             "augmentation_names": [x["Augmentation"] for x in combined_results],
             "class_names": class_names,
-            "dataset_size": len(image_paths)
-        })
+            "dataset_size": len(image_paths),
+        }
 
-        self._results = output_results
-
-    def _resolve_aug_dict(self):
+    def _process_augmentation(self, aug_name, aug_class, model, test_loader,
+                              image_paths, ground_truths, class_names, target_names,
+                              display_idx, device, baseline):
         """
-        Build the augmentation dict and apply any custom parameter overrides.
+        Evaluate one augmentation across its severities and assemble its results.
 
-        Uses the ``aug_library`` input (default ``"albumentations"``) for the
-        defaults, then applies any ``custom_parameters`` parsed as
-        ``(aug_name, param_name, value)`` triplets; absent input keeps defaults.
-
-        Returns:
-            Dict[str, Any]: Mapping of augmentation name to its augmentation
-                instance, with any overrides applied.
-
-        Raises:
-            RuntimeError: If ``custom_parameters`` are provided but malformed
-                (e.g. wrong token count, unknown augmentation/parameter name, or
-                an unparseable value).
-        """
-        # Apply user defined parameters to default parameters
-        aug_library = self._input_arguments.get('aug_library') or "albumentations"
-        aug_dict = make_augmentation_dict(aug_library)
-
-        # Empty/absent input is the normal case: nothing to override, carry on.
-        custom_parameters = self._input_arguments.get('custom_parameters') or None
-        if custom_parameters:
-            # The user explicitly asked for overrides, so a malformed value is a
-            # real error: fail loudly rather than silently running with defaults.
-            try:
-                for aug_name, param_name, parameters_in_string in triplets(custom_parameters):
-                    aug_dict = custom_parameter_change(
-                        aug_dict, aug_name, param_name, parameters_in_string
-                    )
-            except Exception as e:
-                self.add_to_log(
-                    logging.ERROR,
-                    f"Failed to apply custom_parameters '{custom_parameters}': {e}",
-                )
-                raise RuntimeError(
-                    f"Invalid custom_parameters '{custom_parameters}': {e}"
-                ) from e
-        else:
-            print("~~ No custom parameters provided, let's use the default ones! n_n ~~")
-
-        print('aug dict', aug_dict)
-        return aug_dict
-
-    def _unwrap_model(self):
-        """
-        Return the underlying torch model/pipeline from the wrapped instance.
-
-        Returns the ``_model`` attribute for a plain model or ``_pipeline`` for a
-        pipeline, whichever the wrapped instance exposes.
-
-        Returns:
-            Any: The underlying model or pipeline object.
-
-        Raises:
-            ValueError: If the wrapped instance exposes neither ``_model`` nor
-                ``_pipeline``.
-        """
-        if "_model" in dir(self._model_instance):
-            return self._model_instance._model
-        elif "_pipeline" in dir(self._model_instance):
-            return self._model_instance._pipeline
-        raise ValueError(
-            "idk what the", type(self._model_instance),
-            "model instance is supposed to be ", dir(self._model_instance),
-        )
-
-    def _get_aug_methods(self):
-        """
-        Parse the ``aug_methods`` input into a list of augmentation names.
-
-        Splits the comma-separated input, stripping whitespace and dropping empty
-        tokens; defaults to ``["all"]`` (select every augmentation) when unset.
-
-        Returns:
-            List[str]: The requested augmentation names, or ``["all"]`` for all.
-        """
-        aug_methods = self._input_arguments.get('aug_methods') or 'all'
-        return [x.strip() for x in aug_methods.split(",") if x.strip()]
-
-    def _load_images(self, image_paths: list[str], labels) -> list[np.ndarray]:
-        """
-        Wrap the image paths in a lazy dataset and batching loader.
-
-        Builds an ``ImageDataset`` that decodes and resizes images to (500, 700)
-        on access, so only one batch is held in memory at a time, and returns it
-        together with a non-shuffling ``DataLoader``.
+        Runs each severity (reusing the clean baseline for ``"None"``), saves the
+        averaged confusion matrix per severity, builds the display samples, and
+        renders the per-class plots via ``_sklearn_method``.
 
         Args:
-            image_paths (list[str]): Image file paths to load lazily.
-            labels: Ground-truth label per image, aligned with ``image_paths``.
+            aug_name (str): Name of the augmentation.
+            aug_class: The ``Augmentation`` instance to evaluate.
+            model: Underlying model (or API URL string).
+            test_loader (DataLoader): Loader over the (uncorrupted) test images.
+            image_paths (List[str]): All image file paths.
+            ground_truths (List): Ground-truth label per image.
+            class_names (Dict[str, str]): Mapping from class index to display name.
+            target_names (List[str]): Class display names aligned with matrix axes.
+            display_idx (int): Index of the sample image to display.
+            device (torch.device): Device the model runs on.
+            baseline (tuple): ``(avg_report, avg_cm, cm_stats, dataset, y_pred)``
+                for the clean pass, shared across augmentations.
 
         Returns:
-            Tuple[ImageDataset, DataLoader]: The dataset and its batching loader.
+            Dict[str, Any]: The per-augmentation results dict.
         """
-        from .cvrob_util import ImageDataset  # or wherever it's imported from
-        dataset = ImageDataset(image_paths, labels)
-        dataset.transform = transforms.Compose([
-            transforms.Resize((500, 700)),  # H, W
-            transforms.ToTensor()
-        ])
-        # transform = transforms.Compose([
-        #     transforms.Resize((500, 700)),  # H, W
-        #     transforms.ToTensor()
-        # ])
-        # image_tensors = torch.stack([transform(Image.open(p).convert("RGB")) for p in image_paths])
-        # label_tensors = torch.tensor(labels, dtype=torch.long)
-        # dataset = TensorDataset(image_tensors, label_tensors)
-        loader = DataLoader(dataset, batch_size=16, shuffle=False)
+        base_avg_report, base_avg_cm, base_cm_stats, base_dataset, base_y_pred = baseline
 
-        return dataset, loader
+        crs = []; cms = []; cm_dict = dict(); display_scored = dict()
+        severities = ["None"] + aug_class.severities
+        if aug_name == "None":
+            severities = ["None"]
+
+        for severity_idx, severity_name in enumerate(severities):
+            print('severity idx', severity_idx, 'severity_name', severity_name)
+            if severity_name == "None":
+                # Reuse the baseline computed once above; the clean pass is
+                # identical across augmentations, so don't re-evaluate it.
+                avg_report, avg_cm, cm_stats = base_avg_report, base_avg_cm, base_cm_stats
+                scored_dataset, scored_y_pred = base_dataset, base_y_pred
+            else:
+                avg_report, avg_cm, scored_dataset, scored_y_pred = self._evaluate_severity(
+                    model, test_loader, aug_class, severity_name, severity_idx, target_names, device
+                )
+                cm_stats = self._compute_cm_stats(avg_cm, target_names)
+
+            corrupted_dir = Path(aug_name) / f"severity_{severity_name}"
+
+            # The display image/prediction come from the same scored pass
+            # (shuffle=False, so display_idx aligns), avoiding a second
+            # corrupt+inference pass per severity.
+            display_scored[str(severity_name)] = (scored_dataset, scored_y_pred[display_idx])
+
+            cm_path, cm_path1 = self._save_cm_path(avg_cm, target_names, corrupted_dir)
+            cm_dict[str(severity_name)] = [
+                str(Path(cm_path).relative_to(self._output_folder)),
+                str(Path(cm_path1).relative_to(self._output_folder)),
+            ]
+            crs.append(avg_report); cms.append(cm_stats)
+
+        display_info = self._build_display_info(
+            aug_name, aug_class, image_paths, ground_truths,
+            class_names, display_idx, display_scored,
+        )
+        path_dict = self._sklearn_method(crs, cms, severities, class_names, Path(aug_name), aug_name)
+        return {
+            "Augmentation": aug_name,
+            "display_info": display_info,
+            "classification_report": crs,
+            "conf_matrix": cms,
+            "plot_paths": path_dict,
+            "confusion_matrix": cm_dict,
+        }
+
+    def _evaluate_baseline(self, model, test_loader, test_dataset, target_names, device):
+        """
+        Evaluate the clean (uncorrupted) pass once for reuse across augmentations.
+
+        Args:
+            model: Underlying model (or API URL string).
+            test_loader (DataLoader): Loader over the uncorrupted test images.
+            test_dataset (Dataset): The dataset behind ``test_loader`` (for display).
+            target_names (List[str]): Class display names aligned with matrix axes.
+            device (torch.device): Device the model runs on.
+
+        Returns:
+            tuple: ``(avg_report, avg_cm, cm_stats, dataset, y_pred)`` for the
+                clean pass, ready to reuse as the ``"None"`` severity.
+        """
+        _, y_pred, y_true = evaluate(model, test_loader, device)
+        report = classification_report(
+            y_true, y_pred,
+            labels=list(range(len(target_names))),
+            target_names=target_names,
+            output_dict=True,
+            zero_division=np.nan,
+        )
+        cm = confusion_matrix(y_true, y_pred, labels=list(range(len(target_names))))
+        avg_report = average_all_reports([report])
+        avg_cm = np.mean([cm], axis=0)
+        cm_stats = self._compute_cm_stats(avg_cm, target_names)
+        return avg_report, avg_cm, cm_stats, test_dataset, y_pred
+
+    def _evaluate_severity(self, model, test_loader, aug_class, severity_name,
+                           severity_idx, target_names, device):
+        """
+        Evaluate one non-clean severity, averaging over epochs.
+
+        Corrupts the loader at ``severity_name`` for each epoch (seeded so runs are
+        reproducible), scores the model, and averages the per-epoch report and
+        confusion matrix. The last epoch's dataset and predictions are returned for
+        building the display sample without a second corrupt+inference pass.
+
+        Args:
+            model: Underlying model (or API URL string).
+            test_loader (DataLoader): Loader over the uncorrupted test images.
+            aug_class: The ``Augmentation`` instance providing the corruption.
+            severity_name (str): Severity label to apply.
+            severity_idx (int): Position of this severity (used to seed epochs).
+            target_names (List[str]): Class display names aligned with matrix axes.
+            device (torch.device): Device the model runs on.
+
+        Returns:
+            tuple: ``(avg_report, avg_cm, dataset, y_pred)`` — averaged report and
+                confusion matrix, plus the last epoch's scored dataset and preds.
+        """
+        num_epochs = self._input_arguments.get('num_epochs') or 1
+        num_epochs = 1 if num_epochs is None else num_epochs
+        num_epochs = 1 if aug_class.deterministic else num_epochs
+
+        all_reports = []; all_cm = []
+        corrupted_loader = None; y_pred = None
+        for i in range(num_epochs):
+            print("NUMEPOCHS", num_epochs)
+            seed = 1000 * severity_idx + i
+            aug_class.set_seed(seed)
+
+            corrupted_loader = aug_class.corr_func_dataloader(test_loader, severity_name)
+            _, y_pred, y_true = evaluate(model, corrupted_loader, device)
+            report = classification_report(
+                y_true, y_pred,
+                labels=list(range(len(target_names))),
+                target_names=target_names,
+                output_dict=True,
+                zero_division=np.nan,
+            )
+            cm = confusion_matrix(y_true, y_pred, labels=list(range(len(target_names))))
+            all_reports.append(report); all_cm.append(cm)
+
+        avg_report = average_all_reports(all_reports)
+        avg_cm = np.mean(all_cm, axis=0)
+        # Display the last epoch's realization: its corrupted dataset and the
+        # predictions the model actually produced on it.
+        return avg_report, avg_cm, corrupted_loader.dataset, y_pred
+
+    def _build_display_info(self, aug_name, aug_class, image_paths, ground_truths,
+                            class_names, display_idx, display_scored):
+        """
+        Build the per-severity display samples for one augmentation.
+
+        For the chosen sample image at each severity (plus ``"None"``), saves the
+        exact corrupted image the model scored and records the saved path with the
+        ground-truth and predicted class names, reusing the scored predictions
+        from ``display_scored`` rather than re-running inference.
+
+        Args:
+            aug_name (str): Name of the augmentation.
+            aug_class: The ``Augmentation`` instance providing the severity list.
+            image_paths (List[str]): All image file paths.
+            ground_truths (List): Ground-truth label per image.
+            class_names (Dict[str, str]): Mapping from class index to display name.
+            display_idx (int): Index of the sample image to display.
+            display_scored (dict): Maps severity label to
+                ``(dataset, prediction_at_display_idx)`` from the scored pass.
+
+        Returns:
+            Dict[str, List[str]]: Mapping of severity (as string) to
+                ``[relative_image_path, ground_truth_name, predicted_name]``.
+        """
+        display_info = dict()
+        severities = ["None"] + aug_class.severities
+        if aug_name == "None":
+            severities = ["None"]
+        for severity in severities:
+            corrupted_dir = Path(aug_name) / f"severity_{severity}"
+            dataset, prediction = display_scored[str(severity)]
+            display_info[str(severity)] = self._display_row_from_scored_batch(
+                dataset,
+                display_idx,
+                prediction,
+                corrupted_dir,
+                image_paths[display_idx],
+                ground_truths[display_idx],
+                class_names,
+            )
+        return display_info
+
+    def _compute_cm_stats(self, avg_cm, target_names):
+        """
+        Derive per-class TP/FP/FN/TN from an averaged confusion matrix.
+
+        Computes per-class counts from ``avg_cm``; an all-zero matrix (no
+        samples) yields zeroed stats for every class rather than division noise.
+
+        Args:
+            avg_cm (np.ndarray): Square confusion matrix (possibly averaged over
+                epochs), rows = true labels, columns = predicted labels.
+            target_names (list[str]): Class names aligned with the matrix axes.
+
+        Returns:
+            Dict[str, Dict[str, float]]: Mapping of class name to its TP, FP, FN
+                and TN counts as floats.
+        """
+        TP = np.diag(avg_cm); FP = avg_cm.sum(axis=0) - TP; FN = avg_cm.sum(axis=1) - TP
+        TN = avg_cm.sum() - (TP + FP + FN)  # ; N = avg_cm.sum()
+        if avg_cm.sum() == 0:
+            return {
+                label: {
+                    "TP": 0.0, "FP": 0.0,
+                    "FN": 0.0, "TN": 0.0
+                } for label in target_names
+            }
+        return {
+            label: {
+                "TP": float(TP[i]), "FP": float(FP[i]),
+                "FN": float(FN[i]), "TN": float(TN[i])
+            } for i, label in enumerate(target_names)
+        }
 
     def _sklearn_method(self, data, data2, severities, class_names, subfolder_name, aug_name):
+        """
+        Bulk of the visualization plotting for metrics, confusion matrix, and population stats.
+
+        Args:
+            data: data of classification reports
+            data2: data of confusion matrices
+            severities: severities
+            class_names: class names
+            subfolder_name: destination for saved artifacts
+            aug_name: augmentation name
+        
+        Returns:
+            path_dict: dictionary of paths of saved artifacts
+        """
         plt.rcParams.update({'font.size': 18})
 
         save_dir0 = self._save_folder / subfolder_name
@@ -712,351 +481,212 @@ class Plugin(IAlgorithm):
         path_dict['plotly_image_path'] = str(fx_path.relative_to(self._output_folder))
         return path_dict
 
-    def _matplotlib_class_images(self, combined_df, class_names, i, save_dir, aug_name):
-        sub_df = combined_df[combined_df['class'] == class_names[i]].copy()
-        sub_df = sub_df.reset_index(drop=True)
-        # =========================
-        # 1. Define columns first
-        # =========================
-        metric_cols = ['precision', 'recall', 'f1-score']
-        cm_cols = ['TP', 'FP', 'FN', 'TN']
-        pop_cols = ['preds_population', 'actual_population']
+    def _prep_class_df(self, combined_df, class_names, i):
+        """
+        Slice the combined dataframe to one class and prepare it for plotting.
 
-        # =========================
-        # 2. Preserve NaN masks (important for semantics)
-        # =========================
-        nan_mask_metrics = sub_df[metric_cols].isna()
-        nan_mask_cm = sub_df[cm_cols].isna()
-        nan_mask_pop = sub_df[pop_cols].isna()
+        Returns the raw per-class slice (with NaNs intact for axis-range and
+        marker decisions), a copy with plotting columns NaN-filled to 0 for line
+        stability, and the per-group NaN masks keyed by ``metrics``/``cm``/``pop``.
 
-        # =========================
-        # 3. Fill NaNs ONLY for plotting stability
-        # =========================
+        Args:
+            combined_df (pd.DataFrame): Merged metrics + CM-stats + populations.
+            class_names (Dict[str, str]): Mapping from class index to display name.
+            i (str): Class index key into ``class_names``.
+
+        Returns:
+            Tuple[pd.DataFrame, pd.DataFrame, Dict[str, pd.DataFrame]]: The raw
+                slice, the NaN-filled plotting slice, and the NaN masks.
+        """
+        sub_df = combined_df[combined_df['class'] == class_names[i]].copy().reset_index(drop=True)
+        nan_masks = {
+            'metrics': sub_df[self._METRIC_COLS].isna(),
+            'cm': sub_df[self._CM_COLS].isna(),
+            'pop': sub_df[self._POP_COLS].isna(),
+        }
         plot_df = sub_df.copy()
-        plot_df[metric_cols] = plot_df[metric_cols].fillna(0)
-        plot_df[cm_cols] = plot_df[cm_cols].fillna(0)
-        plot_df[pop_cols] = plot_df[pop_cols].fillna(0)
+        plot_df[self._METRIC_COLS] = plot_df[self._METRIC_COLS].fillna(0)
+        plot_df[self._CM_COLS] = plot_df[self._CM_COLS].fillna(0)
+        plot_df[self._POP_COLS] = plot_df[self._POP_COLS].fillna(0)
+        return sub_df, plot_df, nan_masks
 
-        # ==========================================================
-        # 4. METRICS PLOT (precision / recall / f1-score)
-        # ==========================================================
-        ax = plot_df.plot(x='severity', y=metric_cols)
-        line_colors = [line.get_color() for line in ax.get_lines()]
+    def _class_plot_specs(self, aug_name, class_name):
+        """
+        Describe the three per-class plots (metrics / CM-stats / populations).
 
-        y_min = plot_df[metric_cols].min().min()
-        y_max = plot_df[metric_cols].max().max()
+        Each spec drives both backends: which columns to plot, axis label, title,
+        y-axis strategy (``fixed`` [-0.1, 1.1] for metrics vs ``auto`` for the
+        others), whether to draw NaN markers, and the output filename per backend.
 
-        ax.set_xlabel('severity', fontsize=20)
-        ax.set_ylabel('metric', fontsize=20)
-        ax.figure.set_size_inches(16, 9)
-        ax.set_title(
-            f"Sklearn report statistics for {aug_name}, class = {class_names[i]}",
-            fontsize=24
-        )
+        Args:
+            aug_name (str): Name of the augmentation (for titles).
+            class_name (str): Display name of the class (for titles/filenames).
 
-        ax.set_ylim(-0.1, 1.1)
+        Returns:
+            List[Dict[str, Any]]: One spec dict per plot, in output order.
+        """
+        return [
+            {
+                'key': 'metrics', 'cols': self._METRIC_COLS, 'ylabel': 'metric',
+                'ylim': 'fixed', 'nan_markers': True,
+                'title': f"Sklearn report statistics for {aug_name}, class = {class_name}",
+                'mpl_file': f"sklearn_figure_class_{class_name}.png",
+                'html_file': f"sklearn_figure_class_{class_name}.html",
+            },
+            {
+                'key': 'cm', 'cols': self._CM_COLS, 'ylabel': 'metric',
+                'ylim': 'auto', 'nan_markers': False,
+                'title': f"Confusion matrix stats for {aug_name}, class = {class_name}",
+                'mpl_file': f"cm_figure_class_{class_name}.png",
+                'html_file': f"cm_figure_class_{class_name}.html",
+            },
+            {
+                'key': 'pop', 'cols': self._POP_COLS, 'ylabel': 'populations',
+                'ylim': 'auto', 'nan_markers': True,
+                'title': f"Raw class populations for {aug_name}, class = {class_name}",
+                'mpl_file': f"sklearn_figure_class_{class_name}_popns.png",
+                'html_file': f"sklearn_figure_class_{class_name}_popns.html",
+            },
+        ]
 
-        # if np.isfinite(y_min) and np.isfinite(y_max) and y_min < y_max:
-        #     ax.set_ylim(y_min - 0.1, y_max + 0.1)
+    def _matplotlib_class_images(self, combined_df, class_names, i, save_dir, aug_name):
+        """
+        Render the three per-class matplotlib plots for one class.
 
-        # Optional: mark where NaNs existed (tiny visual cue)
+        Args:
+            combined_df (pd.DataFrame): dataframe for combined stuff
+            class_names (Dict[str, str]): Mapping from class index to display name.
+            i (str): class name key
+            save_dir (Path): Sub-path under the save folder to write the image into.
+            aug_name (str): augmentation method name
+        
+        Returns:
+            Tuple[Path, Path, Path]: Saved metrics, CM-stats and population paths.
+        """
+        sub_df, plot_df, nan_masks = self._prep_class_df(combined_df, class_names, i)
+        specs = self._class_plot_specs(aug_name, class_names[i])
+        paths = []
+        for spec in specs:
+            ax = plot_df.plot(x='severity', y=spec['cols'])
+            line_colors = [line.get_color() for line in ax.get_lines()]
 
-        severity_order = plot_df['severity'].tolist()  # ['None', 'sigma_1.50', ...]
-        pos_map = {v: i for i, v in enumerate(severity_order)}
+            ax.set_xlabel('severity', fontsize=20)
+            ax.set_ylabel(spec['ylabel'], fontsize=20)
+            ax.figure.set_size_inches(16, 9)
+            ax.set_title(spec['title'], fontsize=24)
+            ax.tick_params(axis='x', labelsize=20, labelrotation=45)
+            ax.tick_params(axis='y', labelsize=20)
 
-        for col_idx, col in enumerate(metric_cols):
-            mask = nan_mask_metrics[col].values
-            x_labels = sub_df.loc[mask, 'severity']
-            x_pos = [pos_map[label] for label in x_labels]  # integer positions
-            y = np.zeros(mask.sum())
+            if spec['ylim'] == 'fixed':
+                ax.set_ylim(-0.1, 1.1)
+            else:
+                y_min = sub_df[spec['cols']].min().min()
+                y_max = sub_df[spec['cols']].max().max()
+                if np.isfinite(y_min) and np.isfinite(y_max) and y_min < y_max:
+                    ax.set_ylim(-5, y_max + 5)
 
-            ax.scatter(
-                x_pos,
-                y,
-                marker='x',
-                color=line_colors[col_idx],
-                alpha=0.8
-            )
+            if spec['nan_markers']:
+                mask_df = nan_masks[spec['key']]
+                severity_order = plot_df['severity'].tolist()  # ['None', 'sigma_1.50', ...]
+                pos_map = {v: idx for idx, v in enumerate(severity_order)}
 
-        nan_handles = []
-        for col_idx, col in enumerate(metric_cols):
-            mask = nan_mask_metrics[col].values
+                # Mark where NaNs existed (a small 'x' at y=0) per column.
+                for col_idx, col in enumerate(spec['cols']):
+                    mask = mask_df[col].values
+                    x_pos = [pos_map[label] for label in sub_df.loc[mask, 'severity']]
+                    ax.scatter(x_pos, np.zeros(mask.sum()), marker='x',
+                               color=line_colors[col_idx], alpha=0.8)
 
-            if mask.sum() == 0:
-                continue
+                nan_handles = [
+                    mlines.Line2D([], [], color=line_colors[col_idx], marker='x',
+                                  linestyle='None', markersize=10, label=f"x {col} (NaN)")
+                    for col_idx, col in enumerate(spec['cols'])
+                    if mask_df[col].values.sum() > 0
+                ]
+                plt.tight_layout()
+                handles, _ = ax.get_legend_handles_labels()
+                ax.legend(handles=handles + nan_handles, fontsize=16)
+            else:
+                plt.tight_layout()
 
-            handle = mlines.Line2D(
-                [],
-                [],
-                color=line_colors[col_idx],
-                marker='x',
-                linestyle='None',
-                markersize=10,
-                label=f"x {col} (NaN)"
-            )
+            path = save_dir / spec['mpl_file']
+            ax.figure.savefig(path)
+            plt.close(ax.figure)
+            paths.append(path)
 
-            nan_handles.append(handle)
-
-        ax_path = save_dir / f"sklearn_figure_class_{class_names[i]}.png"
-        ax.tick_params(axis='x', labelsize=20, labelrotation=45)
-        ax.tick_params(axis='y', labelsize=20)
-        plt.tight_layout()
-
-        handles, labels = ax.get_legend_handles_labels()
-        ax.legend(handles=handles + nan_handles, fontsize=16)
-        ax.figure.savefig(ax_path)
-        plt.close(ax.figure)
-
-        # ==========================================================
-        # 5. CONFUSION MATRIX PLOT (TP / FP / FN / TN)
-        # ==========================================================
-        ax1 = plot_df.plot(x='severity', y=cm_cols)
-
-        y_min = sub_df[cm_cols].min().min()
-        y_max = sub_df[cm_cols].max().max()
-
-        ax1.set_xlabel('severity', fontsize=20)
-        ax1.set_ylabel('metric', fontsize=20)
-        ax1.figure.set_size_inches(16, 9)
-        ax1.set_title(
-            f"Confusion matrix stats for {aug_name}, class = {class_names[i]}",
-            fontsize=24
-        )
-
-        if np.isfinite(y_min) and np.isfinite(y_max) and y_min < y_max:
-            ax1.set_ylim(-5, y_max + 5)
-
-        ax_path1 = save_dir / f"cm_figure_class_{class_names[i]}.png"
-        ax1.tick_params(axis='x', labelsize=20, labelrotation=45)
-        ax1.tick_params(axis='y', labelsize=20)
-        plt.tight_layout()
-        ax1.figure.savefig(ax_path1)
-        plt.close(ax1.figure)
-
-        # ==========================================================
-        # 6. POPULATION PLOT (safe, usually no NaNs here)
-        # ==========================================================
-        ax2 = plot_df.plot(x='severity', y=pop_cols)
-
-        y_min = sub_df[pop_cols].min().min()
-        y_max = sub_df[pop_cols].max().max()
-
-        ax2.set_xlabel('severity', fontsize=20)
-        ax2.set_ylabel('populations', fontsize=20)
-        ax2.figure.set_size_inches(16, 9)
-        ax2.set_title(
-            f"Raw class populations for {aug_name}, class = {class_names[i]}",
-            fontsize=24
-        )
-
-        if np.isfinite(y_min) and np.isfinite(y_max) and y_min < y_max:
-            ax2.set_ylim(-5, y_max + 5)
-
-        severity_order = plot_df['severity'].tolist()  # ['None', 'sigma_1.50', ...]
-        pos_map = {v: i for i, v in enumerate(severity_order)}
-
-        for col_idx, col in enumerate(pop_cols):
-            mask = nan_mask_pop[col].values
-            x_labels = sub_df.loc[mask, 'severity']
-            x_pos = [pos_map[label] for label in x_labels]  # integer positions
-            y = np.zeros(mask.sum())
-
-            ax2.scatter(
-                x_pos,
-                y,
-                marker='x',
-                color=line_colors[col_idx],
-                alpha=0.8
-            )
-            
-        nan_handles = []
-        for col_idx, col in enumerate(pop_cols):
-            mask = nan_mask_pop[col].values
-
-            if mask.sum() == 0:
-                continue
-
-            handle = mlines.Line2D(
-                [],
-                [],
-                color=line_colors[col_idx],
-                marker='x',
-                linestyle='None',
-                markersize=10,
-                label=f"x {col} (NaN)"
-            )
-
-            nan_handles.append(handle)
-
-        ax_path2 = save_dir / f"sklearn_figure_class_{class_names[i]}_popns.png"
-        ax2.tick_params(axis='x', labelsize=20, labelrotation=45)
-        ax2.tick_params(axis='y', labelsize=20)
-        plt.tight_layout()
-        handles, labels = ax2.get_legend_handles_labels()
-        ax2.legend(handles=handles + nan_handles, fontsize=16)
-        ax2.figure.savefig(ax_path2)
-        plt.close(ax2.figure)
-
-        return ax_path, ax_path1, ax_path2
+        return tuple(paths)
 
     def _plotly_class_images(self, combined_df, class_names, i, save_dir, aug_name):
-        sub_df = combined_df[combined_df['class'] == class_names[i]].copy()
+        """
+        Render the three per-class plotly plots for one class.
 
-        # =========================
-        # 1. Define columns FIRST
-        # =========================
-        metric_cols = ['precision', 'recall', 'f1-score']
-        cm_cols = ['TP', 'FP', 'FN', 'TN']
-        pop_cols = ['preds_population', 'actual_population']
+        Args:
+            combined_df (pd.DataFrame): dataframe for combined stuff
+            class_names (Dict[str, str]): Mapping from class index to display name.
+            i (str): class name key
+            save_dir (Path): Sub-path under the save folder to write the image into.
+            aug_name (str): augmentation method name
+        
+        Returns:
+            Tuple[Path, Path, Path]: Saved metrics, CM-stats and population paths.
+        """
+        sub_df, plot_df, nan_masks = self._prep_class_df(combined_df, class_names, i)
+        specs = self._class_plot_specs(aug_name, class_names[i])
+        paths = []
+        for spec in specs:
+            fig = px.line(plot_df, x="severity", y=spec['cols'], markers=True,
+                          title=spec['title'])
 
-        # =========================
-        # 2. Fill ONLY for plotting stability
-        # =========================
-        nan_mask_metrics = sub_df[metric_cols].isna()
-        nan_mask_pop = sub_df[pop_cols].isna()
-        plot_df = sub_df.copy()
-        plot_df[metric_cols] = plot_df[metric_cols].fillna(0)
-        plot_df[cm_cols] = plot_df[cm_cols].fillna(0)
-        plot_df[pop_cols] = plot_df[pop_cols].fillna(0)
+            if spec['nan_markers']:
+                mask_df = nan_masks[spec['key']]
+                trace_colors = [trace.line.color for trace in fig.data]
+                for idx, col in enumerate(spec['cols']):
+                    mask = mask_df[col].values
+                    if mask.sum() == 0:
+                        continue
+                    fig.add_scatter(
+                        x=plot_df.loc[mask, "severity"],
+                        y=plot_df.loc[mask, col],
+                        mode="markers",
+                        marker=dict(symbol="x", size=10, color=trace_colors[idx]),
+                        name=f"x {col} (NaN)",
+                        showlegend=True,
+                    )
 
-        # =========================
-        # 3. Metrics plot
-        # =========================
-
-        fig = px.line(
-            plot_df,
-            x="severity",
-            y=metric_cols,
-            markers=True,
-            title=f"Sklearn report statistics for {aug_name}, class = {class_names[i]}"
-        )
-
-        # capture trace colors for reuse
-        trace_colors = [trace.line.color for trace in fig.data]
-
-        for idx, col in enumerate(metric_cols):
-            mask = nan_mask_metrics[col].values
-
-            if mask.sum() == 0:
-                continue
-
-            fig.add_scatter(
-                x=plot_df.loc[mask, "severity"],
-                y=plot_df.loc[mask, col],
-                mode="markers",
-                marker=dict(
-                    symbol="x",
-                    size=10,
-                    color=trace_colors[idx]
-                ),
-                name=f"x {col} (NaN)",
-                showlegend=True
+            fig.update_layout(
+                width=1600, height=900,
+                xaxis_title="severity", yaxis_title=spec['ylabel'],
+                font=dict(size=20), title_font_size=24,
             )
 
+            if spec['ylim'] == 'fixed':
+                fig.update_yaxes(range=[-0.1, 1.1])
+            else:
+                y_min = sub_df[spec['cols']].min().min()
+                y_max = sub_df[spec['cols']].max().max()
+                if np.isfinite(y_min) and np.isfinite(y_max) and y_min < y_max:
+                    fig.update_yaxes(range=[-5, y_max + 5])
 
-        fig.update_layout(
-            width=1600,
-            height=900,
-            xaxis_title="severity",
-            yaxis_title="metric",
-            font=dict(size=20),
-            title_font_size=24
-        )
+            path = save_dir / spec['html_file']
+            fig.write_html(str(path))
+            paths.append(path)
 
-        y_min = plot_df[metric_cols].min().min()
-        y_max = plot_df[metric_cols].max().max()
-
-        fig.update_yaxes(range=[-0.1, 1.1])
-        # if np.isfinite(y_min) and np.isfinite(y_max) and y_min < y_max:
-        #     fig.update_yaxes(range=[y_min - 0.1, y_max + 0.1])
-
-        html_path = save_dir / f"sklearn_figure_class_{class_names[i]}.html"
-        fig.write_html(str(html_path))
-
-        # =========================
-        # 4. Confusion matrix plot
-        # =========================
-        fig = px.line(
-            plot_df,
-            x="severity",
-            y=cm_cols,
-            markers=True,
-            title=f"Confusion matrix stats for {aug_name}, class = {class_names[i]}"
-        )
-
-        fig.update_layout(
-            width=1600,
-            height=900,
-            xaxis_title="severity",
-            yaxis_title="metric",
-            font=dict(size=20),
-            title_font_size=24
-        )
-
-        y_min = sub_df[cm_cols].min().min()
-        y_max = sub_df[cm_cols].max().max()
-
-        if np.isfinite(y_min) and np.isfinite(y_max) and y_min < y_max:
-            fig.update_yaxes(range=[-5, y_max + 5])
-
-        html_path1 = save_dir / f"cm_figure_class_{class_names[i]}.html"
-        fig.write_html(str(html_path1))
-
-        # =========================
-        # 5. Population plot
-        # =========================
-        fig = px.line(
-            plot_df,
-            x="severity",
-            y=pop_cols,
-            markers=True,
-            title=f"Raw class populations for {aug_name}, class = {class_names[i]}"
-        )
-
-        # capture trace colors for reuse
-        trace_colors = [trace.line.color for trace in fig.data]
-
-        for idx, col in enumerate(pop_cols):
-            mask = nan_mask_pop[col].values
-
-            if mask.sum() == 0:
-                continue
-
-            fig.add_scatter(
-                x=plot_df.loc[mask, "severity"],
-                y=plot_df.loc[mask, col],
-                mode="markers",
-                marker=dict(
-                    symbol="x",
-                    size=10,
-                    color=trace_colors[idx]
-                ),
-                name=f"x {col} (NaN)",
-                showlegend=True
-            )
-
-        fig.update_layout(
-            width=1600,
-            height=900,
-            xaxis_title="severity",
-            yaxis_title="populations",
-            font=dict(size=20),
-            title_font_size=24
-        )
-
-        y_min = sub_df[pop_cols].min().min()
-        y_max = sub_df[pop_cols].max().max()
-
-        if np.isfinite(y_min) and np.isfinite(y_max) and y_min < y_max:
-            fig.update_yaxes(range=[-5, y_max + 5])
-
-        html_path2 = save_dir / f"sklearn_figure_class_{class_names[i]}_popns.html"
-        fig.write_html(str(html_path2))
-
-        return html_path, html_path1, html_path2
+        return tuple(paths)
 
     def _save_cm_path(self, avg_cm, target_names,  corrupted_dir):
+        """
+        Save the confusion matrix as matplotlib and plotly images.
 
+        Args:
+            avg_cm (np.ndarray): Confusion Matrix (averaged over epochs) to be done
+            target_names (List[str]): Class display names aligned with matrix axes.
+            corrupted_dir (Path): Sub-path under the save folder to write the image into.
+
+        Returns:
+            tuple:
+                save_path (Path): matplotlib png path
+                save_path1 (Path): plotly html path
+        """
         n_classes = len(target_names)
         fig_size = max(8, n_classes * 1.5)
 
@@ -1118,47 +748,3 @@ class Plugin(IAlgorithm):
 
         print(f"Saved to {save_path1} [plotly]")
         return save_path , save_path1
-
-    def _save_one_image(self, image: np.ndarray, subfolder_name, image_path_original):
-        save_dir = self._save_folder / subfolder_name
-        save_dir.mkdir(parents=True, exist_ok=True)
-
-        image_path = save_dir / image_path_original
-        image = np.transpose(image, (1, 2, 0))
-        Image.fromarray((image * 255.0).astype(np.uint8)).save(image_path)
-
-        return str(image_path)
-
-    def _get_one_corrupted_image_direct(
-        self,
-        image_path: str,
-        aug_class,         # Augmentation instance
-        severity: str,     # e.g. "severity_1" or "None"
-        resize: tuple[int, int] = (240, 320),  # (H, W) — match _load_images
-    ) -> np.ndarray:
-        """
-        Fetch and corrupt a single image directly from disk.
-        Matches the pipeline of _load_images + _get_one_corrupted_image exactly,
-        but without loading any other images.
-
-        Returns: CHW float32 numpy array in [0, 1]
-        """
-        # 1. Load and resize — identical to _load_images transform
-        image = Image.open(image_path).convert("RGB")
-        if resize is not None:
-            image = image.resize((resize[1], resize[0]), Image.BILINEAR)  # PIL takes (W, H)
-
-        # 2. To uint8 HWC numpy — skip the float tensor round-trip entirely
-        image_np = np.array(image, dtype=np.uint8)  # HWC uint8
-
-        # 3. Corrupt
-        if aug_class.name == "None" or severity == "None":
-            corrupted = image_np  # HWC uint8
-        else:
-            corrupted = aug_class.corr_func_arr(
-                image_np[None],   # needs batch dim: (1, H, W, C)
-                severity
-            )[0]                  # back to (H, W, C)
-
-        # 4. Normalise to CHW float32 [0, 1]
-        return corrupted.transpose(2, 0, 1).astype(np.float32) / 255.0

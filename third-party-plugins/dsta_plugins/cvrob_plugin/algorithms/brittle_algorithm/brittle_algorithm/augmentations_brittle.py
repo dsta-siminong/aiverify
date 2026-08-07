@@ -1,13 +1,5 @@
 import torch 
 import numpy as np
-# import albumentations as A
-# from albumentations.pytorch import ToTensorV2
-import plotly.graph_objects as go
-# from augly.image import blur, brightness, random_noise, contrast, color_jitter, pixelization, sharpen
-# from augly.image import aug_np_wrapper
-# from .cvrob_util import evaluate, collect_probs
-# from plotly.subplots import make_subplots
-# from imagecorruptions import corrupt
 import matplotlib.pyplot as plt
 import json
 import base64
@@ -53,8 +45,8 @@ class BrittlenessResult:
         labels (list): List or tensor of true labels for all inputs.
     """
     results: list
-    imgsA: list
-    imgsB: list 
+    # imgsA: list
+    # imgsB: list 
     probs_A: list
     probs_B: list 
     labels: list
@@ -91,39 +83,150 @@ def brittle_res_to_dict(br):
     Returns:
         dict: Dictionary containing:
             - 'results': List of dictionaries for each individual result.
-            - 'imgsA': List representation of imgsA tensor.
-            - 'imgsB': List representation of imgsB tensor.
+            # - 'imgsA': List representation of imgsA tensor.
+            # - 'imgsB': List representation of imgsB tensor.
             - 'probs_A': List representation of probs_A tensor.
             - 'probs_B': List representation of probs_B tensor.
             - 'labels': List representation of labels tensor.
     """
     d = {
         "results": [brittle_res_indiv_to_dict(r) for r in br.results],
-        "imgsA": br.imgsA.numpy().tolist(),
-        "imgsB": br.imgsB.numpy().tolist(),
+        # "imgsA": br.imgsA.numpy().tolist(),
+        # "imgsB": br.imgsB.numpy().tolist(),
         "probs_A": br.probs_A.numpy().tolist(),
         "probs_B": br.probs_B.numpy().tolist(),
         "labels": br.labels.numpy().tolist(),
     }
     return d
 
+@dataclass
+class BrittleRowView:
+    """
+    Pre-computed display fields for one brittleness row.
+
+    Holds everything the three visualizers render per sample, so the shared
+    per-row computation (class-name mapping, probability lookups) happens once
+    in ``build_row_views`` rather than being copy-pasted into each backend.
+
+    Attributes:
+        index (int): Sample index into the image/probability tensors.
+        name: Display name for the image (file name, or the index if no paths).
+        classA: Predicted class before corruption (mapped name or int).
+        classB: Predicted class after corruption (mapped name or int).
+        gt: Ground-truth class (mapped name or int).
+        prob_A_predA (float): P(classA) before corruption.
+        prob_B_predA (float): P(classA) after corruption.
+        prob_B_predB (float): P(classB) after corruption.
+        brittleness (float): Confidence drop on the true class.
+    """
+    index: int
+    name: object
+    classA: object
+    classB: object
+    gt: object
+    prob_A_predA: float
+    prob_B_predA: float
+    prob_B_predB: float
+    brittleness: float
+
+def build_row_views(results, b_result, class_names=None, image_paths=None):
+    """
+    Build the shared per-row view model for a list of brittleness results.
+
+    Resolves the display name, maps class indices to names (when provided), and
+    looks up the before/after probabilities once per row.
+
+    Args:
+        results (list): ``BrittlenessResultIndiv`` items to render (already
+            truncated to top-K by the caller if desired).
+        b_result (BrittlenessResult): Provides ``probs_A``/``probs_B``/``labels``.
+        class_names (dict, optional): Maps class index to display name.
+        image_paths (list, optional): Source paths; the file name is shown when
+            given, otherwise the raw index.
+
+    Returns:
+        List[BrittleRowView]: One view per input result, in the same order.
+    """
+    probs_A = b_result.probs_A
+    probs_B = b_result.probs_B
+    labels = b_result.labels
+
+    views = []
+    for res in results:
+        i = res.index
+        name = Path(str(image_paths[i])).name if image_paths is not None else i
+
+        predA_int = res.predA
+        predB_int = res.predB
+        classA, classB = predA_int, predB_int
+        gt = labels[i].item()
+        if class_names is not None:
+            classA = class_names[predA_int]
+            classB = class_names[predB_int]
+            gt = class_names[gt]
+
+        views.append(BrittleRowView(
+            index=i,
+            name=name,
+            classA=classA,
+            classB=classB,
+            gt=gt,
+            prob_A_predA=probs_A[i][predA_int].item(),
+            prob_B_predA=probs_B[i][predA_int].item(),
+            prob_B_predB=probs_B[i][predB_int].item(),
+            brittleness=res.brittleness,
+        ))
+    return views
+
+def _draw_mpl_pair(ax_before, ax_after, imgA, imgB, vw):
+    """
+    Draw one before/after image pair with captions onto a pair of axes.
+
+    Shared by the combined top-K grid and the per-row fragment figures so the
+    imshow + text block is written once instead of duplicated.
+
+    Args:
+        ax_before: Axis for the before-corruption image.
+        ax_after: Axis for the after-corruption image.
+        imgA (np.ndarray): Display-ready before image (HWC).
+        imgB (np.ndarray): Display-ready after image (HWC).
+        vw (BrittleRowView): The row's pre-computed display fields.
+    """
+    ax_before.imshow(imgA)
+    ax_before.axis("off")
+    ax_before.text(
+        0.02, 0.98,
+        f"image path: {vw.name}\nA (before) | pred={vw.classA}\n\n"
+        f"pred_proba of class {vw.classA}={vw.prob_A_predA:.3f}",
+        transform=ax_before.transAxes,
+        va="top", ha="left", fontsize=9,
+        bbox=dict(boxstyle="round", facecolor="white", alpha=0.8)
+    )
+
+    ax_after.imshow(imgB)
+    ax_after.axis("off")
+    ax_after.text(
+        0.02, 0.98,
+        f"image path: {vw.name}\nB (after) | pred={vw.classB}\n"
+        f"pred_proba of {vw.classB}={vw.prob_B_predB:.3f}\n"
+        f"pred_proba of {vw.classA}={vw.prob_B_predA:.3f} | Δ={vw.brittleness:.3f}",
+        transform=ax_after.transAxes,
+        va="top", ha="left", fontsize=9,
+        bbox=dict(boxstyle="round", facecolor="white", alpha=0.8)
+    )
+
 def visualize_topk_matplotlib(
-    results_sorted, 
+    results_sorted,
     b_result,
+    imgs_A,
+    imgs_B,
     K=10,
-    class_names=None, 
+    class_names=None,
     transform=None,
     directory=Path(),
     image_paths=None
 ):
-    imgs_A = b_result.imgsA
-    imgs_B = b_result.imgsB
-    probs_A = b_result.probs_A
-    probs_B = b_result.probs_B 
-
-    topk = results_sorted[:K]
-    # top_k_indices = [item.index for item in topk]
-    # print("&& TOPK INDICES 2", top_k_indices)
+    views = build_row_views(results_sorted[:K], b_result, class_names, image_paths)
 
     fig, axes = plt.subplots(
         K, 2,
@@ -139,90 +242,22 @@ def visualize_topk_matplotlib(
     fragment_paths = []
 
     print(f"TRANSFORM: {transform}")
-    for row, res in enumerate(topk):
-        i = res.index
-        if image_paths is not None:
-            idx = Path(str(image_paths[i])).name
-        else:
-            idx = i
+    for row, vw in enumerate(views):
+        imgA = unnormalize(imgs_A[vw.index], transform)
+        imgB = unnormalize(imgs_B[vw.index], transform)
 
-        imgA = unnormalize(imgs_A[i], transform)
-        imgB = unnormalize(imgs_B[i], transform)
+        # Same pair on the combined grid row and its standalone fragment figure.
+        _draw_mpl_pair(axes[row, 0], axes[row, 1], imgA, imgB, vw)
 
-        predA_int = res.predA
-        predB_int = res.predB
-        classA = predA_int
-        classB = predB_int
-        if class_names is not None:
-            classA = class_names[predA_int]
-            classB = class_names[predB_int]
-
-        initial_class_prob_A = probs_A[i][predA_int].item()
-        resultant_initial_class_prob_B = probs_B[i][predA_int].item()
-        resultant_class_prob_B = probs_B[i][predB_int].item()
-
-        axes[row, 0].imshow(imgA)
-        axes[row, 0].axis("off")
-        axes[row, 0].text(
-            0.02, 0.98,
-            f"image path: {idx}\nA (before) | pred={classA}\n\npred_proba of class {classA}={initial_class_prob_A:.3f}",
-            transform=axes[row, 0].transAxes,
-            va="top",
-            ha="left",
-            fontsize=9,
-            bbox=dict(boxstyle="round", facecolor="white", alpha=0.8)
-        )
-
-        axes[row, 1].imshow(imgB)
-        axes[row, 1].axis("off")
-        axes[row, 1].text(
-            0.02, 0.98,
-            f"image path: {idx}\nB (after) | pred={classB}\n"
-            f"pred_proba of {classB}={resultant_class_prob_B:.3f}\n"
-            f"pred_proba of {classA}={resultant_initial_class_prob_B:.3f} | Δ={res.brittleness:.3f}",
-            transform=axes[row, 1].transAxes,
-            va="top",
-            ha="left",
-            fontsize=9,
-            bbox=dict(boxstyle="round", facecolor="white", alpha=0.8)
-        )
-
-        # Save this row as its own 1x2 figure
         fig_row, axes_row = plt.subplots(
             1, 2,
             figsize=(12, 3),
             constrained_layout=True
         )
-
         for ax in axes_row:
             for spine in ax.spines.values():
                 spine.set_visible(True)
-
-        axes_row[0].imshow(imgA)
-        axes_row[0].axis("off")
-        axes_row[0].text(
-            0.02, 0.98,
-            f"image path: {idx}\nA (before) | pred={classA}\n\npred_proba of class {classA}={initial_class_prob_A:.3f}",
-            transform=axes_row[0].transAxes,
-            va="top",
-            ha="left",
-            fontsize=9,
-            bbox=dict(boxstyle="round", facecolor="white", alpha=0.8)
-        )
-
-        axes_row[1].imshow(imgB)
-        axes_row[1].axis("off")
-        axes_row[1].text(
-            0.02, 0.98,
-            f"image path: {idx}\nB (after) | pred={classB}\n"
-            f"pred_proba of {classB}={resultant_class_prob_B:.3f}\n"
-            f"pred_proba of {classA}={resultant_initial_class_prob_B:.3f} | Δ={res.brittleness:.3f}",
-            transform=axes_row[1].transAxes,
-            va="top",
-            ha="left",
-            fontsize=9,
-            bbox=dict(boxstyle="round", facecolor="white", alpha=0.8)
-        )
+        _draw_mpl_pair(axes_row[0], axes_row[1], imgA, imgB, vw)
 
         fragment_path = fragments_dir / f"brittleness_top_{row + 1}.png"
         fragment_paths.append(fragment_path)
@@ -230,63 +265,49 @@ def visualize_topk_matplotlib(
         plt.close(fig_row)
 
     save_path = directory / f"brittleness_topk.png"
-    plt.savefig(save_path)
+    fig.savefig(save_path)
     plt.close(fig)
 
     return save_path, fragment_paths
 
 def visualize_in_html(
-    results_sorted, 
-    b_result, 
-    class_names=None, 
+    results_sorted,
+    b_result,
+    imgs_A,
+    imgs_B,
+    class_names=None,
     transform=None,
     directory=Path(),
     image_paths=None
 ):
-    imgs_A = b_result.imgsA
-    imgs_B = b_result.imgsB
-    probsA = b_result.probs_A
-    probsB = b_result.probs_B 
-    labels = b_result.labels
+    views = build_row_views(results_sorted, b_result, class_names, image_paths)
 
     # Prepare image & info lists
-    # img_base64_list = []
     imageA_list = []
     imageB_list = []
     info_list = []
 
-    for res in results_sorted:
-        i = res.index
-        if image_paths is not None:
-            idx = Path(str(image_paths[i])).name
-        else:
-            idx = i
+    for vw in views:
+        i = vw.index
+        idx = vw.name
         # images
         imgA_b64 = "data:image/png;base64," + tensor_to_base64(imgs_A[i], transform, jpeg_quality=85)
         imgB_b64 = "data:image/png;base64," + tensor_to_base64(imgs_B[i], transform, jpeg_quality=85)
 
-        # predictions
-        predA_cls = probsA[i].argmax().item()
-        predB_cls = probsB[i].argmax().item()
-
-        predA_p = probsA[i, predA_cls].item()
-        predB_p = probsB[i, predB_cls].item()
-
-        gt = labels[i].item()
+        predA_cls = vw.classA
+        predB_cls = vw.classB
+        predA_p = vw.prob_A_predA
+        predB_p = vw.prob_B_predB
+        gt = vw.gt
 
         imageA_list.append(imgA_b64)
         imageB_list.append(imgB_b64)
 
-        if class_names is not None:
-            predA_cls = class_names[predA_cls]
-            predB_cls = class_names[predB_cls]
-            gt = class_names[gt]
-
-        bar_pct = int(res.brittleness * 100)
+        bar_pct = int(vw.brittleness * 100)
         bar_color = (
-            "#2ecc71" if res.brittleness < 0.25 else
-            "#f1c40f" if res.brittleness < 0.5  else
-            "#e67e22" if res.brittleness < 0.75 else
+            "#2ecc71" if vw.brittleness < 0.25 else
+            "#f1c40f" if vw.brittleness < 0.5  else
+            "#e67e22" if vw.brittleness < 0.75 else
             "#e74c3c"
         )
 
@@ -300,9 +321,9 @@ def visualize_in_html(
             # After
             f'<span style="color:#c0392b"><b>▶ After corruption</b></span><br>'
             f'&nbsp;&nbsp;Prediction: <b>{predB_cls}</b> &nbsp;|&nbsp; Confidence of {predB_cls}: <b>{predB_p:.3f}</b><br>'
-            f'&nbsp;&nbsp;Confidence of {predA_cls} <b>{(predA_p - res.brittleness):.3f}</b><br><br>'
+            f'&nbsp;&nbsp;Confidence of {predA_cls} <b>{(predA_p - vw.brittleness):.3f}</b><br><br>'
             # Brittleness score + bar
-            f'<b>Brittleness Δ: {res.brittleness:.2f} / 1.00</b><br>'
+            f'<b>Brittleness Δ: {vw.brittleness:.2f} / 1.00</b><br>'
             f'<div style="background:#ddd;border-radius:4px;height:10px;width:300px;display:inline-block;margin:4px 0">'
             f'<div style="background:{bar_color};width:{bar_pct}%;height:10px;border-radius:4px"></div></div><br>'
             f'<small style="color:#888">'
@@ -395,31 +416,24 @@ def visualize_in_html(
     print("Saved brittleness_carousel.html")
     return save_path
 
-
 def visualize_topk_without_plotly(
     results_sorted,
     b_result,
+    imgs_A,
+    imgs_B,
     K=10,
     class_names=None,
     transform=None,
     directory=Path(),
     image_paths=None
 ):
-    imgs_A = b_result.imgsA
-    imgs_B = b_result.imgsB
-    probs_A = b_result.probs_A
-    probs_B = b_result.probs_B 
-    topk = results_sorted[:K]
+    views = build_row_views(results_sorted[:K], b_result, class_names, image_paths)
 
     rows_html = []
 
-    for rank, res in enumerate(topk, start=1):
-        i = res.index
-
-        if image_paths is not None:
-            idx = Path(str(image_paths[i])).name
-        else:
-            idx = i
+    for rank, vw in enumerate(views, start=1):
+        i = vw.index
+        idx = vw.name
 
         imgA_b64 = tensor_to_base64(
             imgs_A[i],
@@ -432,17 +446,11 @@ def visualize_topk_without_plotly(
             jpeg_quality=85
         )
 
-        predA_int = res.predA
-        predB_int = res.predB
-        classA = predA_int
-        classB = predB_int
-        if class_names is not None:
-            classA = class_names[predA_int]
-            classB = class_names[predB_int]
-
-        initial_class_prob_A = probs_A[i][predA_int].item()
-        resultant_initial_class_prob_B = probs_B[i][predA_int].item()
-        resultant_class_prob_B = probs_B[i][predB_int].item()
+        classA = vw.classA
+        classB = vw.classB
+        initial_class_prob_A = vw.prob_A_predA
+        resultant_initial_class_prob_B = vw.prob_B_predA
+        resultant_class_prob_B = vw.prob_B_predB
 
         classA_html = f'<span class="classA">{classA}</span>'
         classB_html = f'<span class="classB">{classB}</span>'
@@ -472,7 +480,7 @@ def visualize_topk_without_plotly(
             <p>
                 <b>After Corruption</b><br>
                 P({classA_html}) = {resultant_initial_class_prob_B:.3f}<br>
-                Δ = {res.brittleness:.3f}<br>
+                Δ = {vw.brittleness:.3f}<br>
                 {after_classB_line}
             </p>
         </div>

@@ -24,10 +24,63 @@ import torch
 from torch.utils.data import DataLoader, TensorDataset
 from .cvrob_util import *
 from .augmentations_class import make_augmentation_dict, custom_parameter_change, handle_url_algos
+from .cvrob_algo_common import BasePlugin
 from .augmentations_brittle import *
-import pandas as pd 
+import pandas as pd
 import json
 from pprint import pprint
+from dataclasses import dataclass
+
+
+@dataclass
+class _BrittleCtx:
+    """
+    Everything ``_brittle_method`` resolves once up front and threads to its
+    phase helpers, so no single method has to re-derive the setup.
+
+    Attributes:
+        image_paths (list): All image file paths.
+        ground_truths (list): Ground-truth label per image.
+        model: The unwrapped torch model (or API URL string).
+        device (torch.device): Device the model runs on.
+        class_names (dict): Class index (as str) -> display name.
+        class_names_int (dict): Class index (as int) -> display name.
+        aug_name (str): The selected augmentation's name.
+        aug_class: The selected ``Augmentation`` instance.
+        severities (tuple): ``(before, after)`` severity specifiers.
+        loader_A: Loader for the before severity (may be the clean loader).
+        loader_B: Loader for the after severity.
+    """
+    image_paths: list
+    ground_truths: list
+    model: object
+    device: object
+    class_names: dict
+    class_names_int: dict
+    aug_name: str
+    aug_class: object
+    severities: tuple
+    loader_A: object
+    loader_B: object
+
+
+@dataclass
+class _BrittleScored:
+    """
+    The images, probabilities and labels captured from the two scoring passes.
+
+    Attributes:
+        imgs_A: CHW image tensors scored at the before severity.
+        probs_A: Per-sample class probabilities at the before severity.
+        imgs_B: CHW image tensors scored at the after severity.
+        probs_B: Per-sample class probabilities at the after severity.
+        labels: Ground-truth labels (shared across both passes).
+    """
+    imgs_A: object
+    probs_A: object
+    imgs_B: object
+    probs_B: object
+    labels: object
 
 
 # =====================================================================================
@@ -39,305 +92,20 @@ from pprint import pprint
 #    requirements individually.
 # 3. Do not modify the class name, else the plugin cannot be read by the system.
 # =====================================================================================
-class Plugin(IAlgorithm):
+class Plugin(BasePlugin):
     """
     # TODO: Update the plugin description below
-    The Plugin(Augmentation v Metric Algorithm) class specifies methods in generating results for algorithm
+    The Plugin(Brittle Algorithm) class specifies methods in generating results for algorithm
     """
 
     # Some information on plugin
-    _name: str = "Augmentation v Metric Algorithm"
-    _description: str = "This algorithm shows the relationship between certain augmentations and the model's performance metrics"
+    _name: str = "Brittle Algorithm"
+    _description: str = "This algorithm shows the most brittle images"
     _version: str = "0.1.0"
     _metadata: PluginMetadata = PluginMetadata(_name, _description, _version)
     _plugin_type: PluginType = PluginType.ALGORITHM
     _requires_ground_truth: bool = True
     _supported_algorithm_model_type: List = [ModelType.CLASSIFICATION]
-
-    @staticmethod
-    def get_metadata() -> PluginMetadata:
-        """
-        A method to return the metadata for this plugin
-
-        Returns:
-            PluginMetadata: Metadata of this plugin
-        """
-        return Plugin._metadata
-
-    @staticmethod
-    def get_plugin_type() -> PluginType:
-        """
-        A method to return the type for this plugin
-
-        Returns:
-            PluginType: Type of this plugin
-        """
-        return Plugin._plugin_type
-
-    def __init__(
-        self,
-        data_instance_and_serializer: Tuple[IData, ISerializer],
-        model_instance_and_serializer: Tuple[IModel, ISerializer],
-        ground_truth_instance_and_serializer: Tuple[IData, ISerializer],
-        initial_data_instance: Union[IData, None],
-        initial_model_instance: Union[IModel, IPipeline, None],
-        **kwargs,
-    ):
-
-        self._initial_data_instance = initial_data_instance
-        self._initial_model_instance = initial_model_instance
-
-        # Look for kwargs values for log_instance, progress_callback and base path
-        self._logger = kwargs.get("logger", None)
-        self._progress_inst = SimpleProgress(
-            1, 0, kwargs.get("progress_callback", None)
-        )
-
-        # Check if data and model are tuples and if the tuples contain 2 items
-        if (
-            not isinstance(data_instance_and_serializer, Tuple)
-            or len(data_instance_and_serializer) != 2
-        ):
-            self.add_to_log(
-                logging.ERROR,
-                f"The algorithm has failed data validation: {data_instance_and_serializer}",
-            )
-            raise RuntimeError("The algorithm has failed data validation")
-
-        if (
-            not isinstance(model_instance_and_serializer, Tuple)
-            or len(model_instance_and_serializer) != 2
-        ):
-            self.add_to_log(
-                logging.ERROR,
-                f"The algorithm has failed model validation: {model_instance_and_serializer}",
-            )
-            raise RuntimeError("The algorithm has failed model validation")
-
-        self._data_instance = data_instance_and_serializer[0]
-        self._model_instance = model_instance_and_serializer[0]
-        self._model_type = kwargs.get("model_type")
-        self._ground_truth_label = kwargs.get("ground_truth")
-
-        if Plugin._requires_ground_truth:
-            # Check if ground truth instance is tuple and if the tuple contains 2 items
-            if (
-                not isinstance(ground_truth_instance_and_serializer, Tuple)
-                or len(ground_truth_instance_and_serializer) != 2
-            ):
-                self.add_to_log(
-                    logging.ERROR,
-                    f"The algorithm has failed ground truth data validation: \
-                        {ground_truth_instance_and_serializer}",
-                )
-                raise RuntimeError(
-                    "The algorithm has failed ground truth data validation"
-                )
-            self._requires_ground_truth = True
-            self._ground_truth_instance = ground_truth_instance_and_serializer[0]
-            self._ground_truth_serializer = ground_truth_instance_and_serializer[1]
-            self._ground_truth = kwargs.get("ground_truth")
-
-        else:
-            self._ground_truth_instance = None
-            self._ground_truth = ""
-
-        self._base_path = kwargs.get("project_base_path", Path().absolute())
-
-        # Other variables
-        self._data = None
-        self._results = {"results": [0]}
-
-        # Perform setup for this plug-in
-        self.setup()
-
-        # Write all output to the output folder
-        self._output_folder = Path.cwd() / "output"
-        self._output_folder.mkdir(parents=True, exist_ok=True)
-        self._save_folder = self._output_folder / "images"
-
-        # TODO: Update the input json schema in input.schema.json
-        # Algorithm input schema defined in input.schema.json
-        # By defining the input schema, it allows the front-end to know what algorithm input params is
-        # required by this plugin. This allows this algorithm plug-in to receive the arguments values it requires.
-        
-        current_file_dir = Path(__file__).parent
-        
-        self._input_schema = load_schema_file(
-            str(current_file_dir / "input.schema.json")
-        )
-
-        # TODO: Update the output json schema in output.schema.json
-        # Algorithm output schema defined in output.schema.json
-        # By defining the output schema, this plug-in validates the result with the output schema.
-        # This allows the result to be validated against the schema before passing it to the front-end for display.
-        self._output_schema = load_schema_file(
-            str(current_file_dir / "output.schema.json")
-        )
-
-        # Retrieve the input parameters defined in the input schema and store them
-        self._input_arguments = dict()
-        for key in self._input_schema.get("properties").keys():
-            self._input_arguments.update({key: kwargs.get(key)})
-
-        # Perform validation on input argument schema
-        if not validate_json(self._input_arguments, self._input_schema):
-            self.add_to_log(
-                logging.ERROR,
-                f"The algorithm has failed input schema validation. \
-                    The input must adhere to the schema in input.schema.json: {self._input_arguments}",
-            )
-            raise RuntimeError("The algorithm has failed input schema validation. \
-                               The input must adhere to the schema in input.schema.json")
-
-    def add_to_log(self, log_level: int, log_message: str) -> None:
-        """
-        A helper method to log messages to store events occurred
-
-        Args:
-            log_level (int): The logging level
-            log_message (str): The logging message
-        """
-        if self._logger is not None:
-            if not isinstance(log_level, int) or not isinstance(log_message, str):
-                raise RuntimeError(
-                    "The algorithm has invalid log level or message. The log level should be a \
-                        logging level(i.e. logging.DEBUG) and log message should be in String format"
-                )        
-        if self._logger is not None:
-            if log_level is logging.DEBUG:
-                self._logger.debug(log_message)
-            elif log_level is logging.INFO:
-                self._logger.info(log_message)
-            elif log_level is logging.WARNING:
-                self._logger.warning(log_message)
-            elif log_level is logging.ERROR:
-                self._logger.error(log_message)
-            elif log_level is logging.CRITICAL:
-                self._logger.critical(log_message)
-            else:
-                pass  # Invalid log level
-        else:
-            pass  # No log instance
-
-    def setup(self) -> None:
-        """
-        A method to perform setup for this algorithm plugin
-        """
-        # Perform validation on logger
-        if self._logger:
-            if not isinstance(self._logger, logging.Logger):
-                raise RuntimeError(
-                    "The algorithm has failed to set up logger. The logger type is invalid"
-                )
-
-        # Perform validation on model type
-        if self._model_type not in Plugin._supported_algorithm_model_type:
-            self.add_to_log(
-                logging.ERROR,
-                f"The algorithm has failed validation for model type: {self._model_type}",
-            )
-            raise RuntimeError("The algorithm has failed validation for model type")
-
-        # Perform validation on data instance
-        if not isinstance(self._data_instance, IData):
-            self.add_to_log(
-                logging.ERROR,
-                f"The algorithm has failed data validation: {self._data_instance}",
-            )
-            raise RuntimeError("The algorithm has failed data validation")
-
-        # Perform validation on model instance
-        if not isinstance(self._model_instance, IModel) and not isinstance(
-            self._model_instance, IPipeline
-        ):
-            self.add_to_log(
-                logging.ERROR,
-                f"The algorithm has failed model validation: {self._model_instance}",
-            )
-            raise RuntimeError("The algorithm has failed model validation")
-
-        # Perform validation on ground truth instance
-        if self._requires_ground_truth:
-            if not isinstance(self._ground_truth_instance, IData):
-                self.add_to_log(
-                    logging.ERROR,
-                    f"The algorithm has failed ground truth data validation: {self._ground_truth_instance}",
-                )
-                raise RuntimeError(
-                    "The algorithm has failed ground truth data validation"
-                )
-
-            # Perform validation on ground truth header
-            if not isinstance(self._ground_truth, str):
-                self.add_to_log(
-                    logging.ERROR,
-                    f"The algorithm has failed ground truth header validation. \
-                    Header must be in String and must be present in the dataset: {self._ground_truth}",
-                )
-                raise RuntimeError(
-                    "The algorithm has failed ground truth header validation. \
-                    Header must be in String and must be present in the dataset"
-                )
-
-        # Perform validation on progress_inst
-        if self._progress_inst:
-            if not isinstance(self._progress_inst, SimpleProgress):
-                raise RuntimeError(
-                    "The algorithm has failed validation for the progress bar"
-                )
-
-        # Perform validation on project_base_path
-        if not isinstance(self._base_path, PurePath):
-            self.add_to_log(
-                logging.ERROR,
-                f"The algorithm has failed validation for the project path. \
-                Ensure that the project path is a valid path: {self._base_path}",
-            )
-            raise RuntimeError(
-                "The algorithm has failed validation for the project path. \
-                Ensure that the project path is a valid path"
-            )
-
-        # Perform validation on metadata
-        if not isinstance(self._metadata, PluginMetadata):
-            self.add_to_log(
-                logging.ERROR,
-                f"The algorithm has failed validation for its metadata: {Plugin._metadata}",
-            )
-            raise RuntimeError("The algorithm has failed validation for its metadata")
-
-        # Perform validation on plugin type
-        if not isinstance(self._plugin_type, PluginType):
-            self.add_to_log(
-                logging.ERROR,
-                f"The algorithm has failed validation for its plugin type. \
-                Ensure that PluginType is PluginType.ALGORITHM: {Plugin._plugin_type}",
-            )
-            raise RuntimeError(
-                "The algorithm has failed validation for its plugin type. \
-                Ensure that PluginType is PluginType.ALGORITHM"
-            )
-        # Perform logging
-        self.add_to_log(logging.INFO, "Setup completed")
-
-    def get_progress(self) -> int:
-        """
-        A method to return the current progress for this plugin
-
-        Returns:
-            int: Completion Progress
-        """
-        return self._progress_inst.get_progress()
-
-    def get_results(self) -> Dict:
-        """
-        A method to return generated results for this plugin
-
-        Returns:
-            Dict: The results to be returned for display
-        """
-        return self._results
 
     def generate(self) -> None:
         """
@@ -355,69 +123,138 @@ class Plugin(IAlgorithm):
             shutil.rmtree(self._save_folder)
         self._save_folder.mkdir(parents=True, exist_ok=True)
 
-        # Apply user defined parameters to default parameters
-        aug_dict = make_augmentation_dict(self._input_arguments['aug_library'])
-        custom_parameters = None
-        try:
-            custom_parameters = self._input_arguments['custom_parameters']
-            custom_parameters = triplets(custom_parameters)
-            for sublist in custom_parameters:
-                aug_name, param_name, parameters_in_string = sublist
-                aug_dict = custom_parameter_change(aug_dict, aug_name, param_name, parameters_in_string)
-        except Exception as e:
-            print("No custom parameter_change")
-            print(f"Custom parameters exception: {e} , {custom_parameters}")
-            print()
-
+        aug_dict = self._resolve_aug_dict()
+        # Progress is advanced inside _brittle_method across its work units
+        # (two scoring passes, the display-info pass, and the three visualizers),
+        # so it reaches 100% without a final manual tick here.
         self._brittle_method(aug_dict)
-        # Update progress (For 100% completion)
-        self._progress_inst.update(1)
 
     def _brittle_method(self, aug_dict):
+        """
+        Orchestrate the brittleness evaluation end to end.
 
-        image_paths : list[str] = self._data_instance.get_data()["image_directory"].tolist()
+        Resolves setup, scores the before/after severities, ranks samples by
+        confidence drop, and renders the display samples and visualizations into
+        ``self._results``. Progress advances over the two scoring passes, the
+        display-info pass, and the three visualizers.
+
+        Args:
+            aug_dict (Dict[str, Any]): Mapping of augmentation name to instance.
+        """
+        ctx = self._setup_brittle(aug_dict)
+
+        # Work units: 2 scoring passes + display-info + 3 visualizers.
+        self._progress_inst.add_total(6)
+
+        scored = self._score_severities(ctx)
+        b_result, correct_before, correct_before_wrong_after = \
+            self._build_brittleness_results(scored)
+        self._results = self._render_brittle_outputs(
+            ctx, scored, b_result, correct_before, correct_before_wrong_after
+        )
+
+    def _setup_brittle(self, aug_dict):
+        """
+        Resolve all inputs the brittleness run needs before any scoring.
+
+        Loads the images, unwraps the model, resolves class names and the chosen
+        augmentation, validates the before/after severities, and builds the two
+        corresponding data loaders.
+
+        Args:
+            aug_dict (Dict[str, Any]): Mapping of augmentation name to instance.
+
+        Returns:
+            _BrittleCtx: The resolved context threaded through the phase helpers.
+        """
+        image_paths: list[str] = self._data_instance.get_data()["image_directory"].tolist()
         ground_truths = self._ordered_ground_truth_df[self._ground_truth_label].tolist()
-        test_dataset, test_loader = self._load_images(image_paths, ground_truths)
-        #KIV: set a random seed here manually; if we want to manually set it then we'll need to change this
-        np.random.seed(42) 
+        _, test_loader = self._load_images(image_paths, ground_truths)
+        # KIV: set a random seed here manually; if we want to manually set it then we'll need to change this
+        np.random.seed(42)
 
-        if "_model" in dir(self._model_instance):
-            model = self._model_instance._model
-        elif "_pipeline" in dir(self._model_instance):
-            model = self._model_instance._pipeline
-        else:
-            raise ValueError("idk what the", type(self._model_instance),"model instance is supposed to be ", dir(self._model_instance))
+        model = self._unwrap_model()
 
-        class_names_arg = self._input_arguments.get('class_names') or None 
+        class_names_arg = self._input_arguments.get('class_names') or None
         class_names = handle_class_names_arg(class_names_arg, model)
         print("Class names:", class_names)
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
         class_names_int = {int(k): v for k, v in class_names.items()}
 
         aug_name = self._input_arguments['aug_method']
-        if 'url' in aug_dict:
-            if 'http' in aug_dict['url']:
-                handle_url_algos(aug_dict, aug_methods)
+        if 'url' in aug_dict and 'http' in aug_dict['url']:
+            handle_url_algos(aug_dict, [aug_name])
         aug_class = aug_dict[aug_name]
 
         severities = self._validate_severities()
         if severities[0] == "None":
             loader_A = test_loader
-        else: 
-            loader_A = aug_class.corr_func_dataloader(test_loader, severity_idx = severities[0])
-        loader_B = aug_class.corr_func_dataloader(test_loader, severity_idx = severities[1])
+        else:
+            loader_A = aug_class.corr_func_dataloader(test_loader, severity_idx=severities[0])
+        loader_B = aug_class.corr_func_dataloader(test_loader, severity_idx=severities[1])
 
-        imgs_A, probs_A, labels = collect_probs(model, loader_A, device)
-        imgs_B, probs_B, _      = collect_probs(model, loader_B, device)
+        return _BrittleCtx(
+            image_paths=image_paths,
+            ground_truths=ground_truths,
+            model=model,
+            device=device,
+            class_names=class_names,
+            class_names_int=class_names_int,
+            aug_name=aug_name,
+            aug_class=aug_class,
+            severities=severities,
+            loader_A=loader_A,
+            loader_B=loader_B,
+        )
 
+    def _score_severities(self, ctx):
+        """
+        Score the model over the before/after loaders.
+
+        Runs one inference pass per severity, capturing the exact images and
+        class probabilities (with ground-truth labels) for reuse in ranking and
+        display. Advances progress once per pass.
+
+        Args:
+            ctx (_BrittleCtx): Resolved run context.
+
+        Returns:
+            _BrittleScored: Images, probabilities and labels for both severities.
+        """
+        imgs_A, probs_A, labels = collect_probs(ctx.model, ctx.loader_A, ctx.device)
+        self._progress_inst.update(1)
+        imgs_B, probs_B, _ = collect_probs(ctx.model, ctx.loader_B, ctx.device)
+        self._progress_inst.update(1)
+        return _BrittleScored(
+            imgs_A=imgs_A, probs_A=probs_A,
+            imgs_B=imgs_B, probs_B=probs_B,
+            labels=labels,
+        )
+
+    def _build_brittleness_results(self, scored):
+        """
+        Rank every sample by its confidence drop on the true class.
+
+        Computes per-sample brittleness (P(true) before − after), builds and
+        sorts the per-sample results (most brittle first), and derives the two
+        filtered subsets used by the visualizers.
+
+        Args:
+            scored (_BrittleScored): Per-severity images, probabilities, labels.
+
+        Returns:
+            Tuple[BrittlenessResult, list, list]: The aggregate result, the
+                samples correct before corruption, and the subset of those that
+                became incorrect after.
+        """
+        probs_A, probs_B, labels = scored.probs_A, scored.probs_B, scored.labels
         N = len(labels)
         idx = torch.arange(N)
 
         pA = probs_A[idx, labels]
         pB = probs_B[idx, labels]
-
         brittleness = pA - pB
+
         results_all = [
             BrittlenessResultIndiv(
                 index=i,
@@ -432,189 +269,154 @@ class Plugin(IAlgorithm):
         # Sort (most brittle first)
         results_all_sorted = sorted(results_all, key=lambda x: x.brittleness, reverse=True)
         b_result = BrittlenessResult(
-            results = results_all_sorted,
-            imgsA = imgs_A, 
-            imgsB = imgs_B, 
-            probs_A = probs_A,
-            probs_B = probs_B,
-            labels = labels
+            results=results_all_sorted,
+            probs_A=probs_A,
+            probs_B=probs_B,
+            labels=labels,
         )
 
-        #KIV: define the top_k value here; if want to make custom then we change this
-        TOPK_SAFE = 15
-        TOPK = 10
-             
-        output_results = brittle_res_to_dict(b_result)
-        output_results = {k:v for k,v in output_results.items() if k not in ["imgsA", "imgsB"]}
-        results_list = output_results['results']
-        results_correctb4 = [
-            r for r in b_result.results
-            if r.predA == r.label
+        correct_before = [r for r in b_result.results if r.predA == r.label]
+        correct_before_wrong_after = [
+            r for r in b_result.results if r.predA == r.label and r.predB != r.label
         ]
-        results_correctb4_incorrectaft = [
-            r for r in b_result.results
-            if r.predA == r.label and r.predB != r.label
-        ]
+        return b_result, correct_before, correct_before_wrong_after
 
-        top_k_indices = [item.index for item in results_correctb4][:min(TOPK_SAFE, len(results_list))]
-        display_info = self._loop_for_display_info(
-            model, 
-            severities, 
-            aug_class,
-            image_paths,
-            ground_truths,
-            aug_name,
-            top_k_indices,
-            class_names,
-            device
-        )
-
-        output_results.update(
-            {"display_info": display_info}
-        )
-
-        aug_dir =  self._output_folder / aug_name
-        mpl_dir = aug_dir / f"matplotlib"
-        mpl_dir.mkdir(parents=True, exist_ok=True)
-        plotly_dir = aug_dir / f"plotly"
-        plotly_dir.mkdir(parents=True, exist_ok=True)
-        mpl_path, mpl_frag_paths = visualize_topk_matplotlib(
-            results_correctb4, 
-            b_result,
-            K=min(TOPK, len(results_correctb4)),
-            class_names=class_names_int, 
-            transform=None,
-            directory=mpl_dir,
-            image_paths=image_paths
-        )
-        plotly_path = visualize_topk_without_plotly(
-            results_correctb4, 
-            b_result,
-            K=min(TOPK, len(results_correctb4)),
-            class_names=class_names_int, 
-            transform=None,
-            directory = plotly_dir,
-            image_paths=image_paths
-        )
-        html_path = visualize_in_html(
-            results_correctb4_incorrectaft, 
-            b_result, 
-            class_names=class_names_int, 
-            transform=None,
-            directory = plotly_dir,
-            image_paths=image_paths
-        )
-        output_results.update(
-            {
-                "matplotlib_image_path": str(mpl_path.relative_to(self._output_folder)),
-                "plotly_image_path": str(plotly_path.relative_to(self._output_folder)),
-                "html_carousel_path": str(html_path.relative_to(self._output_folder)),
-                "matplotlib_fragment_paths": [str(x.relative_to(self._output_folder)) for x in mpl_frag_paths],
-                "dataset_size": len(image_paths),
-                "class_names": class_names
-            }
-        )
-
-        self._results = output_results
-
-    def _load_images(self, image_paths: list[str], labels) -> list[np.ndarray]:
+    def _render_brittle_outputs(self, ctx, scored, b_result,
+                                correct_before, correct_before_wrong_after):
         """
-        Load a list of numpy images from file paths.
+        Build display samples and visualizations, and assemble the results dict.
+
+        Saves the top-K display rows, renders the matplotlib grid (plus
+        fragments), the standalone HTML top-K, and the HTML carousel, then packs
+        every path and summary field into the output dict. Advances progress once
+        for the display pass and once per visualizer.
 
         Args:
-            image_paths (list[str]): A list of image file paths
+            ctx (_BrittleCtx): Resolved run context.
+            scored (_BrittleScored): Per-severity images, probabilities, labels.
+            b_result (BrittlenessResult): The ranked aggregate result.
+            correct_before (list): Samples correct before corruption.
+            correct_before_wrong_after (list): Of those, ones wrong after.
 
         Returns:
-            np.ndarray: A list of numpy images
+            Dict[str, Any]: The fully-populated results dict for ``self._results``.
         """
-        transform = transforms.Compose([
-            transforms.Resize((240, 320)),  # H, W
-            transforms.ToTensor()
-        ])
+        # KIV: define the top_k value here; if want to make custom then we change this
+        TOPK_SAFE = 15
+        TOPK = 10
 
-        # Load all images into a tensor
-        image_tensors = torch.stack([transform(Image.open(p).convert("RGB")) for p in image_paths])
+        output_results = brittle_res_to_dict(b_result)
 
-        # Convert labels to tensor
-        label_tensors = torch.tensor(labels, dtype=torch.long)
+        top_k_indices = [item.index for item in correct_before][
+            :min(TOPK_SAFE, len(b_result.results))
+        ]
+        display_info = self._loop_for_display_info(
+            ctx.severities,
+            ctx.aug_class,
+            ctx.image_paths,
+            ctx.ground_truths,
+            ctx.aug_name,
+            top_k_indices,
+            ctx.class_names,
+            (scored.imgs_A, scored.imgs_B),
+            (scored.probs_A, scored.probs_B),
+        )
+        output_results.update({"display_info": display_info})
+        self._progress_inst.update(1)
 
-        # Create TensorDataset
-        dataset = TensorDataset(image_tensors, label_tensors)
+        aug_dir = self._output_folder / ctx.aug_name
+        mpl_dir = aug_dir / "matplotlib"
+        mpl_dir.mkdir(parents=True, exist_ok=True)
+        plotly_dir = aug_dir / "plotly"
+        plotly_dir.mkdir(parents=True, exist_ok=True)
 
-        # Create DataLoader
-        loader = DataLoader(dataset, batch_size=16, shuffle=False)
+        K = min(TOPK, len(correct_before))
+        mpl_path, mpl_frag_paths = visualize_topk_matplotlib(
+            correct_before, b_result, scored.imgs_A, scored.imgs_B,
+            K=K, class_names=ctx.class_names_int, transform=None,
+            directory=mpl_dir, image_paths=ctx.image_paths,
+        )
+        self._progress_inst.update(1)
+        plotly_path = visualize_topk_without_plotly(
+            correct_before, b_result, scored.imgs_A, scored.imgs_B,
+            K=K, class_names=ctx.class_names_int, transform=None,
+            directory=plotly_dir, image_paths=ctx.image_paths,
+        )
+        self._progress_inst.update(1)
+        html_path = visualize_in_html(
+            correct_before_wrong_after, b_result, scored.imgs_A, scored.imgs_B,
+            class_names=ctx.class_names_int, transform=None,
+            directory=plotly_dir, image_paths=ctx.image_paths,
+        )
+        self._progress_inst.update(1)
 
-        return dataset, loader
+        output_results.update({
+            "matplotlib_image_path": str(mpl_path.relative_to(self._output_folder)),
+            "plotly_image_path": str(plotly_path.relative_to(self._output_folder)),
+            "html_carousel_path": str(html_path.relative_to(self._output_folder)),
+            "matplotlib_fragment_paths": [
+                str(x.relative_to(self._output_folder)) for x in mpl_frag_paths
+            ],
+            "dataset_size": len(ctx.image_paths),
+            "class_names": ctx.class_names,
+        })
+        return output_results
 
-    def _save_one_image(self, image: np.ndarray, subfolder_name, image_path_original):
-        save_dir = self._save_folder / subfolder_name
-        save_dir.mkdir(parents=True, exist_ok=True)
-
-        image_path = save_dir / image_path_original
-        image = np.transpose(image, (1, 2, 0))
-        Image.fromarray((image * 255.0).astype(np.uint8)).save(image_path)
-
-        return str(image_path)
-
-    def _get_one_corrupted_image_direct(
-        self,
-        image_path: str,
-        aug_class,         # Augmentation instance
-        severity: str,     # e.g. "severity_1" or "None"
-        resize: tuple[int, int] = (240, 320),  # (H, W) — match _load_images
-    ) -> np.ndarray:
-        """
-        Fetch and corrupt a single image directly from disk.
-        Matches the pipeline of _load_images + _get_one_corrupted_image exactly,
-        but without loading any other images.
-
-        Returns: CHW float32 numpy array in [0, 1]
-        """
-        # 1. Load and resize — identical to _load_images transform
-        image = Image.open(image_path).convert("RGB")
-        if resize is not None:
-            image = image.resize((resize[1], resize[0]), Image.BILINEAR)  # PIL takes (W, H)
-
-        # 2. To uint8 HWC numpy — skip the float tensor round-trip entirely
-        image_np = np.array(image, dtype=np.uint8)  # HWC uint8
-
-        # 3. Corrupt
-        if aug_class.name == "None" or severity == "None":
-            corrupted = image_np  # HWC uint8
-        else:
-            corrupted = aug_class.corr_func_arr(
-                image_np[None],   # needs batch dim: (1, H, W, C)
-                severity
-            )[0]                  # back to (H, W, C)
-
-        # 4. Normalise to CHW float32 [0, 1]
-        return corrupted.transpose(2, 0, 1).astype(np.float32) / 255.0
-    
     def _loop_for_display_info(
         self,
-        model, 
-        severities, 
+        severities,
         aug_class,
         image_paths,
         ground_truths,
         aug_name,
         top_k_indices,
         class_names,
-        device=None
+        imgs_by_severity,
+        probs_by_severity,
     ):
+        """
+        Build the top-K display rows for the before/after severities.
+
+        For each severity and each selected sample, saves the exact image the
+        model scored and reuses its prediction from the same pass, so the shown
+        image and predicted label can never disagree and no second
+        corrupt+inference is run.
+
+        Args:
+            severities (tuple): ``(before, after)`` severity specifiers, aligned
+                with ``imgs_by_severity`` / ``probs_by_severity``.
+            aug_class: The ``Augmentation`` instance (for severity naming).
+            image_paths (List[str]): All image file paths.
+            ground_truths (List): Ground-truth label per image.
+            aug_name (str): Name of the augmentation (for the save sub-path).
+            top_k_indices (List[int]): Sample indices to display.
+            class_names (Dict[str, str]): Mapping from class index to display name.
+            imgs_by_severity (tuple): ``(vb  , imgs_B)`` CHW image tensors from
+                the scored passes, indexed by sample.
+            probs_by_severity (tuple): ``(probs_A, probs_B)`` per-sample class
+                probabilities from the same passes.
+
+        Returns:
+            List[Dict[str, List[str]]]: One single-key dict per (severity, rank),
+                mapping ``severity_<name>_number_<k>`` to
+                ``[relative_image_path, ground_truth_name, predicted_name]``.
+        """
         display_info = []
-        for s_idx in severities:
+        for pos, s_idx in enumerate(severities):
             severity = aug_class.determine_severity(s_idx)
             corrupted_dir = Path(aug_name) / f"severity_{severity}"
+            imgs = imgs_by_severity[pos]
+            probs = probs_by_severity[pos]
 
-            for i,display_idx in enumerate(top_k_indices):
-                display_image = self._get_one_corrupted_image_direct(
-                    image_paths[display_idx],
-                    aug_class,
-                    severity,
+            for i, display_idx in enumerate(top_k_indices):
+                # Pull the exact pixels the model scored and its matching
+                # prediction from the same pass (shuffle=False, so display_idx
+                # aligns), instead of re-corrupting and re-inferring.
+                image_np = imgs[display_idx].detach().cpu().numpy()
+                image_path = self._save_one_image(
+                    image_np, str(corrupted_dir), Path(str(image_paths[display_idx])).name
                 )
-                image_path = self._save_one_image(display_image, str(corrupted_dir), Path(str(image_paths[display_idx])).name)
-                prediction = get_prediction_from_image(model, display_image, device)
+                prediction = int(probs[display_idx].argmax().item())
                 ground_truth = ground_truths[display_idx]
 
                 random_display = [
@@ -623,10 +425,18 @@ class Plugin(IAlgorithm):
                     class_names[str(prediction)],
                 ]
                 display_info.append({f"severity_{severity}_number_{i+1}": random_display})
-        
-        return display_info 
+
+        return display_info
     
     def _validate_severities(self):
+        """
+        Process the severity values from the input arguments.
+
+        Either take the actual names from b4/aft, or take the indices from b4 idx/aft idx.
+
+        Returns:
+            Tuple: of the b4-aft severities. 
+        """
         severity_before = self._input_arguments.get("severity_before")
         severity_after = self._input_arguments.get("severity_after")
         severity_before_idx = self._input_arguments.get("severity_before_idx")

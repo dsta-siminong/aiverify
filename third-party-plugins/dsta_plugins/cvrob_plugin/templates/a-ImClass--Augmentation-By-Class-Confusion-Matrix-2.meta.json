@@ -1,0 +1,5 @@
+{
+  "cid": "a-ImClass--Augmentation-By-Class-Confusion-Matrix-2",
+  "name": "[ImClass] Augmentation By Class Confusion Matrix",
+  "description": "Tracks confusion matrix statistics per class for model classification across severities of augmentations"
+}

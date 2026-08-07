@@ -1,0 +1,5 @@
+{
+  "cid": "a-ImClass--Augmentation-vs-Metric-Algorithm-1",
+  "name": "[ImClass] Augmentation vs Metric Algorithm",
+  "description": "Measures (image classification) model performance against augmentations of increasing severity"
+}

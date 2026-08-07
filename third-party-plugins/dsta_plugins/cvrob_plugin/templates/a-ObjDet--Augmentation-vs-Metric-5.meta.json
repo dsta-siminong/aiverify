@@ -1,0 +1,5 @@
+{
+  "cid": "a-ObjDet--Augmentation-vs-Metric-5",
+  "name": "[ObjDet] Augmentation vs Metric",
+  "description": "User-facing report for tracking how an object detection model's performance fares across increasing severities of augmentations applied to data."
+}

@@ -1,0 +1,5 @@
+{
+  "cid": "a-ObjDet--Brittleness-9",
+  "name": "[ObjDet] Brittleness",
+  "description": "Highlights images whose object detection score dropped the most within an interval of a given augmentation's severities applied to the data"
+}

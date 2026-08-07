@@ -1,0 +1,5 @@
+{
+  "cid": "a-ObjDet--Augmentation-by-Class-Main-8",
+  "name": "[ObjDet] Augmentation by Class Main",
+  "description": "Tracks model performance for every class and class proportions across severities of augmentations"
+}

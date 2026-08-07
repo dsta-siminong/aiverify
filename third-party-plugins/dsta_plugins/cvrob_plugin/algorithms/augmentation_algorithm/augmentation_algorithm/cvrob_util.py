@@ -220,7 +220,7 @@ def triplets(s):
     assert len(items) % 3 == 0, "Input length must be a multiple of 3"
     return [items[i:i+3] for i in range(0, len(items), 3)]
     
-def augmentation_gradient(model, test_loader, device, aug_class, plot_graphs=False, directory=Path(), num_epochs=1):
+def augmentation_gradient(model, test_loader, device, aug_class, plot_graphs=False, directory=Path(), num_epochs=1, display_idx=None):
     """
     Evaluates how the model performance varies against the given augmentation/corruption
 
@@ -233,12 +233,18 @@ def augmentation_gradient(model, test_loader, device, aug_class, plot_graphs=Fal
         corr_func (function): corruption function to take in images (np array) / give corrupted dataloader
         plot_graphs: either False for no graph, or string for which graphing library to use
         corr_kwargs (dict): corruption arguments
+        display_idx (int, optional): if given, capture the scored dataset and the
+            prediction at this index per severity so the caller can build display
+            samples without a second corrupt+inference pass.
 
     Returns:
         Tuple:
             best_fit_gradient (float): best fit line gradient of graph of performance vs severity (of augmentation)
-            accuracies (list): list of floats of performance metric 
+            accuracies (list): list of floats of performance metric
             fig (figure): outputs figure of plot_graphs library if not plot_graphs not False, else None
+            display_scored (dict): maps severity label ("None" plus each severity)
+                to ``(dataset, prediction_at_display_idx)`` from the scored pass;
+                empty when ``display_idx`` is None.
     """
 
     print(f"[mem at the start of augmentation_gradient stuff] {mem_mb():.1f} MB")
@@ -248,37 +254,49 @@ def augmentation_gradient(model, test_loader, device, aug_class, plot_graphs=Fal
     print("Aug name", aug_class.name)
     print(f"Evaluating on severity 0/None...")
     print(f"[mem before first evaluate] {mem_mb():.1f} MB")
-    base_acc, _ , _ = evaluate(model, test_loader, device)
+    base_acc, base_y_pred, _ = evaluate(model, test_loader, device)
     print(f"[mem after first evaluate] {mem_mb():.1f} MB")
     print(f"Accuracy at severity 0/None: {base_acc:.4f}")
     severities = aug_class.severities #[x for x in range(len(aug_class.severities))]
     accuracies = [base_acc]
 
+    # Per-severity display data pulled from the same scored pass (shuffle=False,
+    # so display_idx aligns with y_pred). The clean/"None" case reuses the base pass.
+    display_scored = {}
+    if display_idx is not None:
+        display_scored["None"] = (test_loader.dataset, base_y_pred[display_idx])
+
     for severity_idx, severity in enumerate(severities):
         print(f"Evaluating on severity {severity}...")
         print(f"[mem before corr_func_dataloader] {mem_mb():.1f} MB")
         all_acc = []
+        corrupted_loader = None; y_pred = None
         for i in range(num_epochs):
-            seed = 1000*i + severity_idx 
+            seed = 1000*i + severity_idx
             aug_class.set_seed(seed)
             corrupted_loader = aug_class.corr_func_dataloader(test_loader, severity_idx=severity)
             print(f"[mem after corr_func_dataloader] {mem_mb():.1f} MB")
-            acc, _,_ = evaluate(model, corrupted_loader, device)
+            acc, y_pred, _ = evaluate(model, corrupted_loader, device)
             print(f"[mem after evaluate] {mem_mb():.1f} MB")
             all_acc.append(acc)
             print(f"epoch {i+1}: {acc}")
         final_acc = sum(all_acc)/len(all_acc)
         accuracies.append(final_acc)
         print(f"Accuracy at severity {severity}: {final_acc:.4f}")
+        # Display the last epoch's realization: its dataset and predictions. The
+        # seed set on the last epoch persists, so dataset[display_idx] reproduces
+        # exactly the pixels the model scored.
+        if display_idx is not None:
+            display_scored[str(severity)] = (corrupted_loader.dataset, y_pred[display_idx])
 
     # Plot results
     fig_path = directory / f"accuracy_vs_severity_{aug_class.name}.png"
     fig = None
     if plot_graphs is not False:
-        fig = plot_accuracy_vs_severity(accuracies, ["None"]+severities, plot_graphs)  
+        fig = plot_accuracy_vs_severity(accuracies, ["None"]+severities, plot_graphs)
         fig.savefig(fig_path)
         plt.close()
-    return best_fit_gradient(list(range(len(severities)+1)), accuracies), accuracies, fig_path
+    return best_fit_gradient(list(range(len(severities)+1)), accuracies), accuracies, fig_path, display_scored
 
 def get_num_classes(model: nn.Module) -> int:
     """
