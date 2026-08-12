@@ -20,7 +20,7 @@ import numpy as np
 import torch
 from .cvrob_util import augmentation_gradient, handle_class_names_arg, mem_mb
 from .augmentations_class import handle_url_algos
-from .cvrob_algo_common import BasePlugin
+from . import cvrob_algo_common
 from pathlib import Path
 import pandas as pd
 
@@ -33,7 +33,7 @@ import pandas as pd
 #    requirements individually.
 # 3. Do not modify the class name, else the plugin cannot be read by the system.
 # =====================================================================================
-class Plugin(BasePlugin):
+class Plugin(cvrob_algo_common.BasePlugin):
     """
     # TODO: Update the plugin description below
     The Plugin(Augmentation v Metric Algorithm) class specifies methods in generating results for algorithm

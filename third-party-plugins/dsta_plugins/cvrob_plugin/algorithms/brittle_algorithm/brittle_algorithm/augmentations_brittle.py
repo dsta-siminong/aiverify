@@ -83,16 +83,13 @@ def brittle_res_to_dict(br):
     Returns:
         dict: Dictionary containing:
             - 'results': List of dictionaries for each individual result.
-            # - 'imgsA': List representation of imgsA tensor.
-            # - 'imgsB': List representation of imgsB tensor.
             - 'probs_A': List representation of probs_A tensor.
             - 'probs_B': List representation of probs_B tensor.
             - 'labels': List representation of labels tensor.
+    
     """
     d = {
         "results": [brittle_res_indiv_to_dict(r) for r in br.results],
-        # "imgsA": br.imgsA.numpy().tolist(),
-        # "imgsB": br.imgsB.numpy().tolist(),
         "probs_A": br.probs_A.numpy().tolist(),
         "probs_B": br.probs_B.numpy().tolist(),
         "labels": br.labels.numpy().tolist(),

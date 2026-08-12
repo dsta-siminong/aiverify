@@ -19,15 +19,13 @@ import numpy as np
 import torch
 from .cvrob_util import evaluate, average_all_reports, handle_class_names_arg
 from .augmentations_class import handle_url_algos
-from .cvrob_algo_common import BasePlugin
+from . import cvrob_algo_common
 from sklearn.metrics import classification_report, confusion_matrix, ConfusionMatrixDisplay
 
 import pandas as pd 
-import json
 import matplotlib.pyplot as plt
 import plotly.express as px 
 import plotly.graph_objects as go
-from pprint import pprint
 import matplotlib.lines as mlines
 
 # =====================================================================================
@@ -39,7 +37,7 @@ import matplotlib.lines as mlines
 #    requirements individually.
 # 3. Do not modify the class name, else the plugin cannot be read by the system.
 # =====================================================================================
-class Plugin(BasePlugin):
+class Plugin(cvrob_algo_common.BasePlugin):
     """
     # TODO: Update the plugin description below
     The Plugin(Augmentation by Class Algorithm) class specifies methods in generating results for algorithm

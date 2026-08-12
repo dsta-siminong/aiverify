@@ -19,7 +19,7 @@ from aiverify_test_engine.utils.simple_progress import SimpleProgress
 import numpy as np
 import torch
 from .cvrob_util import *
-from .augmentations_class import make_augmentation_dict, custom_parameter_change, handle_url_algos
+from .augmentations_class import handle_url_algos
 import pandas as pd 
 import json
 import matplotlib.pyplot as plt
@@ -28,7 +28,113 @@ import plotly.graph_objects as go
 
 from .pycocotools_fdet.coco import COCO
 from .pycocotools_fdet.cocoeval import COCOeval, average_curve_dataframes, plot_curve_dataframe
-from .cvrob_algo_common import BasePlugin
+from . import cvrob_algo_common
+from dataclasses import dataclass
+
+
+@dataclass
+class _OdBcCtx:
+    """
+    Everything ``_augmentation_bc_method`` resolves once up front and threads to
+    its phase helpers, so no single method has to re-derive the setup.
+
+    Attributes:
+        model: The unwrapped torch detection model (or API URL string).
+        device (torch.device): Device the model runs on.
+        class_names (dict): Class index (as str) -> display name.
+        image_paths (list): All image file paths.
+        ground_truths (list): Per-image ground-truth annotations (class ids resolved).
+        test_loader: Clean detection data loader (shuffle off).
+        display_idx (int): Index of the single sample shown per severity.
+        aug_methods (list): Augmentation names requested (or ``["all"]``).
+        cocoGt (COCO): Ground-truth COCO index, built once and shared across
+            all augmentations/severities/epochs (GT is constant for the run).
+    """
+    model: object
+    device: object
+    class_names: dict
+    image_paths: list
+    ground_truths: list
+    test_loader: object
+    display_idx: int
+    aug_methods: list
+    cocoGt: object
+
+
+@dataclass
+class _SeverityOutputs:
+    """
+    The per-severity pieces one ``(aug, severity)`` pass contributes to its
+    augmentation's aggregate results.
+
+    Attributes:
+        cr (dict): ``{"map": avg_map, **avg_stats}`` classification-report row.
+        matrix: Epoch-averaged detection-matching matrix.
+        display (list): Display-info row for this severity.
+        cm_paths (list): ``[png_rel_path, html_rel_path]`` of the matrix figure.
+        coco_graphs (list): Relative paths of the per-severity COCO curve figures.
+        coco_summary (dict): Epoch-averaged COCO/F-beta summary.
+        fbeta_df: Epoch-averaged F-beta curve DataFrame (for the overall plot).
+        pr_df: Epoch-averaged P-R curve DataFrame (for the overall plot).
+    """
+    cr: dict
+    matrix: object
+    display: list
+    cm_paths: list
+    coco_graphs: list
+    coco_summary: dict
+    fbeta_df: object
+    pr_df: object
+
+
+@dataclass
+class _Series:
+    """
+    One line on a per-class severity panel, backend-agnostic.
+
+    Attributes:
+        col (str): Column in the panel DataFrame to plot on the y-axis.
+        label (str): Legend label.
+        color: Explicit color, or ``None`` to auto-assign (matplotlib color cycle
+            / plotly qualitative palette by series index).
+        marker: matplotlib marker (e.g. ``'o'``); its presence also switches the
+            plotly trace to ``lines+markers``. ``None`` means a plain line.
+        dash (bool): Draw dashed (matplotlib ``'--'`` / plotly ``dash='dash'``).
+    """
+    col: str
+    label: str
+    color: object = None
+    marker: object = None
+    dash: bool = False
+
+
+@dataclass
+class _PanelSpec:
+    """
+    A per-class "metric/count vs severity" panel, rendered to both backends.
+
+    Attributes:
+        title (str): Figure title (shared by both backends).
+        ylabel (str): matplotlib y-axis label.
+        series (list): The ``_Series`` lines to draw.
+        stem (str): Output filename stem (``<stem>.png`` / ``<stem>.html``).
+        nan_masks (dict | None): Optional ``col -> boolean mask`` marking severities
+            whose value was NaN (drawn as ``x`` markers at y=0 in the line color).
+        ylim (tuple | None): matplotlib y-limits.
+        plotly_range (tuple | None): plotly y-axis range (kept separate from
+            ``ylim`` to preserve the original per-backend limits exactly).
+        ylabel_plotly (str | None): plotly y-axis label; falls back to ``ylabel``.
+    """
+    title: str
+    ylabel: str
+    series: list
+    stem: str
+    nan_masks: object = None
+    ylim: object = None
+    plotly_range: object = None
+    ylabel_plotly: object = None
+
+
 # =====================================================================================
 # NOTE:
 # 1. Check that you have installed the aiverify_test_engine latest package.
@@ -38,7 +144,7 @@ from .cvrob_algo_common import BasePlugin
 #    requirements individually.
 # 3. Do not modify the class name, else the plugin cannot be read by the system.
 # =====================================================================================
-class Plugin(BasePlugin):
+class Plugin(cvrob_algo_common.BasePlugin):
     """
     # TODO: Update the plugin description below
     The Plugin(OD Augmentation by Class Algorithm) class specifies methods in generating results for algorithm
@@ -73,7 +179,9 @@ class Plugin(BasePlugin):
         if self._save_folder.exists():
             shutil.rmtree(self._save_folder)
         self._save_folder.mkdir(parents=True, exist_ok=True)
-
+        self._iou_thres = self._input_arguments.get('iou_thres') or 0.5
+        self._score_thres = self._input_arguments.get('score_thres') or 0.5
+        
         # Apply user defined parameters to default parameters
         aug_dict = self._resolve_aug_dict()
         self._augmentation_bc_method(aug_dict)
@@ -122,6 +230,60 @@ class Plugin(BasePlugin):
         ]
 
     def _augmentation_bc_method(self, aug_dict):
+        """
+        Orchestrate the per-class detection evaluation across all augmentations.
+
+        Resolves setup once, then evaluates each in-scope augmentation (per-class
+        COCO stats, matrices, curves and display samples per severity) and
+        assembles the aggregate results dict into ``self._results``. Progress
+        advances once per augmentation that actually runs.
+
+        Args:
+            aug_dict (Dict[str, Any]): Mapping of augmentation name to instance.
+        """
+        ctx = self._setup_odbc(aug_dict)
+
+        # The clean ("None") severity is identical for every augmentation: same
+        # loader, corruption skipped, epochs forced to 1. Evaluate it once and
+        # reuse the result across augmentations instead of paying a full
+        # inference + COCO-eval pass per augmentation. See _run_one_severity.
+        self._clean_severity_outputs = None
+
+        num_augs_to_run = sum(
+            1 for aug_name in aug_dict if self._should_run_aug(aug_name, ctx.aug_methods)
+        )
+        self._progress_inst.add_total(num_augs_to_run)
+
+        combined_results = []
+        for aug_name, aug_class in aug_dict.items():
+            if not self._should_run_aug(aug_name, ctx.aug_methods):
+                continue
+
+            combined_results.append(self._run_one_aug(ctx, aug_name, aug_class))
+            self._progress_inst.update(1)
+            print()
+
+        self._results = {
+            "results": combined_results,
+            "augmentation_names": [x["Augmentation"] for x in combined_results],
+            "class_names": ctx.class_names,
+            "dataset_size": len(ctx.image_paths),
+        }
+
+    def _setup_odbc(self, aug_dict):
+        """
+        Resolve all inputs the evaluation needs before any augmentation runs.
+
+        Unwraps the model, resolves class names and URL-backed augmentations,
+        picks the device, resolves ground-truth class ids, loads the clean loader,
+        chooses the display sample, and writes + parses the COCO ground truth once.
+
+        Args:
+            aug_dict (Dict[str, Any]): Mapping of augmentation name to instance.
+
+        Returns:
+            _OdBcCtx: The resolved context threaded through the phase helpers.
+        """
         model = self._unwrap_model()
         aug_methods = self._get_aug_methods()
         class_names_arg = self._input_arguments['class_names'] or None
@@ -130,124 +292,166 @@ class Plugin(BasePlugin):
         print("Augmentation methods:", aug_methods)
         if 'url' in aug_dict and 'http' in aug_dict['url']:
             handle_url_algos(aug_dict, aug_methods)
-            
-        print("Class names:", class_names)
-        self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-        self._ordered_ground_truth = self._resolve_class_ids(self._ordered_ground_truth, class_names)
+        print("Class names:", class_names)
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self._device = device
+
+        ground_truths = self._resolve_class_ids(self._ordered_ground_truth, class_names)
+        self._ordered_ground_truth = ground_truths
 
         image_paths: list[str] = self._data_instance.get_data()["image_directory"].tolist()
-        ground_truths = self._ordered_ground_truth
-        test_dataset, test_loader = self._load_images_objdet(image_paths, ground_truths)
-        #KIV: set a random seed here manually; if we want to manually set it then we'll need to change this
+        _, test_loader = self._load_images_objdet(image_paths, ground_truths)
+        # KIV: set a random seed here manually; if we want to make it configurable
+        # later we'll change this.
         np.random.seed(42)
         display_idx = np.random.choice(len(image_paths))
-
-        combined_results = []
 
         # Write the COCO ground truth into the output folder (not the CWD) and
         # parse it once here: the GT is constant for the whole run, so there's no
         # reason to reload/re-index it per epoch inside the severity loop.
         gt_json = str(self._save_folder / 'ground_truths.json')
-        create_coco_gt(image_paths, self._ordered_ground_truth, class_names, gt_json)
+        create_coco_gt(image_paths, ground_truths, class_names, gt_json)
         cocoGt = COCO(gt_json)
-        num_augs_to_run = sum(
-            1 for aug_name in aug_dict if self._should_run_aug(aug_name, aug_methods)
+
+        return _OdBcCtx(
+            model=model,
+            device=device,
+            class_names=class_names,
+            image_paths=image_paths,
+            ground_truths=ground_truths,
+            test_loader=test_loader,
+            display_idx=display_idx,
+            aug_methods=aug_methods,
+            cocoGt=cocoGt,
         )
-        self._progress_inst.add_total(num_augs_to_run)
-        for aug_name, aug_class in aug_dict.items():
-            if not self._should_run_aug(aug_name, aug_methods):
-                continue
 
-            individual_results = {"Augmentation": aug_name}
-            display_info = {}
-            cm_dict = {}
-            coco_dict = {}
-            coco_graph_dict = {}
-            crs = []
-            cms = []
-            fbeta_df_list = []; pr_df_list = []
+    def _run_one_aug(self, ctx, aug_name, aug_class):
+        """
+        Evaluate a single augmentation across all its severities.
 
-            severities = ["None"] + aug_class.severities
-            if aug_name == "None":
-                severities = ["None"]
+        Runs each severity, collects the per-severity outputs, then builds the
+        per-class metric plots and the overall COCO curve overlays.
 
-            for severity_idx, severity_name in enumerate(severities):
-                print('severity idx', severity_idx, 'severity_name', severity_name)
-                corrupted_dir = Path(aug_name) / f"severity_{severity_name}"
+        Args:
+            ctx (_OdBcCtx): Resolved run context.
+            aug_name (str): Name of this augmentation.
+            aug_class: The ``Augmentation`` instance.
 
-                num_epochs = self._input_arguments.get('num_epochs') or 1
-                num_epochs = num_epochs if severity_name != "None" else 1
-                num_epochs = 1 if num_epochs is None else num_epochs
-                num_epochs = 1 if aug_class.deterministic else num_epochs
+        Returns:
+            dict: The per-augmentation results entry for ``combined_results``.
+        """
+        severities = ["None"] + aug_class.severities
+        if aug_name == "None":
+            severities = ["None"]
 
-                save_dir_coco = self._save_folder / corrupted_dir
-                save_dir_coco.mkdir(parents=True, exist_ok=True)
-                avg_stats, avg_matrix, avg_map, avg_summary, coco_imgs, coco_dfs = self._run_severity_epochs_coco(
-                    model, test_loader, aug_class, severity_name, severity_idx,
-                    num_epochs, class_names,
-                    cocoGt, image_paths, save_dir_coco
-                )
+        per_sev = [
+            self._run_one_severity(ctx, aug_name, aug_class, severity_idx, severity_name)
+            for severity_idx, severity_name in enumerate(severities)
+        ]
 
-                display_info[str(severity_name)] = self._get_display_info_for_severity(
-                    model, image_paths, ground_truths, aug_class, severity_name,
-                    display_idx, class_names, corrupted_dir,
-                )
+        crs = [o.cr for o in per_sev]
+        fbeta_df_list = [o.fbeta_df for o in per_sev]
+        pr_df_list = [o.pr_df for o in per_sev]
 
-                save_path, save_path_html = self._save_detection_matrix_path(
-                    avg_matrix, class_names, corrupted_dir
-                )
-                cm_dict[str(severity_name)] = [
-                    str(Path(save_path).relative_to(self._output_folder)),
-                    str(Path(save_path_html).relative_to(self._output_folder)),
-                ]
+        path_dict = self._detection_method(
+            crs, severities, ctx.class_names, Path(aug_name), aug_name
+        )
+        overall_coco_path_dict = self._overall_coco_path_method(
+            fbeta_df_list,
+            pr_df_list,
+            severities,
+            Path(aug_name),
+            iou_thres=f"iou={self._iou_thres:.2f}",
+            fbeta_metric=None,
+        )
 
-                coco_graph_dict[str(severity_name)] = [str(x.relative_to(self._output_folder)) for x in coco_imgs]
-                coco_dict[str(severity_name)] = avg_summary
-
-                crs.append({"map": avg_map, **avg_stats})
-                cms.append(avg_matrix)
-
-                fbeta_df_list.append(coco_dfs[0]); pr_df_list.append(coco_dfs[1])
-
-
-            path_dict = self._detection_method(
-                crs, 
-                severities, 
-                class_names, 
-                Path(aug_name), 
-                aug_name
-            )
-            overall_coco_path_dict = self._overall_coco_path_method(
-                fbeta_df_list, 
-                pr_df_list,
-                severities, 
-                Path(aug_name), 
-                # aug_name,
-                iou_thres = f"iou={self._iou_thres:.2f}",
-                fbeta_metric = None,
-            )
-            individual_results.update({
-                "display_info": display_info,
-                "classification_report": crs,
-                "conf_matrix": cms,
-                "plot_paths": path_dict,
-                "confusion_matrix": cm_dict,
-                "coco_graphs": coco_graph_dict,
-                "coco_summary": coco_dict,
-                "coco_graphs_overall": overall_coco_path_dict
-            })
-
-            combined_results.append(individual_results)
-            self._progress_inst.update(1)
-            print()
-
-        self._results = {
-            "results": combined_results,
-            "augmentation_names": [x["Augmentation"] for x in combined_results],
-            "class_names": class_names,
-            "dataset_size": len(image_paths),
+        return {
+            "Augmentation": aug_name,
+            "display_info": {n: o.display for n, o in zip(severities, per_sev)},
+            "classification_report": crs,
+            "conf_matrix": [o.matrix for o in per_sev],
+            "plot_paths": path_dict,
+            "confusion_matrix": {n: o.cm_paths for n, o in zip(severities, per_sev)},
+            "coco_graphs": {n: o.coco_graphs for n, o in zip(severities, per_sev)},
+            "coco_summary": {n: o.coco_summary for n, o in zip(severities, per_sev)},
+            "coco_graphs_overall": overall_coco_path_dict,
         }
+
+    def _run_one_severity(self, ctx, aug_name, aug_class, severity_idx, severity_name):
+        """
+        Evaluate one ``(aug, severity)`` pass and package its contributions.
+
+        Resolves the epoch count, runs the epoch-averaged COCO evaluation, builds
+        the display sample, and saves the detection matrix figure.
+
+        Args:
+            ctx (_OdBcCtx): Resolved run context.
+            aug_name (str): Name of the augmentation.
+            aug_class: The ``Augmentation`` instance.
+            severity_idx (int): Ordinal of this severity (used for seeding).
+            severity_name (str): Severity label (``"None"`` for the clean pass).
+
+        Returns:
+            _SeverityOutputs: The per-severity pieces for the aggregate results.
+        """
+        print('severity idx', severity_idx, 'severity_name', severity_name)
+
+        # The clean pass is augmentation-independent (see _augmentation_bc_method):
+        # compute it for the first augmentation, then reuse that _SeverityOutputs
+        # for every subsequent one. Its saved artifacts (display/matrix/curve PNGs)
+        # live under the first augmentation's severity_None/ folder; the reused
+        # results reference that single copy, which is correct since the clean
+        # images are identical regardless of augmentation.
+        if severity_name == "None" and self._clean_severity_outputs is not None:
+            print("Reusing cached clean (None) severity outputs")
+            return self._clean_severity_outputs
+
+        corrupted_dir = Path(aug_name) / f"severity_{severity_name}"
+
+        num_epochs = self._input_arguments.get('num_epochs') or 1
+        num_epochs = num_epochs if severity_name != "None" else 1
+        num_epochs = 1 if num_epochs is None else num_epochs
+        num_epochs = 1 if aug_class.deterministic else num_epochs
+
+        save_dir_coco = self._save_folder / corrupted_dir
+        save_dir_coco.mkdir(parents=True, exist_ok=True)
+        avg_stats, avg_matrix, avg_map, avg_summary, coco_imgs, coco_dfs = self._run_severity_epochs_coco(
+            ctx.model, ctx.test_loader, aug_class, severity_name, severity_idx,
+            num_epochs, ctx.class_names,
+            ctx.cocoGt, ctx.image_paths, save_dir_coco
+        )
+
+        display = self._get_display_info_for_severity(
+            ctx.model, ctx.image_paths, ctx.ground_truths, aug_class, severity_name,
+            ctx.display_idx, ctx.class_names, corrupted_dir,
+        )
+
+        save_path, save_path_html = self._save_detection_matrix_path(
+            avg_matrix, ctx.class_names, corrupted_dir
+        )
+        cm_paths = [
+            str(Path(save_path).relative_to(self._output_folder)),
+            str(Path(save_path_html).relative_to(self._output_folder)),
+        ]
+        coco_graphs = [str(x.relative_to(self._output_folder)) for x in coco_imgs]
+
+        outputs = _SeverityOutputs(
+            cr={"map": avg_map, **avg_stats},
+            matrix=avg_matrix,
+            display=display,
+            cm_paths=cm_paths,
+            coco_graphs=coco_graphs,
+            coco_summary=avg_summary,
+            fbeta_df=coco_dfs[0],
+            pr_df=coco_dfs[1],
+        )
+
+        # Cache the clean pass so later augmentations skip re-computing it.
+        if severity_name == "None":
+            self._clean_severity_outputs = outputs
+
+        return outputs
 
     def _build_combined_df(self, data: list, severities: list) -> "pd.DataFrame":
         """
@@ -282,6 +486,104 @@ class Plugin(BasePlugin):
         df['actual_population'] = df['TP'] + df['FN']
         return df
 
+    def _render_class_panel(self, df: "pd.DataFrame", spec: "_PanelSpec", save_dir: Path):
+        """
+        Render one per-class "value vs severity" panel to matplotlib and plotly.
+
+        Draws each ``spec.series`` line against ``df['severity']`` on both
+        backends, optionally overlaying ``x`` markers at y=0 for NaN severities
+        (``spec.nan_masks``) in the matching line color, and applies the shared
+        figure styling. This is the single backend implementation the three
+        ``_plot_class_*`` panels delegate to.
+
+        Args:
+            df (pd.DataFrame): Panel data; must contain ``severity`` plus every
+                ``series.col``. Rows are the x-axis in order.
+            spec (_PanelSpec): The panel definition (series, title, limits, stem).
+            save_dir (Path): Directory to write ``<stem>.png`` / ``<stem>.html``.
+
+        Returns:
+            Tuple[Path, Path]: The saved ``(png_path, html_path)``.
+        """
+        severity_order = df['severity'].tolist()
+        pos_map = {v: i for i, v in enumerate(severity_order)}
+        plotly_colors = px.colors.qualitative.Plotly
+
+        # --- matplotlib ---
+        fig, ax = plt.subplots(figsize=(10, 6))
+        line_colors = {}
+        for s in spec.series:
+            kwargs = {'label': s.label}
+            if s.color is not None:
+                kwargs['color'] = s.color
+            if s.marker is not None:
+                kwargs['marker'] = s.marker
+            if s.dash:
+                kwargs['linestyle'] = '--'
+            line, = ax.plot(df['severity'], df[s.col], **kwargs)
+            line_colors[s.col] = line.get_color()
+
+        if spec.nan_masks:
+            for s in spec.series:
+                mask = spec.nan_masks.get(s.col)
+                if mask is not None and mask.any():
+                    x_pos = [pos_map[v] for v in df.loc[mask, 'severity']]
+                    ax.scatter(x_pos, [0] * len(x_pos), marker='x',
+                               color=line_colors[s.col], alpha=0.8, zorder=5,
+                               label=f'{s.label} (NaN\u21920)')
+
+        ax.set_title(spec.title)
+        ax.set_xlabel("severity")
+        ax.set_ylabel(spec.ylabel)
+        ax.legend()
+        if spec.ylim is not None:
+            ax.set_ylim(*spec.ylim)
+        plt.xticks(rotation=45)
+
+        png_path = save_dir / f"{spec.stem}.png"
+        fig.savefig(png_path, bbox_inches="tight")
+        plt.close()
+
+        # --- plotly ---
+        fig_html = go.Figure()
+        series_colors = {}
+        for i, s in enumerate(spec.series):
+            color = s.color if s.color is not None else plotly_colors[i % len(plotly_colors)]
+            series_colors[s.col] = color
+            line_kw = {'color': color}
+            if s.dash:
+                line_kw['dash'] = 'dash'
+            fig_html.add_trace(go.Scatter(
+                x=df['severity'], y=df[s.col],
+                mode='lines+markers' if s.marker is not None else 'lines',
+                name=s.label, line=line_kw,
+            ))
+
+        if spec.nan_masks:
+            for s in spec.series:
+                mask = spec.nan_masks.get(s.col)
+                if mask is not None and mask.any():
+                    nan_sev = df.loc[mask, 'severity'].tolist()
+                    fig_html.add_trace(go.Scatter(
+                        x=nan_sev, y=[0] * len(nan_sev), mode='markers',
+                        marker=dict(symbol='x', size=12, color=series_colors[s.col],
+                                    line=dict(width=2)),
+                        name=f'{s.label} (NaN\u21920)', showlegend=True,
+                    ))
+
+        fig_html.update_layout(
+            title=spec.title,
+            width=1600, height=900, xaxis_title="severity",
+            yaxis_title=spec.ylabel_plotly or spec.ylabel,
+            font=dict(size=20), title_font_size=24,
+        )
+        if spec.plotly_range is not None:
+            fig_html.update_yaxes(range=list(spec.plotly_range))
+        html_path = save_dir / f"{spec.stem}.html"
+        fig_html.write_html(str(html_path))
+
+        return png_path, html_path
+
     def _plot_class_metrics(
         self,
         plot_df: "pd.DataFrame",
@@ -291,71 +593,27 @@ class Plugin(BasePlugin):
         class_name: str,
     ):
         """
-        Plot precision / recall / f1 over severity for one class (matplotlib + plotly).
+        Plot precision / recall / f1 / map over severity for one class.
 
         Returns:
             (png_path, html_path)
         """
-        metric_cols = ['precision', 'recall', 'f1_score', 'map']
-        severity_order = plot_df['severity'].tolist()
-        pos_map = {v: i for i, v in enumerate(severity_order)}
-
-        # --- matplotlib ---
-        fig, ax = plt.subplots(figsize=(10, 6))
-        line_colors = {}
-        for col, label in zip(metric_cols, ['precision', 'recall', 'f1', 'map']):
-            line, = ax.plot(plot_df['severity'], plot_df[col], label=label)
-            line_colors[col] = line.get_color()
-
-        for col, label in zip(metric_cols, ['precision', 'recall', 'f1', 'map']):
-            mask = nan_masks[col]
-            if mask.any():
-                x_pos = [pos_map[s] for s in plot_df.loc[mask, 'severity']]
-                ax.scatter(x_pos, [0] * len(x_pos), marker='x',
-                           color=line_colors[col], alpha=0.8, zorder=5,
-                           label=f'{label} (NaN\u21920)')
-
-        ax.set_title(f"{aug_name} - {class_name}")
-        ax.set_xlabel("severity")
-        ax.set_ylabel("score")
-        ax.legend()
-        ax.set_ylim(-0.1, 1.1)
-        plt.xticks(rotation=45)
-
-        png_path = save_dir / f"{class_name}_metrics.png"
-        fig.savefig(png_path, bbox_inches="tight")
-        plt.close()
-
-        # --- plotly ---
-        fig_html = px.line(
-            plot_df, x='severity', y=metric_cols,
+        spec = _PanelSpec(
             title=f"{aug_name} - {class_name}",
-            labels={'value': 'metric', 'variable': 'metric'}
+            ylabel="score",
+            ylabel_plotly="metric",
+            stem=f"{class_name}_metrics",
+            nan_masks=nan_masks,
+            ylim=(-0.1, 1.1),
+            plotly_range=(-0.1, 1.1),
+            series=[
+                _Series(col='precision', label='precision'),
+                _Series(col='recall', label='recall'),
+                _Series(col='f1_score', label='f1'),
+                _Series(col='map', label='map'),
+            ],
         )
-        plotly_colors = px.colors.qualitative.Plotly
-        col_color_map = {col: plotly_colors[i] for i, col in enumerate(metric_cols)}
-
-        for col, label in zip(metric_cols, ['precision', 'recall', 'f1', 'map']):
-            mask = nan_masks[col]
-            if mask.any():
-                nan_severities = plot_df.loc[mask, 'severity'].tolist()
-                fig_html.add_trace(go.Scatter(
-                    x=nan_severities, y=[0] * len(nan_severities),
-                    mode='markers',
-                    marker=dict(symbol='x', size=12, color=col_color_map[col],
-                                line=dict(width=2)),
-                    name=f'{label} (NaN\u21920)', showlegend=True
-                ))
-
-        fig_html.update_layout(
-            width=1600, height=900, xaxis_title="severity", yaxis_title="metric",
-            font=dict(size=20), title_font_size=24
-        )
-        fig_html.update_yaxes(range=[-0.1, 1.1])
-        html_path = save_dir / f"{class_name}_metrics.html"
-        fig_html.write_html(str(html_path))
-
-        return png_path, html_path
+        return self._render_class_panel(plot_df, spec, save_dir)
 
     def _plot_class_counts(
         self,
@@ -375,39 +633,16 @@ class Plugin(BasePlugin):
         count_colors = {'TP': '#2ca02c', 'FP': '#ff7f0e', 'FN': '#d62728'}
         count_plot_df = class_df[['severity'] + count_cols].fillna(0)
 
-        # --- matplotlib ---
-        fig, ax = plt.subplots(figsize=(10, 6))
-        for col in count_cols:
-            ax.plot(count_plot_df['severity'], count_plot_df[col],
-                    label=col, color=count_colors[col], marker='o')
-
-        ax.set_title(f"{aug_name} - {class_name} (TP / FP / FN counts)")
-        ax.set_xlabel("severity")
-        ax.set_ylabel("count")
-        ax.legend()
-        plt.xticks(rotation=45)
-
-        png_path_cm = save_dir / f"{class_name}_counts.png"
-        fig.savefig(png_path_cm, bbox_inches="tight")
-        plt.close()
-
-        # --- plotly ---
-        fig_counts = go.Figure()
-        for col in count_cols:
-            fig_counts.add_trace(go.Scatter(
-                x=count_plot_df['severity'], y=count_plot_df[col],
-                mode='lines+markers', name=col,
-                line=dict(color=count_colors[col])
-            ))
-        fig_counts.update_layout(
+        spec = _PanelSpec(
             title=f"{aug_name} - {class_name} (TP / FP / FN counts)",
-            width=1600, height=900, xaxis_title="severity", yaxis_title="count",
-            font=dict(size=20), title_font_size=24
+            ylabel="count",
+            stem=f"{class_name}_counts",
+            series=[
+                _Series(col=col, label=col, color=count_colors[col], marker='o')
+                for col in count_cols
+            ],
         )
-        html_path_cm = save_dir / f"{class_name}_counts.html"
-        fig_counts.write_html(str(html_path_cm))
-
-        return png_path_cm, html_path_cm
+        return self._render_class_panel(count_plot_df, spec, save_dir)
 
     def _plot_class_population(
         self,
@@ -428,46 +663,22 @@ class Plugin(BasePlugin):
         pop_df['pred_population']   = pop_df['TP'] + pop_df['FP']
         y_max = pop_df[['actual_population', 'pred_population']].max().max()
 
-        # --- matplotlib ---
-        fig, ax = plt.subplots(figsize=(10, 6))
-        ax.plot(pop_df['severity'], pop_df['actual_population'],
-                label='actual population (GT boxes)', color='steelblue', marker='o')
-        ax.plot(pop_df['severity'], pop_df['pred_population'],
-                label='pred population (pred boxes)', color='darkorange',
-                marker='s', linestyle='--')
-        ax.set_title(f"{aug_name} - {class_name} (population)")
-        ax.set_xlabel("severity")
-        ax.set_ylabel("count")
-        ax.legend()
-        plt.xticks(rotation=45)
-        ax.set_ylim(-5, y_max + 5)
-
-        png_path_pop = save_dir / f"{class_name}_population.png"
-        fig.savefig(png_path_pop, bbox_inches="tight")
-        plt.close()
-
-        # --- plotly ---
-        fig_pop = go.Figure()
-        fig_pop.add_trace(go.Scatter(
-            x=pop_df['severity'], y=pop_df['actual_population'],
-            mode='lines+markers', name='actual population (GT boxes)',
-            line=dict(color='steelblue')
-        ))
-        fig_pop.add_trace(go.Scatter(
-            x=pop_df['severity'], y=pop_df['pred_population'],
-            mode='lines+markers', name='pred population (pred boxes)',
-            line=dict(color='darkorange', dash='dash')
-        ))
-        fig_pop.update_layout(
+        # Note: matplotlib and plotly use slightly different lower bounds here
+        # (-5 vs 5), preserved from the original per-backend limits.
+        spec = _PanelSpec(
             title=f"{aug_name} - {class_name} (population)",
-            width=1600, height=900, xaxis_title="severity", yaxis_title="count",
-            font=dict(size=20), title_font_size=24
+            ylabel="count",
+            stem=f"{class_name}_population",
+            ylim=(-5, y_max + 5),
+            plotly_range=(5, y_max + 5),
+            series=[
+                _Series(col='actual_population', label='actual population (GT boxes)',
+                        color='steelblue', marker='o'),
+                _Series(col='pred_population', label='pred population (pred boxes)',
+                        color='darkorange', marker='s', dash=True),
+            ],
         )
-        fig_pop.update_yaxes(range=[5, y_max + 5])
-        html_path_pop = save_dir / f"{class_name}_population.html"
-        fig_pop.write_html(str(html_path_pop))
-
-        return png_path_pop, html_path_pop
+        return self._render_class_panel(pop_df, spec, save_dir)
 
     def _plot_map(
         self,
@@ -768,6 +979,56 @@ class Plugin(BasePlugin):
         print(f"Saved to {save_path_html} [plotly]")
         return save_path, save_path_html
 
+    def _extract_coco_ap(self, cocoEval): #class_names
+        """
+        Read overall and per-class Average Precision from a COCO accumulator at
+        the single configured ``self._iou_thres``.
+
+        Replaces the former TorchMetrics ``MeanAveragePrecision`` pass: after
+        ``cocoEval.accumulate()`` the ``(T, R, K, A, M)`` precision tensor holds
+        interpolated precision per (IoU, recall, class, area, maxDet). This
+        slices the single IoU row matching ``self._iou_thres``, area ``all`` and
+        ``maxDets=100`` (matching COCO's ``AP_50`` convention), then averages
+        over the recall axis per class. Absent categories (all ``-1``) yield NaN.
+
+        Args:
+            cocoEval (COCOeval): Accumulated evaluator (``accumulate()`` already run).
+
+        Returns:
+            Tuple[float, dict]: Overall mAP (mean of valid per-class AP, or -1.0
+                if none valid) and ``{class_name: ap}`` per-class AP.
+
+        Raises:
+            ValueError: If ``self._iou_thres`` is not on COCO's IoU grid.
+        """
+        p = cocoEval.params
+        precision = cocoEval.eval['precision']  # (T, R, K, A, M)
+
+        t_idx = np.where(np.isclose(p.iouThrs, self._iou_thres))[0]
+        if t_idx.size == 0:
+            raise ValueError(
+                f"iou_thres={self._iou_thres} is not on the COCO IoU grid "
+                f"({p.iouThrs[0]:.2f}:{p.iouThrs[-1]:.2f} step 0.05); pick a "
+                f"value on the grid so per-class AP can be read out."
+            )
+        t = t_idx.item()
+        aind = p.areaRngLbl.index('all')
+        mind = p.maxDets.index(100)
+
+        # catNms is ordered by category id, matching the precision tensor's K axis.
+        per_class_ap = {}
+        valid_aps = []
+        for k, class_name in enumerate(p.catNms):
+            s = precision[t, :, k, aind, mind]
+            s = s[s > -1]
+            ap = float(np.mean(s)) if s.size else float("nan")
+            per_class_ap[class_name] = ap
+            if s.size:
+                valid_aps.append(ap)
+
+        overall = float(np.mean(valid_aps)) if valid_aps else -1.0
+        return overall, per_class_ap
+
     def _run_severity_epochs_coco(
         self,
         model,
@@ -831,13 +1092,20 @@ class Plugin(BasePlugin):
             fbeta_df = cocoEval.computeFBetaCurveData(betas=[1,2], iouThr=self._iou_thres, average='macro')
             pr_df = cocoEval.computePRCurveData(average='macro')
             cocopr_df = cocoEval.computeCocoPRCurveData()  #TODO: KIV doing this by class
-            per_class_report = cocoEval.generateReport()
+            per_class_report = cocoEval.generateReport(iouThr=self._iou_thres)
 
             for k in det_stats['per_class']:
                 assert k in per_class_report
                 class_report = per_class_report[k]
                 for k1,v1 in class_report.items():
                     det_stats['per_class'][k][k1] = v1
+
+            # Overall + per-class AP now come from the COCO accumulator at
+            # iou_thres (single source of truth), not from TorchMetrics.
+            overall_ap, per_class_ap = self._extract_coco_ap(cocoEval, class_names)
+            det_stats["map"] = overall_ap
+            for k in det_stats['per_class']:
+                det_stats['per_class'][k]["map"] = per_class_ap.get(k, float("nan"))
 
             all_stats.append(det_stats["per_class"])
             all_matrices.append(det_stats["matrix"])

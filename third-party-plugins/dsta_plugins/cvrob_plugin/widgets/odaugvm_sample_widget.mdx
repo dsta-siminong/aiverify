@@ -52,6 +52,49 @@ export const AugmentationSeverityPanel = ({ props }) => {
     return { total: labels.length, perLabel, scoreMin, scoreMax, scoreAvg };
   };
 
+  // IoU of two [x1,y1,x2,y2] boxes.
+  const boxIou = (a, b) => {
+    const [ax1, ay1, ax2, ay2] = a;
+    const [bx1, by1, bx2, by2] = b;
+    const ix1 = Math.max(ax1, bx1);
+    const iy1 = Math.max(ay1, by1);
+    const ix2 = Math.min(ax2, bx2);
+    const iy2 = Math.min(ay2, by2);
+    const interArea = Math.max(0, ix2 - ix1) * Math.max(0, iy2 - iy1);
+    const areaA = Math.max(0, ax2 - ax1) * Math.max(0, ay2 - ay1);
+    const areaB = Math.max(0, bx2 - bx1) * Math.max(0, by2 - by1);
+    const union = areaA + areaB - interArea;
+    return union > 0 ? interArea / union : 0;
+  };
+
+  // How many GT objects are actually correctly detected: a predicted box with
+  // matching label, IoU >= iouThres, and score >= scoreThres. Greedy
+  // one-to-one match (highest-IoU valid pairs first), mirroring the
+  // `_count_correct_detections` used on the Python side, so "correct" means
+  // the same thing here as it does in the brittleness filters.
+  const countCorrectDetections = (gtBoxes, predObj, iouThres, scoreThres) => {
+    const gt = Array.isArray(gtBoxes) ? gtBoxes : [];
+    if (!predObj || !Array.isArray(predObj.boxes) || gt.length === 0) return 0;
+    const { boxes, labels, scores = [] } = predObj;
+    const keepIdx = boxes.map((_, i) => i).filter((i) => (scores[i] ?? 0) >= scoreThres);
+    if (keepIdx.length === 0) return 0;
+
+    const matchedGt = new Set();
+    let correct = 0;
+    keepIdx.forEach((pi) => {
+      let bestG = -1;
+      let bestV = iouThres;
+      gt.forEach((g, gi) => {
+        if (matchedGt.has(gi)) return;
+        if (Number(labels[pi]) !== Number(g.label)) return;
+        const v = boxIou(boxes[pi], g.bbox);
+        if (v >= bestV) { bestG = gi; bestV = v; }
+      });
+      if (bestG >= 0) { matchedGt.add(bestG); correct += 1; }
+    });
+    return correct;
+  };
+
   const fmt = (n) => (n !== null && n !== undefined ? (n * 100).toFixed(1) + "%" : "—");
 
   const labelColor = (label) => LABEL_COLORS[Number(label) % LABEL_COLORS.length] || "#e5e7eb";
@@ -133,7 +176,7 @@ export const AugmentationSeverityPanel = ({ props }) => {
   );
 
   // Stats panel now spans full width below the images, laid out in three columns
-  const DetectionStatsPanel = ({ gt, pred, countMatch }) => (
+  const DetectionStatsPanel = ({ gt, pred, correctCount, detectedWell }) => (
     <div
       style={{
         background: "#f9fafb",
@@ -159,7 +202,15 @@ export const AugmentationSeverityPanel = ({ props }) => {
       {/* Predictions column */}
       <div style={{ flex: 1, paddingRight: "1.25rem" }}>
         <SectionLabel>Predictions</SectionLabel>
-        <StatRow label="Boxes" value={pred.total} highlight={countMatch ? "#085224" : "#680b0b"} />
+        <StatRow label="Boxes" value={pred.total} />
+        {/* Boxes correctly matched to GT (right label + IoU + score), not just
+            raw counts — an image can have the "right" box count while every
+            box is wrong, so the highlight lives here instead. */}
+        <StatRow
+          label="Correct"
+          value={`${correctCount} / ${gt.total}`}
+          highlight={detectedWell ? "#085224" : "#680b0b"}
+        />
         <LabelPills perLabel={pred.perLabel} colorFn={labelColor} />
       </div>
 
@@ -182,6 +233,15 @@ export const AugmentationSeverityPanel = ({ props }) => {
   if (!resultsData || resultsData.length === 0) {
     return <div>No results data available</div>;
   }
+
+  // Reuse the same thresholds the algorithm was run with, if available, so
+  // "correct" means the same thing here as in the brittleness filters.
+  // min_recall isn't part of ALGORITHM_ARGUMENTS (it's a display-only knob),
+  // so it keeps the same default (0.75) used on the Python side.
+  const algoArgs = (props.getResults(cid) || {}).ALGORITHM_ARGUMENTS || {};
+  const IOU_THRES = algoArgs.iou_thres ?? 0.5;
+  const SCORE_THRES = algoArgs.score_thres ?? 0.5;
+  const MIN_RECALL = 0.75;
 
   const augmentationPanels = resultsData.map((augmentationItem, index) => {
     const { Augmentation, display_info } = augmentationItem;
@@ -217,9 +277,15 @@ export const AugmentationSeverityPanel = ({ props }) => {
       const fileName = withoutPredPath.split("/").pop();
       const gt = summariseGT(gtBoxes);
       const pred = summarisePred(predObj);
-      const countMatch = gt.total === pred.total;
 
-      return { severityKey, withoutPredUrl, withPredUrl, fileName, gt, pred, countMatch };
+      // "Correct" is judged on matched detections (right label + IoU + score
+      // against GT), not on whether the box counts happen to line up — a
+      // model can emit the right number of boxes and still get every single
+      // one wrong.
+      const correctCount = countCorrectDetections(gtBoxes, predObj, IOU_THRES, SCORE_THRES);
+      const detectedWell = gt.total > 0 && correctCount / gt.total >= MIN_RECALL;
+
+      return { severityKey, withoutPredUrl, withPredUrl, fileName, gt, pred, correctCount, detectedWell };
     });
 
     const baseFileName = (severityEntries.find(Boolean) || {}).fileName || "";
@@ -261,8 +327,8 @@ export const AugmentationSeverityPanel = ({ props }) => {
 
         {severityEntries.map((entry, i) => {
           if (!entry) return null;
-          const { severityKey, withoutPredUrl, withPredUrl, gt, pred, countMatch } = entry;
-          const borderColor = countMatch ? "#085224" : "#680b0b";
+          const { severityKey, withoutPredUrl, withPredUrl, gt, pred, correctCount, detectedWell } = entry;
+          const borderColor = detectedWell ? "#085224" : "#680b0b";
 
           return (
             // The outer wrapper must contain everything for this severity level —
@@ -318,7 +384,7 @@ export const AugmentationSeverityPanel = ({ props }) => {
               </div>
 
               {/* ── Row 2: stats panel, full width, three columns ── */}
-              <DetectionStatsPanel gt={gt} pred={pred} countMatch={countMatch} />
+              <DetectionStatsPanel gt={gt} pred={pred} correctCount={correctCount} detectedWell={detectedWell} />
             </div>
           );
         })}

@@ -8,7 +8,6 @@ import matplotlib.pyplot as plt
 # from tqdm import tqdm
 import torch.nn as nn
 from pathlib import Path
-from torchmetrics.detection.mean_ap import MeanAveragePrecision
 import json
 # from collections import defaultdict
 from torchvision.ops import box_iou
@@ -109,6 +108,21 @@ def _match_predictions_to_gt(
             stats[class_name]["FN"] += 1
 
 def get_prediction_from_image(model, display_image, device):
+    """
+    Predict the class of a single image, dispatching by model kind.
+
+    A string ``model`` is treated as an API URL; otherwise the image is run
+    through the local model on ``device``.
+
+    Args:
+        model: A torch model, or an API URL string for remote prediction.
+        display_image (np.ndarray): CHW image array to classify.
+        device (torch.device): Device the local model runs on.
+
+    Returns:
+        dict: prediction of the image represented by the bounding boxes of detection, 
+        labels for classes of the boxes, and the scores of each detection
+    """
     if isinstance(model, str):
         return get_prediction_from_image_api(model, display_image)
     image = torch.tensor(display_image).unsqueeze(0).float()
@@ -127,6 +141,23 @@ def get_prediction_from_image(model, display_image, device):
     return prediction
 
 def get_prediction_from_image_api(model, display_image):
+    """
+    Predict the class of a single image via an HTTP API.
+
+    Serialises the image to ``.npy``, POSTs it to the API URL, and returns the
+    predicted class from the JSON response.
+
+    Args:
+        model (str): API URL that accepts a ``.npy`` image and returns a prediction.
+        display_image (np.ndarray): Image array to classify.
+
+    Returns:
+        dict: prediction of the image represented by the bounding boxes of detection, 
+        labels for classes of the boxes, and the scores of each detection
+
+    Raises:
+        requests.HTTPError: If the API request returns an error status.
+    """
     API_URL = model
 
     # display_image: (C, H, W)
@@ -135,7 +166,7 @@ def get_prediction_from_image_api(model, display_image):
     buffer = io.BytesIO()
     np.save(buffer, batch)
     buffer.seek(0)
-
+    
     response = requests.post(
         API_URL,
         files={"file": ("array.npy", buffer, "application/octet-stream")},
@@ -162,14 +193,16 @@ def triplets(s):
         tokens from the input string.
 
     Raises:
-        AssertionError: If the number of tokens in the input is not a multiple
-        of three.
+        AssertionError: If the number of tokens in the input is not a multiple of three.
     """
     items = s.split()
     assert len(items) % 3 == 0, "Input length must be a multiple of 3"
     return [items[i:i+3] for i in range(0, len(items), 3)]
 
 def normalize_per_class(per_class):
+    """
+    Make all keys strings
+    """
     out = {}
 
     for k, v in per_class.items():
@@ -184,9 +217,21 @@ def normalize_per_class(per_class):
     
 def get_num_classes(model: nn.Module) -> int:
     """
-    Infer number of classes from classification OR detection models.
-    """
+    Infer the number of output classes from a PyTorch classification model.
 
+    The function attempts to determine the number of classes by inspecting the
+    final Linear or Conv2d layer, or common classifier attributes such as
+    'fc', 'classifier', 'head', or 'heads'.
+
+    Args:
+        model (nn.Module): A PyTorch model assumed to be used for classification.
+
+    Returns:
+        int: The inferred number of output classes.
+
+    Raises:
+        RuntimeError: If the number of classes cannot be determined from the model.
+    """
     # =========================
     # 1. Detection models (torchvision Faster R-CNN style)
     # =========================
@@ -283,6 +328,9 @@ def handle_class_names_arg(class_names_arg, model):
     return class_names
 
 def average_detection_stats(all_stats):
+    """
+    Take the average for all of the performance metrics over multiple epochs
+    """
     avg_stats = {}
     class_keys = all_stats[0].keys()
 
@@ -300,6 +348,22 @@ def average_detection_stats(all_stats):
     return avg_stats
 
 class DetectionDataset(torch.utils.data.Dataset):
+    """
+    Lazy image dataset for object detection.
+
+    Loads each image on demand, upscaling it (with its boxes) so the shorter side
+    is at least ``min_size`` while preserving aspect ratio, then applies the
+    optional transform. Each item is ``(image, {"boxes", "labels"})``, where
+    ``boxes`` are ``[x1, y1, x2, y2]`` in pixel coordinates and ``labels`` are
+    integer class ids; images with no annotations yield empty box/label tensors.
+
+    Attributes:
+        image_paths (List[str]): Image file paths, one per sample.
+        targets (List[List[dict]]): Per-image ``{"bbox", "label"}`` annotations.
+        transform (callable | None): Optional image transform (e.g. ``ToTensor``),
+            applied after resizing.
+        min_size (int): Minimum shorter-side length; smaller images are upscaled.
+    """
     def __init__(self, image_paths, targets, transform=None, min_size=500):
         self.image_paths = image_paths
         self.targets = targets
@@ -363,28 +427,25 @@ def create_coco_gt(
     class_names,
     output_json,
 ):
-    """
-    Create a COCO-format ground-truth json from already-resolved,
-    per-image ground truth.
+    """Write a COCO-format ground-truth json from already-resolved per-image GT.
 
-    Parameters
-    ----------
-    image_paths : list[str] or list[Path]
-        List of image paths, in the same order as ordered_ground_truth
-        (i.e. image_paths[i] corresponds to ordered_ground_truth[i]).
+    Reads each image's dimensions from disk, assigns 1-based image ids in list
+    order, converts every ``[x_min, y_min, x_max, y_max]`` box to COCO's
+    ``[x, y, w, h]`` form, and emits the ``images``/``annotations``/``categories``
+    structure as json.
 
-    ordered_ground_truth : list[list[dict]]
-        One entry per image, each a list of {"bbox": [x_min, y_min,
-        x_max, y_max], "label": class_id} dicts. Output of
-        _resolve_class_ids.
+    Args:
+        image_paths (list[str | Path]): Image paths, aligned by position with
+            ``ordered_ground_truth`` (``image_paths[i]`` <-> ``ordered_ground_truth[i]``).
+        ordered_ground_truth (list[list[dict]]): One entry per image, each a list
+            of ``{"bbox": [x_min, y_min, x_max, y_max], "label": class_id}`` dicts
+            (the output of ``_resolve_class_ids``).
+        class_names (dict): ``{class_id_str: name}`` mapping, e.g.
+            ``{"0": "cat", "1": "dog"}``.
+        output_json (str): Path to write the COCO json to.
 
-    class_names : dict
-        Example:
-            {"0": "cat",
-             "1": "dog"}
-
-    output_json : str
-        Output json filename.
+    Raises:
+        ValueError: If ``image_paths`` and ``ordered_ground_truth`` differ in length.
     """
     if len(image_paths) != len(ordered_ground_truth):
         raise ValueError(
@@ -457,27 +518,40 @@ def evaluate_detection_and_create_coco_predictions(
     score_thresh=0.5,
     coco_score_threshold=0.0,
 ):
-    """
-    Combined version of evaluate_detection_detailed + create_coco_predictions.
-    Runs model inference exactly once per batch and feeds the outputs into
-    both the TP/FP/FN/confusion-matrix/mAP bookkeeping AND the COCO predictions
-    JSON, instead of running two full passes over the loader.
+    """Evaluate a detector and write its COCO predictions json in one pass.
 
-    Args mirror the two original functions:
-        - iou_thresh / score_thresh: used for the detailed per-class stats path
-          (same as evaluate_detection_detailed).
-        - coco_score_threshold: minimum score for a box to be written into the
-          COCO predictions JSON (same as create_coco_predictions's
-          score_threshold). Kept separate since the two thresholds were
-          allowed to differ before merging (score_thresh vs score_threshold).
+    Runs inference exactly once per batch and feeds each batch's outputs into
+    both the TP/FP/FN/confusion-matrix/mAP bookkeeping and the COCO predictions
+    json, rather than sweeping the loader twice. Predictions are matched to
+    ground truth greedily by IoU for the per-class stats, while the mAP is
+    accumulated separately via TorchMetrics.
 
-    Returns same dict as evaluate_detection_detailed:
-        {"map": float, "per_class": dict, "matrix": ndarray}
-    Also writes output_json, same as create_coco_predictions did.
+    Args:
+        model: Detection model, or an API URL string (routed through ``predict``).
+        loader (torch.utils.data.DataLoader): Loader yielding ``(images, targets)``.
+        device (torch.device): Device local inference runs on.
+        class_names (dict): ``{class_id_str: name}`` mapping.
+        image_paths (list): Image paths, in loader (dataset) order; used to map
+            each prediction back to its 1-based COCO ``image_id``.
+        output_json (str): Path to write the COCO predictions json to.
+        iou_thresh (float, optional): IoU threshold for greedy matching and mAP.
+            Defaults to ``0.5``.
+        score_thresh (float, optional): Minimum score for a box to enter the
+            per-class TP/FP/FN stats. Defaults to ``0.5``.
+        coco_score_threshold (float, optional): Minimum score for a box to be
+            written into the COCO predictions json. Kept separate from
+            ``score_thresh`` so the stats and json cutoffs can differ. Defaults
+            to ``0.0``.
+
+    Returns:
+        dict: ``{"per_class": dict, "matrix": np.ndarray}`` — the per-class
+            ``{TP, FP, FN, support}`` stats and the ``(num_classes, num_classes)``
+            detection-matching matrix. The overall and per-class ``map`` are
+            filled in by the caller from the COCO accumulator (see
+            ``_run_severity_epochs_coco``), so they are not computed here.
     """
     num_classes = len(class_names)
     matrix = np.zeros((num_classes, num_classes), dtype=np.float32)
-    metric = MeanAveragePrecision(iou_thresholds=[iou_thresh], class_metrics=True)
 
     per_class = {
         class_name: {"TP": 0, "FP": 0, "FN": 0, "support": 0}
@@ -495,8 +569,6 @@ def evaluate_detection_and_create_coco_predictions(
         targets = [{k: v.cpu() for k, v in t.items()} for t in targets]
 
         preds = predict(model, images, device)
-
-        metric.update(preds, targets)
 
         for pred, gt in zip(preds, targets):
             pred_boxes, pred_labels, pred_scores = _filter_and_sort_preds(
@@ -539,40 +611,59 @@ def evaluate_detection_and_create_coco_predictions(
                 })
             dataset_idx += 1
 
+    # dataset_idx advances once per prediction in loader order; it must have
+    # walked exactly every image. If it hasn't, the loader reordered/dropped
+    # samples (e.g. shuffle=True) and every image_id mapping above is wrong.
+    if dataset_idx != len(image_paths):
+        raise RuntimeError(
+            f"prediction/image alignment broke: consumed {dataset_idx} images "
+            f"but expected {len(image_paths)}. The loader must be unshuffled and "
+            f"order-preserving for the COCO image_id mapping to be valid."
+        )
+
     with open(output_json, "w") as f:
         json.dump(predictions, f, indent=2)
     print(f"Saved predictions to {output_json}")
 
-    # per_class = stats #_compute_per_class_metrics(stats)
-    map_result = metric.compute()
-
-    classes = map_result["classes"]
-    aps = map_result["map_per_class"]
-    if classes.ndim == 0:
-        classes = classes.unsqueeze(0)
-        aps = aps.unsqueeze(0)
-
-    per_class_ap = {
-        class_names[str(cls_idx.item())]: float(ap)
-        for cls_idx, ap in zip(classes, aps)
-    }
-    for class_name, metrics in per_class.items():
-        metrics["map"] = per_class_ap.get(class_name, float("nan"))
-
-    metric.reset()
-
+    # Note: overall/per-class mAP is NOT computed here anymore. It is derived
+    # from the COCO accumulator at the single configured iou_thres by the
+    # caller, so there is one consistent AP semantic across the whole plugin.
     return {
-        "map": map_result["map"].item(),
         "per_class": per_class,
         "matrix": matrix,
     }
 
 def predict(model, images, device):
+    """Run detection inference on a batch, dispatching by model kind.
+
+    A string ``model`` is treated as an API URL; anything else is run locally
+    on ``device``.
+
+    Args:
+        model: A torch detection model, or an API URL string.
+        images (list[torch.Tensor]): Batch of image tensors.
+        device (torch.device): Device the local model runs on.
+
+    Returns:
+        list[dict]: One prediction dict per image with CPU tensors for
+            ``boxes``, ``labels``, and ``scores``.
+    """
     if isinstance(model, str):
         return predict_api(model, images)
     return predict_direct(model, images, device)
 
 def predict_direct(model, images, device):
+    """Run a local detection model over a batch and return CPU predictions.
+
+    Args:
+        model (torch.nn.Module): Detection model returning per-image dicts with
+            ``boxes``, ``labels``, and ``scores``.
+        images (list[torch.Tensor]): Batch of image tensors.
+        device (torch.device): Device to run inference on.
+
+    Returns:
+        list[dict]: One prediction dict per image, with all tensors moved to CPU.
+    """
     model.eval(); model.to(device)
 
     images = [img.to(device) for img in images]
@@ -583,6 +674,23 @@ def predict_direct(model, images, device):
     return [{k: v.cpu() for k, v in o.items()} for o in outputs]
 
 def predict_api(api_url, images):
+    """Run detection inference on a batch via an HTTP API.
+
+    Stacks the batch, serialises it to ``.npy``, POSTs it to the API URL, and
+    reassembles the JSON response into per-image prediction tensors.
+
+    Args:
+        api_url (str): API URL accepting a ``.npy`` batch and returning
+            ``{"predictions": [...]}``.
+        images (list[torch.Tensor]): Batch of image tensors.
+
+    Returns:
+        list[dict]: One prediction dict per image with ``boxes``, ``labels``,
+            and ``scores`` tensors.
+
+    Raises:
+        requests.HTTPError: If the API request returns an error status.
+    """
     # images is List[Tensor]
     batch = torch.stack(images).cpu().numpy()
 
@@ -609,12 +717,22 @@ def predict_api(api_url, images):
     return preds
 
 def average_summaries(all_summaries):
-    '''
-    Average a list of summary dicts produced by collectSummaryResults()
-    across multiple epochs into a single dict of the same structure.
+    '''Average a list of ``collectSummaryResults()`` dicts across epochs.
 
-    :param all_summaries: list of dicts, each from collectSummaryResults()
-    :return: dict with same structure, leaf values averaged across epochs
+    Produces a single dict of the same structure, with every leaf value
+    (including the nested ``best_fbeta`` fields) averaged over epochs using
+    ``np.nanmean``. ``average_method`` is carried over unchanged since it is the
+    same for all epochs.
+
+    Args:
+        all_summaries (list[dict]): One dict per epoch, each as returned by
+            ``collectSummaryResults()``.
+
+    Returns:
+        dict: Same structure as a single summary, with leaf values averaged.
+
+    Raises:
+        ValueError: If ``all_summaries`` is empty.
     '''
     if not all_summaries:
         raise ValueError("all_summaries is empty")
@@ -642,14 +760,23 @@ def average_summaries(all_summaries):
     return avg
 
 def plotMultipleFBetaCurves(curveDfs, curve_name, legend_names, filename):
-    '''
-    Overlay a single named curve (e.g. 'precision', 'recall', 'F1', 'F2', ...) from
-    multiple plotFBetaCurve() outputs onto one plot, for comparison.
-    :param curveDfs: list of DataFrames, each as returned by plotFBetaCurve()
-    :param curve_name: which curve to pull out of each DataFrame (e.g. 'F1')
-    :param legend_names: list of legend labels, same length as curveDfs, one per DataFrame
-    :param filename: output filename
-    :return: None
+    '''Overlay one named F-beta curve from several DataFrames onto one plot.
+
+    Pulls the ``curve_name`` row (e.g. ``'precision'``, ``'recall'``, ``'F1'``)
+    from each DataFrame and plots them together for comparison, then saves the
+    figure to ``filename``.
+
+    Args:
+        curveDfs (list[pd.DataFrame]): DataFrames, each as returned by
+            ``plotFBetaCurve()``.
+        curve_name (str): Which curve (index row) to pull from each DataFrame.
+        legend_names (list[str]): Legend label per DataFrame; same length as
+            ``curveDfs``.
+        filename (str | Path): Output image path.
+
+    Raises:
+        ValueError: If ``curveDfs`` and ``legend_names`` differ in length, or if
+            ``curve_name`` is absent from any DataFrame.
     '''
     if len(curveDfs) != len(legend_names):
         raise ValueError(f'curveDfs (len={len(curveDfs)}) and legend_names (len={len(legend_names)}) must be the same length')
@@ -673,14 +800,23 @@ def plotMultipleFBetaCurves(curveDfs, curve_name, legend_names, filename):
     plt.close(fig)
 
 def plotMultiplePRCurves(curveDfs, curve_name, legend_names, filename):
-    '''
-    Overlay a single named IoU curve (e.g. 'iou=0.50') from multiple plotPRCurve()
-    outputs onto one plot, for comparison.
-    :param curveDfs: list of DataFrames, each as returned by plotPRCurve()
-    :param curve_name: which curve to pull out of each DataFrame (e.g. 'iou=0.50')
-    :param legend_names: list of legend labels, same length as curveDfs, one per DataFrame
-    :param filename: output filename
-    :return: None
+    '''Overlay one named IoU P-R curve from several DataFrames onto one plot.
+
+    Pulls the ``curve_name`` row (e.g. ``'iou=0.50'``) from each DataFrame and
+    plots the precision-vs-recall curves together for comparison, then saves the
+    figure to ``filename``.
+
+    Args:
+        curveDfs (list[pd.DataFrame]): DataFrames, each as returned by
+            ``plotPRCurve()``.
+        curve_name (str): Which curve (index row) to pull from each DataFrame.
+        legend_names (list[str]): Legend label per DataFrame; same length as
+            ``curveDfs``.
+        filename (str | Path): Output image path.
+
+    Raises:
+        ValueError: If ``curveDfs`` and ``legend_names`` differ in length, or if
+            ``curve_name`` is absent from any DataFrame.
     '''
     if len(curveDfs) != len(legend_names):
         raise ValueError(f'curveDfs (len={len(curveDfs)}) and legend_names (len={len(legend_names)}) must be the same length')

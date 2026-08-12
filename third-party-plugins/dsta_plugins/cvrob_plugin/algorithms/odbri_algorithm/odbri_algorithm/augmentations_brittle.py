@@ -1,13 +1,5 @@
 import torch 
 import numpy as np
-# import albumentations as A
-# from albumentations.pytorch import ToTensorV2
-# import plotly.graph_objects as go
-# from augly.image import blur, brightness, random_noise, contrast, color_jitter, pixelization, sharpen
-# from augly.image import aug_np_wrapper
-# from .cvrob_util import evaluate
-# from plotly.subplots import make_subplots
-# from imagecorruptions import corrupt
 import matplotlib.pyplot as plt
 import json
 import base64
@@ -15,8 +7,7 @@ from PIL import Image
 import io
 from pathlib import Path
 from dataclasses import dataclass
-# from torchvision import transforms
-from .cvrob_util import delta_detections, delta_detections_labels
+from .cvrob_util import detected_well_before, lost_detections_after
 
 @dataclass
 class BrittlenessResultIndiv:
@@ -52,8 +43,6 @@ class BrittlenessResult:
         labels (list): List or tensor of true labels for all inputs.
     """
     results: list
-    # imgs_A: list
-    # imgs_B: list 
     probs_A: list
     probs_B: list 
     labels: list
@@ -81,6 +70,9 @@ def brittle_res_indiv_to_dict(bri):
     return d 
 
 def brittle_res_to_dict(br):
+    """
+    Convert a BrittlenessResult object to a dictionary.
+    """
     def safe_convert(val):
         if isinstance(val, torch.Tensor):
             return val.numpy().tolist()
@@ -144,7 +136,6 @@ def _pil_to_base64(
 
 # ==== BRITTLENESS HELPERS ====
 
-
 def _brittleness_label(norm: float) -> str:
     """Return a short plain-English severity label for a normalised brittleness value."""
     if norm < 0.25:
@@ -155,7 +146,6 @@ def _brittleness_label(norm: float) -> str:
         return "Moderately brittle"
     else:
         return "Highly brittle"
-
 
 def _detection_summary(scores_dict, score_threshold: float = 0.0) -> tuple:
     """
@@ -466,8 +456,7 @@ def visualize_in_html(
     Build a side-by-side carousel HTML of the most brittle images.
 
     max_size: longest edge in pixels each image is resized to before encoding.
-    jpeg_quality: JPEG quality 1-95. Lower = smaller file.
-                  220 images at 320px / q=85 ≈ 3-7 MB total.
+    jpeg_quality: JPEG quality 1-95. Lower = smaller file. 220 images at 320px / q=85 ≈ 3-7 MB total.
     """
     imageA_list = []
     imageB_list = []
@@ -883,16 +872,37 @@ def process_and_visualize_brittleness_method(
     score_thres,
     aug_name,
     ground_truths,
-    TOPK
+    TOPK,
+    progress_inst,
+    iou_thres=0.5,
+    min_recall=0.75,
+    min_drop=0.5,
 ):
+    """
+    Produce the visual artifacts for the most brittle images and returns the paths
+
+    Particuarly for creating the top K <-> for the results that had 'correct' predictions
+    For creating the carousel <-> for the results that had 'correct' predictions before,
+    then had 'incorrect' predictions later.
+
+    "Correct"/"wrong" are judged on matched detections (label + IoU >= iou_thres + score >= score_thres against GT), not raw box counts:
+      - results_correctb4: at least `min_recall` of GT objects were correctly
+        detected before corruption.
+      - results_correctb4_incorrectaft: of those, correct detections dropped
+        by at least `min_drop` after corruption.
+
+    Returns:
+        d (Dict[str]): dictionary of paths to the visual artifacts
+    """
     d = {}
     results_correctb4 = [
         r for r in b_result.results
-        if delta_detections_labels(r, 0.25)
+        if detected_well_before(r, iou_thres, score_thres, min_recall)
     ]
     results_correctb4_incorrectaft = [
         r for r in b_result.results
-        if delta_detections_labels(r, 0.25) and delta_detections(r, 0.5)
+        if detected_well_before(r, iou_thres, score_thres, min_recall)
+        and lost_detections_after(r, iou_thres, score_thres, min_drop)
     ]
 
     aug_dir =  output_folder / aug_name
@@ -936,6 +946,7 @@ def process_and_visualize_brittleness_method(
         gt_labels=ground_truths,
         score_threshold=score_thres
     )
+    progress_inst.update(1)
 
     plotly_path = visualize_topk_without_plotly(
         results_correctb4, 
@@ -967,6 +978,7 @@ def process_and_visualize_brittleness_method(
         gt_labels=ground_truths,
         score_threshold=score_thres
     )
+    progress_inst.update(1)
 
     html_path = visualize_in_html(
         results_correctb4_incorrectaft, 
@@ -998,6 +1010,7 @@ def process_and_visualize_brittleness_method(
         draw_detections=True,
         score_threshold=score_thres
     )
+    progress_inst.update(1)
 
     d['mpl'] = [mpl_path, mpl_frag_paths]
     d['mpl_det'] = [mpl_path_with_det, mpl_frag_paths_with_det]

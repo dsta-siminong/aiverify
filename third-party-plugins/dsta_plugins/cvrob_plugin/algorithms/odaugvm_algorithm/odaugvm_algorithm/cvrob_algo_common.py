@@ -531,6 +531,12 @@ class BasePlugin(IAlgorithm):
         )
 
     def _build_detection_gt(self, df):
+        """
+        Build the ground truth dictionary from the dataframe passed in as input
+
+        Args:
+            df (pd.DataFrame): dataframe of ground truth
+        """
         gt_dict = {}
 
         for _, row in df.iterrows():

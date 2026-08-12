@@ -23,7 +23,7 @@ from .augmentations_class import handle_url_algos
 from pathlib import Path
 import pandas as pd
 from dataclasses import dataclass
-from .cvrob_algo_common import BasePlugin
+from . import cvrob_algo_common
 
 @dataclass
 class _OdCtx:
@@ -61,7 +61,7 @@ class _OdCtx:
 #    requirements individually.
 # 3. Do not modify the class name, else the plugin cannot be read by the system.
 # =====================================================================================
-class Plugin(BasePlugin):
+class Plugin(cvrob_algo_common.BasePlugin):
     """
     # TODO: Update the plugin description below
     The Plugin(OD Augmentation v Metric Algorithm) class specifies methods in generating results for algorithm

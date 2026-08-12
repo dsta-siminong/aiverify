@@ -242,9 +242,8 @@ def augmentation_gradient(model, test_loader, device, aug_class, plot_graphs=Fal
             best_fit_gradient (float): best fit line gradient of graph of performance vs severity (of augmentation)
             accuracies (list): list of floats of performance metric
             fig (figure): outputs figure of plot_graphs library if not plot_graphs not False, else None
-            display_scored (dict): maps severity label ("None" plus each severity)
-                to ``(dataset, prediction_at_display_idx)`` from the scored pass;
-                empty when ``display_idx`` is None.
+            display_scored (dict): maps severity label ("None" plus each severity) to ``(dataset, prediction_at_display_idx)`` from the scored pass; empty when ``display_idx`` is None.
+            
     """
 
     print(f"[mem at the start of augmentation_gradient stuff] {mem_mb():.1f} MB")

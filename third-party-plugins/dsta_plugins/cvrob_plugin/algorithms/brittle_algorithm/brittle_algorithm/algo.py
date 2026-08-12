@@ -15,22 +15,15 @@ from aiverify_test_engine.plugins.metadata.plugin_metadata import PluginMetadata
 from aiverify_test_engine.utils.json_utils import load_schema_file, validate_json
 from aiverify_test_engine.utils.simple_progress import SimpleProgress
 
-# from . import augmentations
 import numpy as np
-from PIL import Image
-import inspect
-import torchvision.transforms as transforms
 import torch
-from torch.utils.data import DataLoader, TensorDataset
 from .cvrob_util import *
-from .augmentations_class import make_augmentation_dict, custom_parameter_change, handle_url_algos
-from .cvrob_algo_common import BasePlugin
+from .augmentations_class import handle_url_algos
+from . import cvrob_algo_common
 from .augmentations_brittle import *
 import pandas as pd
 import json
-from pprint import pprint
 from dataclasses import dataclass
-
 
 @dataclass
 class _BrittleCtx:
@@ -63,7 +56,6 @@ class _BrittleCtx:
     loader_A: object
     loader_B: object
 
-
 @dataclass
 class _BrittleScored:
     """
@@ -82,7 +74,6 @@ class _BrittleScored:
     probs_B: object
     labels: object
 
-
 # =====================================================================================
 # NOTE:
 # 1. Check that you have installed the aiverify_test_engine latest package.
@@ -92,7 +83,7 @@ class _BrittleScored:
 #    requirements individually.
 # 3. Do not modify the class name, else the plugin cannot be read by the system.
 # =====================================================================================
-class Plugin(BasePlugin):
+class Plugin(cvrob_algo_common.BasePlugin):
     """
     # TODO: Update the plugin description below
     The Plugin(Brittle Algorithm) class specifies methods in generating results for algorithm

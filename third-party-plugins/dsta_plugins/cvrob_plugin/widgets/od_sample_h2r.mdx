@@ -36,11 +36,13 @@ import InfoBox from "./InfoBox";
     </li>
     <li>
       <b>With Predictions</b> — the same image annotated with bounding boxes.
-      The border colour reflects overall detection quality:
-      a <span style={{ color: "green", fontWeight: "bold" }}>green</span> border
-      means the number of predicted boxes matches the number of ground truth boxes,
-      while a <span style={{ color: "red", fontWeight: "bold" }}>red</span> border
-      means there is a mismatch (the model over- or under-detected objects).
+      The border colour reflects overall detection quality: a{" "}
+      <span style={{ color: "green", fontWeight: "bold" }}>green</span> border
+      means the model correctly detected most of the ground truth objects
+      (each one matched by class label, box overlap, and confidence), while
+      a <span style={{ color: "red", fontWeight: "bold" }}>red</span> border
+      means it missed too many of them — even if the total number of
+      predicted boxes happens to look right.
     </li>
   </ul>
 </InfoBox>
@@ -68,10 +70,17 @@ import InfoBox from "./InfoBox";
     </li>
     <li>
       <b>Predictions</b> — the total number of boxes predicted by the model,
-      also broken down by class label. The box count is shown in{" "}
-      <span style={{ color: "green", fontWeight: "bold" }}>green</span> when it
-      matches the ground truth count, and{" "}
-      <span style={{ color: "red", fontWeight: "bold" }}>red</span> when it does not.
+      broken down by class label. A separate <b>Correct</b> count shows how
+      many ground truth objects were actually matched by a prediction with
+      the right class, sufficient box overlap (IoU), and sufficient
+      confidence — this is what's shown in{" "}
+      <span style={{ color: "green", fontWeight: "bold" }}>green</span> when
+      most ground truth objects were correctly detected, and{" "}
+      <span style={{ color: "red", fontWeight: "bold" }}>red</span> when
+      they weren't. Note that the raw box count and the Correct count can
+      diverge: a model can predict the "right" number of boxes while getting
+      most of them wrong, or predict extra boxes while still finding every
+      ground truth object.
     </li>
     <li>
       <b>Confidence</b> — the minimum, average, and maximum confidence scores

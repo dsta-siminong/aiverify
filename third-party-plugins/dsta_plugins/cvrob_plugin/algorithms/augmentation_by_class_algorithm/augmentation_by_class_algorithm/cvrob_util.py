@@ -1,15 +1,12 @@
 import requests
-# from PIL import Image
-# from io import BytesIO
 import io
 import torch 
 import numpy as np
-# import matplotlib.pyplot as plt
-# import plotly.graph_objects as go
-# from tqdm import tqdm
 import torch.nn as nn
+
 import time
 import resource
+
 def mem_mb():
     """
     Report the peak resident memory of this process.
@@ -211,8 +208,7 @@ def triplets(s):
         tokens from the input string.
 
     Raises:
-        AssertionError: If the number of tokens in the input is not a multiple
-        of three.
+        AssertionError: If the number of tokens in the input is not a multiple of three.
     """
     items = s.split()
     assert len(items) % 3 == 0, "Input length must be a multiple of 3"

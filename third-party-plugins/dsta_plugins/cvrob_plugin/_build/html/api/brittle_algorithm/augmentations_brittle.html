@@ -1,0 +1,705 @@
+<!doctype html>
+<html class="no-js" lang="en" data-content_root="../../">
+  <head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="index" title="Index" href="../../genindex.html"><link rel="search" title="Search" href="../../search.html"><link rel="next" title="Odaugbc Algorithm" href="../odaugbc_algorithm.html"><link rel="prev" title="brittle_algorithm.cvrob_util" href="cvrob_util.html">
+
+    <!-- Generated with Sphinx 9.0.4 and Furo 2025.12.19 -->
+        <title>brittle_algorithm.augmentations_brittle - CV Robustness Plugin for AIVerify documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=d111a655" />
+    <link rel="stylesheet" type="text/css" href="../../_static/styles/furo.css?v=7bdb33bb" />
+    <link rel="stylesheet" type="text/css" href="../../_static/styles/furo-extensions.css?v=8dab3a3b" />
+    
+    
+
+
+<style>
+  body {
+    --color-code-background: #f2f2f2;
+  --color-code-foreground: #1e1e1e;
+  
+  }
+  @media not print {
+    body[data-theme="dark"] {
+      --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not([data-theme="light"]) {
+        --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+      }
+    }
+  }
+</style></head>
+  <body>
+    
+    <script>
+      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
+    </script>
+    
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
+      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+  <symbol id="svg-sun" viewBox="0 0 24 24">
+    <title>Light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon" viewBox="0 0 24 24">
+    <title>Dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+    </svg>
+  </symbol>
+  <symbol id="svg-sun-with-moon" viewBox="0 0 24 24">
+    <title>Auto light/dark, in light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path style="opacity: 50%" d="M 5.411 14.504 C 5.471 14.504 5.532 14.504 5.591 14.504 C 3.639 16.319 4.383 19.569 6.931 20.352 C 7.693 20.586 8.512 20.551 9.25 20.252 C 8.023 23.207 4.056 23.725 2.11 21.184 C 0.166 18.642 1.702 14.949 4.874 14.536 C 5.051 14.512 5.231 14.5 5.411 14.5 L 5.411 14.504 Z"/>
+      <line x1="14.5" y1="3.25" x2="14.5" y2="1.25"/>
+      <line x1="14.5" y1="15.85" x2="14.5" y2="17.85"/>
+      <line x1="10.044" y1="5.094" x2="8.63" y2="3.68"/>
+      <line x1="19" y1="14.05" x2="20.414" y2="15.464"/>
+      <line x1="8.2" y1="9.55" x2="6.2" y2="9.55"/>
+      <line x1="20.8" y1="9.55" x2="22.8" y2="9.55"/>
+      <line x1="10.044" y1="14.006" x2="8.63" y2="15.42"/>
+      <line x1="19" y1="5.05" x2="20.414" y2="3.636"/>
+      <circle cx="14.5" cy="9.55" r="3.6"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon-with-sun" viewBox="0 0 24 24">
+    <title>Auto light/dark, in dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path d="M 8.282 7.007 C 8.385 7.007 8.494 7.007 8.595 7.007 C 5.18 10.184 6.481 15.869 10.942 17.24 C 12.275 17.648 13.706 17.589 15 17.066 C 12.851 22.236 5.91 23.143 2.505 18.696 C -0.897 14.249 1.791 7.786 7.342 7.063 C 7.652 7.021 7.965 7 8.282 7 L 8.282 7.007 Z"/>
+      <line style="opacity: 50%" x1="18" y1="3.705" x2="18" y2="2.5"/>
+      <line style="opacity: 50%" x1="18" y1="11.295" x2="18" y2="12.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="4.816" x2="14.464" y2="3.964"/>
+      <line style="opacity: 50%" x1="20.711" y1="10.212" x2="21.563" y2="11.063"/>
+      <line style="opacity: 50%" x1="14.205" y1="7.5" x2="13.001" y2="7.5"/>
+      <line style="opacity: 50%" x1="21.795" y1="7.5" x2="23" y2="7.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="10.184" x2="14.464" y2="11.036"/>
+      <line style="opacity: 50%" x1="20.711" y1="4.789" x2="21.563" y2="3.937"/>
+      <circle style="opacity: 50%" cx="18" cy="7.5" r="2.169"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-pencil" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-pencil-code">
+      <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
+      <path d="M13.5 6.5l4 4" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+  <symbol id="svg-eye" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-eye-code">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+      <path
+        d="M11.11 17.958c-3.209 -.307 -5.91 -2.293 -8.11 -5.958c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6c-.21 .352 -.427 .688 -.647 1.008" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+</svg>
+
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation" aria-label="Toggle site navigation sidebar">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc" aria-label="Toggle table of contents sidebar">
+<label class="overlay sidebar-overlay" for="__navigation"></label>
+<label class="overlay toc-overlay" for="__toc"></label>
+
+<a class="skip-to-content muted-link" href="#furo-main-content">Skip to content</a>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <span class="icon"><svg><use href="#svg-menu"></use></svg></span>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="../../index.html"><div class="brand">CV Robustness Plugin for AIVerify  documentation</div></a>
+    </div>
+    <div class="header-right">
+      <div class="theme-toggle-container theme-toggle-header">
+        <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+          <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+          <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+        </button>
+      </div>
+      <label class="toc-overlay-icon toc-header-icon" for="__toc">
+        <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="../../index.html">
+  
+  <span class="sidebar-brand-text">CV Robustness Plugin for AIVerify  documentation</span>
+  
+</a><form class="sidebar-search-container" method="get" action="../../search.html" role="search">
+  <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form>
+<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
+  <p class="caption" role="heading"><span class="caption-text">Algorithm API:</span></p>
+<ul class="current">
+<li class="toctree-l1 has-children"><a class="reference internal" href="../augmentation_algorithm.html">Augmentation Algorithm</a><input aria-label="Toggle navigation of Augmentation Algorithm" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../augmentation_algorithm/algo.html">augmentation_algorithm.algo</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../augmentation_algorithm/augmentations_class.html">augmentation_algorithm.augmentations_class</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../augmentation_algorithm/cvrob_algo_common.html">augmentation_algorithm.cvrob_algo_common</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../augmentation_algorithm/cvrob_util.html">augmentation_algorithm.cvrob_util</a></li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../augmentation_by_class_algorithm.html">Augmentation By Class Algorithm</a><input aria-label="Toggle navigation of Augmentation By Class Algorithm" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../augmentation_by_class_algorithm/algo.html">augmentation_by_class_algorithm.algo</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../augmentation_by_class_algorithm/augmentations_class.html">augmentation_by_class_algorithm.augmentations_class</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../augmentation_by_class_algorithm/cvrob_algo_common.html">augmentation_by_class_algorithm.cvrob_algo_common</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../augmentation_by_class_algorithm/cvrob_util.html">augmentation_by_class_algorithm.cvrob_util</a></li>
+</ul>
+</li>
+<li class="toctree-l1 current has-children"><a class="reference internal" href="../brittle_algorithm.html">Brittle Algorithm</a><input aria-label="Toggle navigation of Brittle Algorithm" checked="" class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" role="switch" type="checkbox"/><label for="toctree-checkbox-3"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="algo.html">brittle_algorithm.algo</a></li>
+<li class="toctree-l2"><a class="reference internal" href="augmentations_class.html">brittle_algorithm.augmentations_class</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cvrob_algo_common.html">brittle_algorithm.cvrob_algo_common</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cvrob_util.html">brittle_algorithm.cvrob_util</a></li>
+<li class="toctree-l2 current current-page"><a class="current reference internal" href="#">brittle_algorithm.augmentations_brittle</a></li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../odaugbc_algorithm.html">Odaugbc Algorithm</a><input aria-label="Toggle navigation of Odaugbc Algorithm" class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" role="switch" type="checkbox"/><label for="toctree-checkbox-4"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../odaugbc_algorithm/algo.html">odaugbc_algorithm.algo</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../odaugbc_algorithm/augmentations_class.html">odaugbc_algorithm.augmentations_class</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../odaugbc_algorithm/cvrob_algo_common.html">odaugbc_algorithm.cvrob_algo_common</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../odaugbc_algorithm/cvrob_util.html">odaugbc_algorithm.cvrob_util</a></li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../odaugvm_algorithm.html">Odaugvm Algorithm</a><input aria-label="Toggle navigation of Odaugvm Algorithm" class="toctree-checkbox" id="toctree-checkbox-5" name="toctree-checkbox-5" role="switch" type="checkbox"/><label for="toctree-checkbox-5"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../odaugvm_algorithm/algo.html">odaugvm_algorithm.algo</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../odaugvm_algorithm/augmentations_class.html">odaugvm_algorithm.augmentations_class</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../odaugvm_algorithm/cvrob_algo_common.html">odaugvm_algorithm.cvrob_algo_common</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../odaugvm_algorithm/cvrob_util.html">odaugvm_algorithm.cvrob_util</a></li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../odbri_algorithm.html">Odbri Algorithm</a><input aria-label="Toggle navigation of Odbri Algorithm" class="toctree-checkbox" id="toctree-checkbox-6" name="toctree-checkbox-6" role="switch" type="checkbox"/><label for="toctree-checkbox-6"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../odbri_algorithm/algo.html">odbri_algorithm.algo</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../odbri_algorithm/augmentations_class.html">odbri_algorithm.augmentations_class</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../odbri_algorithm/cvrob_algo_common.html">odbri_algorithm.cvrob_algo_common</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../odbri_algorithm/cvrob_util.html">odbri_algorithm.cvrob_util</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../odbri_algorithm/augmentations_brittle.html">odbri_algorithm.augmentations_brittle</a></li>
+</ul>
+</li>
+</ul>
+
+</div>
+</div>
+
+      </div>
+      
+    </div>
+  </aside>
+  <div class="main">
+    <div class="content">
+      <div class="article-container">
+        <a href="#" class="back-to-top muted-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+          </svg>
+          <span>Back to top</span>
+        </a>
+        <div class="content-icon-container">
+          <div class="view-this-page">
+  <a class="muted-link" href="../../_sources/api/brittle_algorithm/augmentations_brittle.rst.txt" title="View this page">
+    <svg><use href="#svg-eye"></use></svg>
+    <span class="visually-hidden">View this page</span>
+  </a>
+</div>
+<div class="theme-toggle-container theme-toggle-content">
+            <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+              <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+              <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+            </button>
+          </div>
+          <label class="toc-overlay-icon toc-content-icon" for="__toc">
+            <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+          </label>
+        </div>
+        <article role="main" id="furo-main-content">
+          <section id="module-brittle_algorithm.augmentations_brittle">
+<span id="brittle-algorithm-augmentations-brittle"></span><h1>brittle_algorithm.augmentations_brittle<a class="headerlink" href="#module-brittle_algorithm.augmentations_brittle" title="Link to this heading">¶</a></h1>
+<dl class="py class">
+<dt class="sig sig-object py" id="brittle_algorithm.augmentations_brittle.BrittleRowView">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">brittle_algorithm.augmentations_brittle.</span></span><span class="sig-name descname"><span class="pre">BrittleRowView</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">index</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">object</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">classA</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">object</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">classB</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">object</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">gt</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">object</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prob_A_predA</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prob_B_predA</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prob_B_predB</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">brittleness</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#brittle_algorithm.augmentations_brittle.BrittleRowView" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Pre-computed display fields for one brittleness row.</p>
+<p>Holds everything the three visualizers render per sample, so the shared
+per-row computation (class-name mapping, probability lookups) happens once
+in <code class="docutils literal notranslate"><span class="pre">build_row_views</span></code> rather than being copy-pasted into each backend.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Variables<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>index</strong> (<em>int</em>) – Sample index into the image/probability tensors.</p></li>
+<li><p><strong>name</strong> (<em>object</em>) – Display name for the image (file name, or the index if no paths).</p></li>
+<li><p><strong>classA</strong> (<em>object</em>) – Predicted class before corruption (mapped name or int).</p></li>
+<li><p><strong>classB</strong> (<em>object</em>) – Predicted class after corruption (mapped name or int).</p></li>
+<li><p><strong>gt</strong> (<em>object</em>) – Ground-truth class (mapped name or int).</p></li>
+<li><p><strong>prob_A_predA</strong> (<em>float</em>) – P(classA) before corruption.</p></li>
+<li><p><strong>prob_B_predA</strong> (<em>float</em>) – P(classA) after corruption.</p></li>
+<li><p><strong>prob_B_predB</strong> (<em>float</em>) – P(classB) after corruption.</p></li>
+<li><p><strong>brittleness</strong> (<em>float</em>) – Confidence drop on the true class.</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="brittle_algorithm.augmentations_brittle.BrittleRowView.brittleness">
+<span class="sig-name descname"><span class="pre">brittleness</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></span><a class="headerlink" href="#brittle_algorithm.augmentations_brittle.BrittleRowView.brittleness" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="brittle_algorithm.augmentations_brittle.BrittleRowView.classA">
+<span class="sig-name descname"><span class="pre">classA</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">object</span></span><a class="headerlink" href="#brittle_algorithm.augmentations_brittle.BrittleRowView.classA" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="brittle_algorithm.augmentations_brittle.BrittleRowView.classB">
+<span class="sig-name descname"><span class="pre">classB</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">object</span></span><a class="headerlink" href="#brittle_algorithm.augmentations_brittle.BrittleRowView.classB" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="brittle_algorithm.augmentations_brittle.BrittleRowView.gt">
+<span class="sig-name descname"><span class="pre">gt</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">object</span></span><a class="headerlink" href="#brittle_algorithm.augmentations_brittle.BrittleRowView.gt" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="brittle_algorithm.augmentations_brittle.BrittleRowView.index">
+<span class="sig-name descname"><span class="pre">index</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></span><a class="headerlink" href="#brittle_algorithm.augmentations_brittle.BrittleRowView.index" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="brittle_algorithm.augmentations_brittle.BrittleRowView.name">
+<span class="sig-name descname"><span class="pre">name</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">object</span></span><a class="headerlink" href="#brittle_algorithm.augmentations_brittle.BrittleRowView.name" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="brittle_algorithm.augmentations_brittle.BrittleRowView.prob_A_predA">
+<span class="sig-name descname"><span class="pre">prob_A_predA</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></span><a class="headerlink" href="#brittle_algorithm.augmentations_brittle.BrittleRowView.prob_A_predA" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="brittle_algorithm.augmentations_brittle.BrittleRowView.prob_B_predA">
+<span class="sig-name descname"><span class="pre">prob_B_predA</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></span><a class="headerlink" href="#brittle_algorithm.augmentations_brittle.BrittleRowView.prob_B_predA" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="brittle_algorithm.augmentations_brittle.BrittleRowView.prob_B_predB">
+<span class="sig-name descname"><span class="pre">prob_B_predB</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></span><a class="headerlink" href="#brittle_algorithm.augmentations_brittle.BrittleRowView.prob_B_predB" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="brittle_algorithm.augmentations_brittle.BrittlenessResult">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">brittle_algorithm.augmentations_brittle.</span></span><span class="sig-name descname"><span class="pre">BrittlenessResult</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">results</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">probs_A</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">probs_B</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">labels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#brittle_algorithm.augmentations_brittle.BrittlenessResult" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Represents a collection of brittleness evaluation results for multiple images.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Variables<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>results</strong> (<em>list</em>) – List of BrittlenessResultIndiv objects for each input.</p></li>
+<li><p><strong>imgsA</strong> (<em>list</em>) – List or tensor of the initial set of input images (before).</p></li>
+<li><p><strong>imgsB</strong> (<em>list</em>) – List or tensor of the resultant (of the corruption) set of input images (after).</p></li>
+<li><p><strong>probs_A</strong> (<em>list</em>) – List or tensor of predicted probabilities for imgsA.</p></li>
+<li><p><strong>probs_B</strong> (<em>list</em>) – List or tensor of predicted probabilities for imgsB.</p></li>
+<li><p><strong>labels</strong> (<em>list</em>) – List or tensor of true labels for all inputs.</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="brittle_algorithm.augmentations_brittle.BrittlenessResult.labels">
+<span class="sig-name descname"><span class="pre">labels</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span></span><a class="headerlink" href="#brittle_algorithm.augmentations_brittle.BrittlenessResult.labels" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="brittle_algorithm.augmentations_brittle.BrittlenessResult.probs_A">
+<span class="sig-name descname"><span class="pre">probs_A</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span></span><a class="headerlink" href="#brittle_algorithm.augmentations_brittle.BrittlenessResult.probs_A" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="brittle_algorithm.augmentations_brittle.BrittlenessResult.probs_B">
+<span class="sig-name descname"><span class="pre">probs_B</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span></span><a class="headerlink" href="#brittle_algorithm.augmentations_brittle.BrittlenessResult.probs_B" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="brittle_algorithm.augmentations_brittle.BrittlenessResult.results">
+<span class="sig-name descname"><span class="pre">results</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span></span><a class="headerlink" href="#brittle_algorithm.augmentations_brittle.BrittlenessResult.results" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="brittle_algorithm.augmentations_brittle.BrittlenessResultIndiv">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">brittle_algorithm.augmentations_brittle.</span></span><span class="sig-name descname"><span class="pre">BrittlenessResultIndiv</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">index</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">label</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">predA</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">predB</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pA</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pB</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">brittleness</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#brittle_algorithm.augmentations_brittle.BrittlenessResultIndiv" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Represents the brittleness evaluation result for a single image.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Variables<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>index</strong> (<em>int</em>) – Index of the input sample.</p></li>
+<li><p><strong>label</strong> (<em>int</em>) – True class label of the input.</p></li>
+<li><p><strong>predA</strong> (<em>int</em>) – Predicted class for the initial input (before).</p></li>
+<li><p><strong>predB</strong> (<em>int</em>) – Predicted class for the resultant (of the corruption) input (after).</p></li>
+<li><p><strong>pA</strong> (<em>float</em>) – Probability of the predicted class for the first input.</p></li>
+<li><p><strong>pB</strong> (<em>float</em>) – Probability of the predicted class for the second input.</p></li>
+<li><p><strong>brittleness</strong> (<em>float</em>) – Measure of change or instability between predictions.</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="brittle_algorithm.augmentations_brittle.BrittlenessResultIndiv.brittleness">
+<span class="sig-name descname"><span class="pre">brittleness</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></span><a class="headerlink" href="#brittle_algorithm.augmentations_brittle.BrittlenessResultIndiv.brittleness" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="brittle_algorithm.augmentations_brittle.BrittlenessResultIndiv.index">
+<span class="sig-name descname"><span class="pre">index</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></span><a class="headerlink" href="#brittle_algorithm.augmentations_brittle.BrittlenessResultIndiv.index" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="brittle_algorithm.augmentations_brittle.BrittlenessResultIndiv.label">
+<span class="sig-name descname"><span class="pre">label</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></span><a class="headerlink" href="#brittle_algorithm.augmentations_brittle.BrittlenessResultIndiv.label" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="brittle_algorithm.augmentations_brittle.BrittlenessResultIndiv.pA">
+<span class="sig-name descname"><span class="pre">pA</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></span><a class="headerlink" href="#brittle_algorithm.augmentations_brittle.BrittlenessResultIndiv.pA" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="brittle_algorithm.augmentations_brittle.BrittlenessResultIndiv.pB">
+<span class="sig-name descname"><span class="pre">pB</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></span><a class="headerlink" href="#brittle_algorithm.augmentations_brittle.BrittlenessResultIndiv.pB" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="brittle_algorithm.augmentations_brittle.BrittlenessResultIndiv.predA">
+<span class="sig-name descname"><span class="pre">predA</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></span><a class="headerlink" href="#brittle_algorithm.augmentations_brittle.BrittlenessResultIndiv.predA" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="brittle_algorithm.augmentations_brittle.BrittlenessResultIndiv.predB">
+<span class="sig-name descname"><span class="pre">predB</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></span><a class="headerlink" href="#brittle_algorithm.augmentations_brittle.BrittlenessResultIndiv.predB" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="brittle_algorithm.augmentations_brittle.brittle_res_indiv_to_dict">
+<span class="sig-prename descclassname"><span class="pre">brittle_algorithm.augmentations_brittle.</span></span><span class="sig-name descname"><span class="pre">brittle_res_indiv_to_dict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">bri</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#brittle_algorithm.augmentations_brittle.brittle_res_indiv_to_dict" title="Link to this definition">¶</a></dt>
+<dd><p>Convert a single BrittlenessResultIndiv object to a dictionary.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>bri</strong> (<a class="reference internal" href="#brittle_algorithm.augmentations_brittle.BrittlenessResultIndiv" title="brittle_algorithm.augmentations_brittle.BrittlenessResultIndiv"><em>BrittlenessResultIndiv</em></a>) – The brittleness result to convert.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><dl class="simple">
+<dt>Dictionary containing keys ‘index’, ‘label’, ‘predA’, ‘predB’,</dt><dd><p>’pA’, ‘pB’, and ‘brittleness’ with corresponding values.</p>
+</dd>
+</dl>
+</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>dict</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="brittle_algorithm.augmentations_brittle.brittle_res_to_dict">
+<span class="sig-prename descclassname"><span class="pre">brittle_algorithm.augmentations_brittle.</span></span><span class="sig-name descname"><span class="pre">brittle_res_to_dict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">br</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#brittle_algorithm.augmentations_brittle.brittle_res_to_dict" title="Link to this definition">¶</a></dt>
+<dd><p>Convert a BrittlenessResult object to a dictionary with JSON-serializable data.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>br</strong> (<a class="reference internal" href="#brittle_algorithm.augmentations_brittle.BrittlenessResult" title="brittle_algorithm.augmentations_brittle.BrittlenessResult"><em>BrittlenessResult</em></a>) – The brittleness results collection to convert.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><dl class="simple">
+<dt>Dictionary containing:</dt><dd><ul class="simple">
+<li><p>’results’: List of dictionaries for each individual result.</p></li>
+<li><p>’probs_A’: List representation of probs_A tensor.</p></li>
+<li><p>’probs_B’: List representation of probs_B tensor.</p></li>
+<li><p>’labels’: List representation of labels tensor.</p></li>
+</ul>
+</dd>
+</dl>
+</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>dict</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="brittle_algorithm.augmentations_brittle.build_row_views">
+<span class="sig-prename descclassname"><span class="pre">brittle_algorithm.augmentations_brittle.</span></span><span class="sig-name descname"><span class="pre">build_row_views</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">results</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">b_result</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">class_names</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">image_paths</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#brittle_algorithm.augmentations_brittle.build_row_views" title="Link to this definition">¶</a></dt>
+<dd><p>Build the shared per-row view model for a list of brittleness results.</p>
+<p>Resolves the display name, maps class indices to names (when provided), and
+looks up the before/after probabilities once per row.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>results</strong> (<em>list</em>) – <code class="docutils literal notranslate"><span class="pre">BrittlenessResultIndiv</span></code> items to render (already
+truncated to top-K by the caller if desired).</p></li>
+<li><p><strong>b_result</strong> (<a class="reference internal" href="#brittle_algorithm.augmentations_brittle.BrittlenessResult" title="brittle_algorithm.augmentations_brittle.BrittlenessResult"><em>BrittlenessResult</em></a>) – Provides <code class="docutils literal notranslate"><span class="pre">probs_A</span></code>/<code class="docutils literal notranslate"><span class="pre">probs_B</span></code>/<code class="docutils literal notranslate"><span class="pre">labels</span></code>.</p></li>
+<li><p><strong>class_names</strong> (<em>dict</em><em>, </em><em>optional</em>) – Maps class index to display name.</p></li>
+<li><p><strong>image_paths</strong> (<em>list</em><em>, </em><em>optional</em>) – Source paths; the file name is shown when
+given, otherwise the raw index.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>One view per input result, in the same order.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>List[<a class="reference internal" href="#brittle_algorithm.augmentations_brittle.BrittleRowView" title="brittle_algorithm.augmentations_brittle.BrittleRowView">BrittleRowView</a>]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="brittle_algorithm.augmentations_brittle.extract_normalize">
+<span class="sig-prename descclassname"><span class="pre">brittle_algorithm.augmentations_brittle.</span></span><span class="sig-name descname"><span class="pre">extract_normalize</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">transform</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#brittle_algorithm.augmentations_brittle.extract_normalize" title="Link to this definition">¶</a></dt>
+<dd><p>Extract the mean and standard deviation from a torchvision Normalize transform.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>transform</strong> (<em>torchvision.transforms</em><em> or </em><em>None</em>) – Transform object to inspect.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Returns (mean, std) if a Normalize
+transform is present, else None.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Tuple[List[float], List[float]] or None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="brittle_algorithm.augmentations_brittle.tensor_to_base64">
+<span class="sig-prename descclassname"><span class="pre">brittle_algorithm.augmentations_brittle.</span></span><span class="sig-name descname"><span class="pre">tensor_to_base64</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">img_tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">transform</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">jpeg_quality</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#brittle_algorithm.augmentations_brittle.tensor_to_base64" title="Link to this definition">¶</a></dt>
+<dd><p>Convert a C,H,W image tensor to a base64-encoded image string.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>img_tensor</strong> (<em>torch.Tensor</em>) – Image tensor with shape (C, H, W), values in [0,1].</p></li>
+<li><p><strong>transform</strong> – Optional preprocessing transform, used to unnormalize if needed.</p></li>
+<li><p><strong>max_size</strong> (<em>int</em><em>, </em><em>optional</em>) – Downscale so the longest edge is at most this many pixels.</p></li>
+<li><p><strong>jpeg_quality</strong> (<em>int</em><em>, </em><em>optional</em>) – If set (1-95), encode as JPEG. Otherwise PNG.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Base64-encoded image. Caller prepends the data URI prefix.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="brittle_algorithm.augmentations_brittle.unnormalize">
+<span class="sig-prename descclassname"><span class="pre">brittle_algorithm.augmentations_brittle.</span></span><span class="sig-name descname"><span class="pre">unnormalize</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">img_tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">transform</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#brittle_algorithm.augmentations_brittle.unnormalize" title="Link to this definition">¶</a></dt>
+<dd><p>Convert a possibly normalized image tensor to a displayable HWC NumPy array.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>img_tensor</strong> (<em>torch.Tensor</em>) – Image tensor of shape (C, H, W), possibly normalized.</p></li>
+<li><p><strong>transform</strong> (<em>torchvision.transforms</em><em>, </em><em>optional</em>) – The transform used during dataset
+preprocessing to extract mean and std for unnormalization.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Image array of shape (H, W, C) with values scaled to [0, 1]
+suitable for visualization.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>numpy.ndarray</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="brittle_algorithm.augmentations_brittle.visualize_in_html">
+<span class="sig-prename descclassname"><span class="pre">brittle_algorithm.augmentations_brittle.</span></span><span class="sig-name descname"><span class="pre">visualize_in_html</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">results_sorted</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">b_result</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">imgs_A</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">imgs_B</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">class_names</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">transform</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">directory</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">PosixPath('.')</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">image_paths</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#brittle_algorithm.augmentations_brittle.visualize_in_html" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="brittle_algorithm.augmentations_brittle.visualize_topk_matplotlib">
+<span class="sig-prename descclassname"><span class="pre">brittle_algorithm.augmentations_brittle.</span></span><span class="sig-name descname"><span class="pre">visualize_topk_matplotlib</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">results_sorted</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">b_result</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">imgs_A</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">imgs_B</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">K</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">class_names</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">transform</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">directory</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">PosixPath('.')</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">image_paths</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#brittle_algorithm.augmentations_brittle.visualize_topk_matplotlib" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="brittle_algorithm.augmentations_brittle.visualize_topk_without_plotly">
+<span class="sig-prename descclassname"><span class="pre">brittle_algorithm.augmentations_brittle.</span></span><span class="sig-name descname"><span class="pre">visualize_topk_without_plotly</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">results_sorted</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">b_result</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">imgs_A</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">imgs_B</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">K</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">class_names</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">transform</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">directory</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">PosixPath('.')</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">image_paths</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#brittle_algorithm.augmentations_brittle.visualize_topk_without_plotly" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</section>
+
+        </article>
+      </div>
+      <footer>
+        
+        <div class="related-pages">
+          <a class="next-page" href="../odaugbc_algorithm.html">
+              <div class="page-info">
+                <div class="context">
+                  <span>Next</span>
+                </div>
+                <div class="title">Odaugbc Algorithm</div>
+              </div>
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+            </a>
+          <a class="prev-page" href="cvrob_util.html">
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+              <div class="page-info">
+                <div class="context">
+                  <span>Previous</span>
+                </div>
+                
+                <div class="title">brittle_algorithm.cvrob_util</div>
+                
+              </div>
+            </a>
+        </div>
+        <div class="bottom-of-page">
+          <div class="left-details">
+            <div class="copyright">
+                Copyright &#169; 2026, Gabriel Boey
+            </div>
+            Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
+            
+            <a href="https://github.com/pradyunsg/furo">Furo</a>
+            
+          </div>
+          <div class="right-details">
+            
+          </div>
+        </div>
+        
+      </footer>
+    </div>
+    <aside class="toc-drawer">
+      
+      
+      <div class="toc-sticky toc-scroll">
+        <div class="toc-title-container">
+          <span class="toc-title">
+            On this page
+          </span>
+        </div>
+        <div class="toc-tree-container">
+          <div class="toc-tree">
+            <ul>
+<li><a class="reference internal" href="#">brittle_algorithm.augmentations_brittle</a><ul>
+<li><a class="reference internal" href="#brittle_algorithm.augmentations_brittle.BrittleRowView"><code class="docutils literal notranslate"><span class="pre">BrittleRowView</span></code></a><ul>
+<li><a class="reference internal" href="#brittle_algorithm.augmentations_brittle.BrittleRowView.brittleness"><code class="docutils literal notranslate"><span class="pre">BrittleRowView.brittleness</span></code></a></li>
+<li><a class="reference internal" href="#brittle_algorithm.augmentations_brittle.BrittleRowView.classA"><code class="docutils literal notranslate"><span class="pre">BrittleRowView.classA</span></code></a></li>
+<li><a class="reference internal" href="#brittle_algorithm.augmentations_brittle.BrittleRowView.classB"><code class="docutils literal notranslate"><span class="pre">BrittleRowView.classB</span></code></a></li>
+<li><a class="reference internal" href="#brittle_algorithm.augmentations_brittle.BrittleRowView.gt"><code class="docutils literal notranslate"><span class="pre">BrittleRowView.gt</span></code></a></li>
+<li><a class="reference internal" href="#brittle_algorithm.augmentations_brittle.BrittleRowView.index"><code class="docutils literal notranslate"><span class="pre">BrittleRowView.index</span></code></a></li>
+<li><a class="reference internal" href="#brittle_algorithm.augmentations_brittle.BrittleRowView.name"><code class="docutils literal notranslate"><span class="pre">BrittleRowView.name</span></code></a></li>
+<li><a class="reference internal" href="#brittle_algorithm.augmentations_brittle.BrittleRowView.prob_A_predA"><code class="docutils literal notranslate"><span class="pre">BrittleRowView.prob_A_predA</span></code></a></li>
+<li><a class="reference internal" href="#brittle_algorithm.augmentations_brittle.BrittleRowView.prob_B_predA"><code class="docutils literal notranslate"><span class="pre">BrittleRowView.prob_B_predA</span></code></a></li>
+<li><a class="reference internal" href="#brittle_algorithm.augmentations_brittle.BrittleRowView.prob_B_predB"><code class="docutils literal notranslate"><span class="pre">BrittleRowView.prob_B_predB</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#brittle_algorithm.augmentations_brittle.BrittlenessResult"><code class="docutils literal notranslate"><span class="pre">BrittlenessResult</span></code></a><ul>
+<li><a class="reference internal" href="#brittle_algorithm.augmentations_brittle.BrittlenessResult.labels"><code class="docutils literal notranslate"><span class="pre">BrittlenessResult.labels</span></code></a></li>
+<li><a class="reference internal" href="#brittle_algorithm.augmentations_brittle.BrittlenessResult.probs_A"><code class="docutils literal notranslate"><span class="pre">BrittlenessResult.probs_A</span></code></a></li>
+<li><a class="reference internal" href="#brittle_algorithm.augmentations_brittle.BrittlenessResult.probs_B"><code class="docutils literal notranslate"><span class="pre">BrittlenessResult.probs_B</span></code></a></li>
+<li><a class="reference internal" href="#brittle_algorithm.augmentations_brittle.BrittlenessResult.results"><code class="docutils literal notranslate"><span class="pre">BrittlenessResult.results</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#brittle_algorithm.augmentations_brittle.BrittlenessResultIndiv"><code class="docutils literal notranslate"><span class="pre">BrittlenessResultIndiv</span></code></a><ul>
+<li><a class="reference internal" href="#brittle_algorithm.augmentations_brittle.BrittlenessResultIndiv.brittleness"><code class="docutils literal notranslate"><span class="pre">BrittlenessResultIndiv.brittleness</span></code></a></li>
+<li><a class="reference internal" href="#brittle_algorithm.augmentations_brittle.BrittlenessResultIndiv.index"><code class="docutils literal notranslate"><span class="pre">BrittlenessResultIndiv.index</span></code></a></li>
+<li><a class="reference internal" href="#brittle_algorithm.augmentations_brittle.BrittlenessResultIndiv.label"><code class="docutils literal notranslate"><span class="pre">BrittlenessResultIndiv.label</span></code></a></li>
+<li><a class="reference internal" href="#brittle_algorithm.augmentations_brittle.BrittlenessResultIndiv.pA"><code class="docutils literal notranslate"><span class="pre">BrittlenessResultIndiv.pA</span></code></a></li>
+<li><a class="reference internal" href="#brittle_algorithm.augmentations_brittle.BrittlenessResultIndiv.pB"><code class="docutils literal notranslate"><span class="pre">BrittlenessResultIndiv.pB</span></code></a></li>
+<li><a class="reference internal" href="#brittle_algorithm.augmentations_brittle.BrittlenessResultIndiv.predA"><code class="docutils literal notranslate"><span class="pre">BrittlenessResultIndiv.predA</span></code></a></li>
+<li><a class="reference internal" href="#brittle_algorithm.augmentations_brittle.BrittlenessResultIndiv.predB"><code class="docutils literal notranslate"><span class="pre">BrittlenessResultIndiv.predB</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#brittle_algorithm.augmentations_brittle.brittle_res_indiv_to_dict"><code class="docutils literal notranslate"><span class="pre">brittle_res_indiv_to_dict()</span></code></a></li>
+<li><a class="reference internal" href="#brittle_algorithm.augmentations_brittle.brittle_res_to_dict"><code class="docutils literal notranslate"><span class="pre">brittle_res_to_dict()</span></code></a></li>
+<li><a class="reference internal" href="#brittle_algorithm.augmentations_brittle.build_row_views"><code class="docutils literal notranslate"><span class="pre">build_row_views()</span></code></a></li>
+<li><a class="reference internal" href="#brittle_algorithm.augmentations_brittle.extract_normalize"><code class="docutils literal notranslate"><span class="pre">extract_normalize()</span></code></a></li>
+<li><a class="reference internal" href="#brittle_algorithm.augmentations_brittle.tensor_to_base64"><code class="docutils literal notranslate"><span class="pre">tensor_to_base64()</span></code></a></li>
+<li><a class="reference internal" href="#brittle_algorithm.augmentations_brittle.unnormalize"><code class="docutils literal notranslate"><span class="pre">unnormalize()</span></code></a></li>
+<li><a class="reference internal" href="#brittle_algorithm.augmentations_brittle.visualize_in_html"><code class="docutils literal notranslate"><span class="pre">visualize_in_html()</span></code></a></li>
+<li><a class="reference internal" href="#brittle_algorithm.augmentations_brittle.visualize_topk_matplotlib"><code class="docutils literal notranslate"><span class="pre">visualize_topk_matplotlib()</span></code></a></li>
+<li><a class="reference internal" href="#brittle_algorithm.augmentations_brittle.visualize_topk_without_plotly"><code class="docutils literal notranslate"><span class="pre">visualize_topk_without_plotly()</span></code></a></li>
+</ul>
+</li>
+</ul>
+
+          </div>
+        </div>
+      </div>
+      
+      
+    </aside>
+  </div>
+</div><script src="../../_static/documentation_options.js?v=5929fcd5"></script>
+    <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../_static/scripts/furo.js?v=46bd48cc"></script>
+    </body>
+</html>
