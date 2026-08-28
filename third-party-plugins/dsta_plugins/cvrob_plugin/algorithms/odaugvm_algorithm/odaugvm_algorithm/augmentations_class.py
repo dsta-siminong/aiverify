@@ -14,6 +14,9 @@ import ast
 from nrtk.impls.perturb_image.optical.otf import CircularAperturePerturber, DefocusPerturber, DetectorPerturber, JitterPerturber, TurbulenceAperturePerturber
 # from nrtk.impls.perturb_image.photometric.enhance import SharpnessPerturber, BrightnessPerturber
 from nrtk.impls.perturb_image.environment import WaterDropletPerturber, HazePerturber
+import torch.multiprocessing
+torch.multiprocessing.set_sharing_strategy('file_system')
+
 
 GEOMETRIC = {"Rotate", "Shear", "Translate", "Perspective", "ScaleUp", "ScaleDown"}
 DETERMINISTIC = {"None", "BrightnessUp", "BrightnessDown", "GaussianBlur", "ScaleUp", "ScaleDown", "Compression"}
@@ -719,9 +722,10 @@ class Augmentation:
             dataset,
             batch_size=testloader.batch_size,
             shuffle=False,
-            num_workers=0,
+            num_workers=2,
             pin_memory=False,
             collate_fn=testloader.collate_fn,
+            persistent_workers=True
         )
 
     def corr_func_sample(self, image, target, severity_idx):

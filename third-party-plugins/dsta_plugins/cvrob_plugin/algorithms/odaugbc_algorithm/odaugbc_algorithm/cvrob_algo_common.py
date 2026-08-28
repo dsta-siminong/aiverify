@@ -37,7 +37,8 @@ from aiverify_test_engine.utils.simple_progress import SimpleProgress
 from .cvrob_util import triplets, DetectionDataset
 from .augmentations_class import make_augmentation_dict, custom_parameter_change
 from PIL import ImageDraw, ImageFont
-
+import torch.multiprocessing
+torch.multiprocessing.set_sharing_strategy('file_system')
 
 class BasePlugin(IAlgorithm):
     """
@@ -611,7 +612,9 @@ class BasePlugin(IAlgorithm):
             dataset,
             batch_size=16,
             shuffle=False,
-            collate_fn=self._collate_fn  # IMPORTANT
+            collate_fn=self._collate_fn,  # IMPORTANT
+            num_workers=2,
+            persistent_workers=True,
         )
 
         return dataset, loader

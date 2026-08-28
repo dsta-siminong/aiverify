@@ -36,7 +36,8 @@ from aiverify_test_engine.utils.simple_progress import SimpleProgress
 
 from .cvrob_util import triplets
 from .augmentations_class import make_augmentation_dict, custom_parameter_change
-
+import torch.multiprocessing
+torch.multiprocessing.set_sharing_strategy('file_system')
 
 class ImageDataset(Dataset):
     """
@@ -512,7 +513,7 @@ class BasePlugin(IAlgorithm):
         # image_tensors = torch.stack([transform(Image.open(p).convert("RGB")) for p in image_paths])
         # label_tensors = torch.tensor(labels, dtype=torch.long)
         # dataset = TensorDataset(image_tensors, label_tensors)
-        loader = DataLoader(dataset, batch_size=16, shuffle=False)
+        loader = DataLoader(dataset, batch_size=16, shuffle=False, num_workers=2, persistent_workers=True)
         return dataset, loader
 
     def _save_one_image(self, image: np.ndarray, subfolder_name, image_path_original):

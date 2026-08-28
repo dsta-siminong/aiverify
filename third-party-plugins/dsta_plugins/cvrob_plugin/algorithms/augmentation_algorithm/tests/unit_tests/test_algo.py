@@ -35,7 +35,7 @@ valid_data_path = str(
     "../../../../../../all_images_all_classes"
 )
 valid_model_path = str(
-    "../../../../../../ship_pipe_sm/ship_pipe_sm"#"../../../../../../api.json"#
+    "../../../../../../api.json"#"../../../../../../ship_pipe_sm/ship_pipe_sm"#
 )
 valid_ground_truth_path = str(
     "../../../../../../labels_all_classes.csv"
@@ -50,9 +50,10 @@ test_dict = {"data_str": "data_str"}
 test_tuple = ("data_str", "data_str")
 test_none = None
 
-plugin_type = PluginType.PIPELINE
-plugin_type_param = "pipeline_path"#"filename"
-i_type = IPipeline
+plugin_type = PluginType.MODEL
+plugin_type_param = "filename"#"pipeline_path"#
+i_type = IModel#IPipeline
+
 class ObjectTest:
     def __init__(self):
         test_discover_plugin()

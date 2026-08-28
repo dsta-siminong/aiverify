@@ -12,6 +12,13 @@ import ast
 from nrtk.impls.perturb_image.optical.otf import CircularAperturePerturber, DefocusPerturber, DetectorPerturber, JitterPerturber, TurbulenceAperturePerturber
 # from nrtk.impls.perturb_image.photometric.enhance import SharpnessPerturber, BrightnessPerturber
 from nrtk.impls.perturb_image.environment import WaterDropletPerturber, HazePerturber
+import torch.multiprocessing
+torch.multiprocessing.set_sharing_strategy('file_system')
+
+# Module-level HTTP session reused across all requests to the remote
+# augmentation service. Connection pooling / keep-alive avoids a fresh
+# TCP (and TLS) handshake on every per-image request.
+_HTTP_SESSION = requests.Session()
 
 DETERMINISTIC = {"None", "BrightnessUp", "BrightnessDown", "GaussianBlur", "ScaleUp", "ScaleDown", "Compression"}
 _NRTK_PERTURBER_CACHE = {}
@@ -274,7 +281,7 @@ def handle_url_algos(aug_dict, aug_algos):
         requests.HTTPError: If the ``/health`` request fails.
     """
     if aug_algos == ["all"]:
-        r = requests.get(f"{aug_dict['url']}/health", timeout=10)
+        r = _HTTP_SESSION.get(f"{aug_dict['url']}/health", timeout=10)
         aug_algos = r.json()['available_augmentations']
     for algo in aug_algos:
         aug_dict[algo] = AugmentationUrl(aug_dict['url'], algo)
@@ -691,9 +698,10 @@ class BaseAugmentation:
             dataset,
             batch_size=testloader.batch_size,
             shuffle=False,
-            num_workers=0,
+            num_workers=4,
             pin_memory=pin_memory,
             collate_fn=testloader.collate_fn,
+            persistent_workers=True
         )
 
 
@@ -906,7 +914,7 @@ class AugmentationUrl(BaseAugmentation):
         """
         if self.name in ["None", None]:
             return True
-        r = requests.get(f"{self.url}/deterministic", params={"aug_name": self.name}, timeout=10)
+        r = _HTTP_SESSION.get(f"{self.url}/deterministic", params={"aug_name": self.name}, timeout=10)
         r.raise_for_status()
         return r.json()["deterministic"]
 
@@ -924,7 +932,7 @@ class AugmentationUrl(BaseAugmentation):
         """
         if self.name in ["None", None]:
             return ["None"]
-        r = requests.get(f"{self.url}/severities", params={"aug_name": self.name}, timeout=10)
+        r = _HTTP_SESSION.get(f"{self.url}/severities", params={"aug_name": self.name}, timeout=10)
         r.raise_for_status()
         return r.json()["severities"]
 
@@ -943,7 +951,7 @@ class AugmentationUrl(BaseAugmentation):
         self.random_seed = x
         if self.name in ["None", None]:
             return
-        r = requests.post(f"{self.url}/seed", json={"aug_name": self.name, "seed": x}, timeout=10)
+        r = _HTTP_SESSION.post(f"{self.url}/seed", json={"aug_name": self.name, "seed": x}, timeout=10)
         r.raise_for_status()
 
     def corr_func_arr(self, image_arr, severity_idx):
@@ -977,7 +985,7 @@ class AugmentationUrl(BaseAugmentation):
             files = {"file": ("images.npy", buf, "application/octet-stream")}
             data = {"aug_name": self.name, "severity": severity}
 
-            r = requests.post(f"{self.url}/corrupt", files=files, data=data, timeout=60)
+            r = _HTTP_SESSION.post(f"{self.url}/corrupt", files=files, data=data, timeout=60)
             r.raise_for_status()
 
             return np.load(io.BytesIO(r.content))

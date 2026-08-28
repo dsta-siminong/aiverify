@@ -10,12 +10,12 @@ binary_classification_pipeline = {
         "../../../../../../all_images_all_classes"
     ),
     "model_path": str(
-        "../../../../../../ship_pipe_sm/ship_pipe_sm"#"../../../../../../api.json"#
+        "../../../../../../api.json"#"../../../../../../ship_pipe_sm/ship_pipe_sm"#
     ),
     "ground_truth_path": str(
         "../../../../../../labels_all_classes.csv"
     ),
-    "run_pipeline": True,
+    "run_pipeline": False,
     "model_type": ModelType.CLASSIFICATION,
     "ground_truth": "label",
     "plugin_argument_values": {

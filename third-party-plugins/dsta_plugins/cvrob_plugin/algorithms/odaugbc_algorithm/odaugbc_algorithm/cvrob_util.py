@@ -11,6 +11,7 @@ from pathlib import Path
 import json
 # from collections import defaultdict
 from torchvision.ops import box_iou
+import time
 
 def _filter_and_sort_preds(pred: dict, score_thresh: float):
     """Filter predictions by confidence score and sort by descending score.
@@ -144,36 +145,93 @@ def get_prediction_from_image_api(model, display_image):
     """
     Predict the class of a single image via an HTTP API.
 
-    Serialises the image to ``.npy``, POSTs it to the API URL, and returns the
-    predicted class from the JSON response.
+    Mirrors the wire-format handling of the batch detection path:
+
+    * The server is probed via ``/health`` to see whether it advertises uint8
+      support. If it does, the image is quantised to uint8 for a smaller
+      payload (the server scales it back to ``[0, 1]`` float on-device);
+      otherwise float32 is sent.
+    * The primary request sends the raw ``.npy`` bytes as
+      ``application/octet-stream`` (the fast path served by ``app_uint8.py``).
+    * If an older server (``app.py``) rejects that with HTTP 400, the request
+      is retried with the legacy multipart ``files={"file": ...}`` upload using
+      the original float32 array.
 
     Args:
         model (str): API URL that accepts a ``.npy`` image and returns a prediction.
-        display_image (np.ndarray): Image array to classify.
+        display_image (np.ndarray): CHW image array (float32 in ``[0, 1]``) to classify.
 
     Returns:
-        dict: prediction of the image represented by the bounding boxes of detection, 
+        dict: prediction of the image represented by the bounding boxes of detection,
         labels for classes of the boxes, and the scores of each detection
 
     Raises:
-        requests.HTTPError: If the API request returns an error status.
+        requests.HTTPError:
+            If the API request returns an error status after any applicable
+            fallback has been attempted.
     """
     API_URL = model
 
-    # display_image: (C, H, W)
-    batch = np.expand_dims(display_image.astype(np.float32), axis=0)
+    session = requests.Session()
+    try:
+        # ------------------------------------------------------------------
+        # Negotiate wire format once. Newer servers (app_uint8.py) advertise
+        # uint8 support via /health; older servers (app.py) may lack /health
+        # or not advertise it, so float32 remains the safe default.
+        # ------------------------------------------------------------------
+        use_uint8 = False
+        try:
+            base = API_URL.rsplit("/", 1)[0]
+            h = session.get(f"{base}/health", timeout=5).json()
+            use_uint8 = "uint8" in h.get("accepts_dtypes", [])
+        except Exception:
+            use_uint8 = False
 
-    buffer = io.BytesIO()
-    np.save(buffer, batch)
-    buffer.seek(0)
-    
-    response = requests.post(
-        API_URL,
-        files={"file": ("array.npy", buffer, "application/octet-stream")},
-    )
-    response.raise_for_status()
+        # display_image: (C, H, W) float32 in [0, 1] -> NCHW batch of 1
+        batch = np.expand_dims(np.asarray(display_image, dtype=np.float32), axis=0)
 
-    result = response.json()
+        if use_uint8:
+            batch = (batch * 255.0).round().clip(0, 255).astype(np.uint8)
+
+        buffer = io.BytesIO()
+        np.save(buffer, batch)
+        payload = buffer.getvalue()
+
+        # --------------------------------------------------------------
+        # Fast path: raw .npy bytes as application/octet-stream.
+        # --------------------------------------------------------------
+        response = session.post(
+            API_URL,
+            data=payload,
+            headers={"Content-Type": "application/octet-stream"},
+            timeout=300,
+        )
+
+        # --------------------------------------------------------------
+        # Compatibility fallback: older servers expect a multipart upload
+        # with a field named "file". Only retry on HTTP 400. Re-send as
+        # float32, which old servers always understand.
+        # --------------------------------------------------------------
+        if response.status_code == 400:
+            print(
+                "Fast raw-body request returned HTTP 400; "
+                "retrying with legacy multipart file upload."
+            )
+
+            fallback_buffer = io.BytesIO()
+            np.save(fallback_buffer, np.expand_dims(np.asarray(display_image, dtype=np.float32), axis=0))
+            fallback_buffer.seek(0)
+
+            response = session.post(
+                API_URL,
+                files={"file": ("array.npy", fallback_buffer, "application/octet-stream")},
+                timeout=300,
+            )
+
+        response.raise_for_status()
+        result = response.json()
+    finally:
+        session.close()
 
     # Return the prediction for the single image
     prediction = result["predictions"][0]
@@ -565,51 +623,73 @@ def evaluate_detection_and_create_coco_predictions(
     predictions = []
     dataset_idx = 0
 
-    for images, targets in loader:
-        targets = [{k: v.cpu() for k, v in t.items()} for t in targets]
+    # ------------------------------------------------------------------
+    # If model is an API URL, create one Session and negotiate the wire
+    # format (uint8 vs float32) once, before the loop, rather than doing
+    # both on every batch. Both are then passed into predict()/predict_api()
+    # for every call instead of being re-derived each time.
+    # ------------------------------------------------------------------
+    session = None
+    use_uint8 = False
+    if isinstance(model, str):
+        session = requests.Session()
+        try:
+            base = model.rsplit("/", 1)[0]
+            h = session.get(f"{base}/health", timeout=5).json()
+            use_uint8 = "uint8" in h.get("accepts_dtypes", [])
+        except Exception:
+            use_uint8 = False
+        print(f"wire format: {'uint8' if use_uint8 else 'float32'}")
 
-        preds = predict(model, images, device)
+    try:
+        for images, targets in loader:
+            targets = [{k: v.cpu() for k, v in t.items()} for t in targets]
 
-        for pred, gt in zip(preds, targets):
-            pred_boxes, pred_labels, pred_scores = _filter_and_sort_preds(
-                pred, score_thresh
-            )
+            preds = predict(model, images, device, session=session, use_uint8=use_uint8)
 
-            _match_predictions_to_gt(
-                pred_boxes,
-                pred_labels,
-                gt["boxes"],
-                gt["labels"],
-                iou_thresh,
-                class_names,
-                per_class,
-                matrix,
-            )
+            for pred, gt in zip(preds, targets):
+                pred_boxes, pred_labels, pred_scores = _filter_and_sort_preds(
+                    pred, score_thresh
+                )
 
-        for pred in preds:
-            filename = Path(image_paths[dataset_idx]).name
-            image_id = filename_to_image_id[filename]
+                _match_predictions_to_gt(
+                    pred_boxes,
+                    pred_labels,
+                    gt["boxes"],
+                    gt["labels"],
+                    iou_thresh,
+                    class_names,
+                    per_class,
+                    matrix,
+                )
 
-            boxes = pred["boxes"].numpy()
-            labels = pred["labels"].numpy()
-            scores = pred["scores"].numpy()
+            for pred in preds:
+                filename = Path(image_paths[dataset_idx]).name
+                image_id = filename_to_image_id[filename]
 
-            for box, label, score in zip(boxes, labels, scores):
-                if score < coco_score_threshold:
-                    continue
-                x1, y1, x2, y2 = box
-                predictions.append({
-                    "image_id": image_id,
-                    "category_id": int(label),
-                    "bbox": [
-                        float(x1),
-                        float(y1),
-                        float(x2 - x1),
-                        float(y2 - y1),
-                    ],
-                    "score": float(score),
-                })
-            dataset_idx += 1
+                boxes = pred["boxes"].numpy()
+                labels = pred["labels"].numpy()
+                scores = pred["scores"].numpy()
+
+                for box, label, score in zip(boxes, labels, scores):
+                    if score < coco_score_threshold:
+                        continue
+                    x1, y1, x2, y2 = box
+                    predictions.append({
+                        "image_id": image_id,
+                        "category_id": int(label),
+                        "bbox": [
+                            float(x1),
+                            float(y1),
+                            float(x2 - x1),
+                            float(y2 - y1),
+                        ],
+                        "score": float(score),
+                    })
+                dataset_idx += 1
+    finally:
+        if session is not None:
+            session.close()
 
     # dataset_idx advances once per prediction in loader order; it must have
     # walked exactly every image. If it hasn't, the loader reordered/dropped
@@ -633,7 +713,7 @@ def evaluate_detection_and_create_coco_predictions(
         "matrix": matrix,
     }
 
-def predict(model, images, device):
+def predict(model, images, device, session=None, use_uint8=False):
     """Run detection inference on a batch, dispatching by model kind.
 
     A string ``model`` is treated as an API URL; anything else is run locally
@@ -643,13 +723,19 @@ def predict(model, images, device):
         model: A torch detection model, or an API URL string.
         images (list[torch.Tensor]): Batch of image tensors.
         device (torch.device): Device the local model runs on.
+        session (requests.Session | None): Persistent session to reuse for
+            the API path, negotiated once by the caller rather than created
+            per call. Ignored for the direct-model path.
+        use_uint8 (bool): Wire format decided once by the caller via
+            ``/health``, rather than re-queried on every call. Ignored for
+            the direct-model path.
 
     Returns:
         list[dict]: One prediction dict per image with CPU tensors for
             ``boxes``, ``labels``, and ``scores``.
     """
     if isinstance(model, str):
-        return predict_api(model, images)
+        return predict_api(model, images, session=session, use_uint8=use_uint8)
     return predict_direct(model, images, device)
 
 def predict_direct(model, images, device):
@@ -673,48 +759,95 @@ def predict_direct(model, images, device):
 
     return [{k: v.cpu() for k, v in o.items()} for o in outputs]
 
-def predict_api(api_url, images):
+def predict_api(api_url, images, session=None, use_uint8=False):
     """Run detection inference on a batch via an HTTP API.
 
     Stacks the batch, serialises it to ``.npy``, POSTs it to the API URL, and
     reassembles the JSON response into per-image prediction tensors.
 
+    Wire format (``use_uint8``) and session are decided once by the caller
+    (typically via one ``/health`` probe before the evaluation loop begins),
+    not re-negotiated on every call — /health round-trips and fresh
+    TCP/TLS handshakes on every batch were the main cost here previously.
+
+    The primary request uses a raw ``application/octet-stream`` body (fast
+    path, served by ``app_uint8.py``); an HTTP 400 falls back to the legacy
+    multipart float32 upload for older servers (``app.py``).
+
     Args:
         api_url (str): API URL accepting a ``.npy`` batch and returning
             ``{"predictions": [...]}``.
-        images (list[torch.Tensor]): Batch of image tensors.
+        images (list[torch.Tensor]): Batch of image tensors (float32 in ``[0, 1]``).
+        session (requests.Session | None): Persistent session to reuse across
+            calls. If None, a bare ``requests.post`` is used (a fresh
+            connection per call — fine for one-off use, not for a loop).
+        use_uint8 (bool): Whether to quantise to uint8 before sending, as
+            decided once by the caller via ``/health``. Only send True when
+            the target server is known to support it (``app_uint8.py``).
 
     Returns:
         list[dict]: One prediction dict per image with ``boxes``, ``labels``,
             and ``scores`` tensors.
 
     Raises:
-        requests.HTTPError: If the API request returns an error status.
+        requests.HTTPError:
+            If the API request returns an error status after any applicable
+            fallback has been attempted.
     """
-    # images is List[Tensor]
-    batch = torch.stack(images).cpu().numpy()
+    # images is List[Tensor], float32 in [0, 1]
+    batch = torch.stack(images).cpu().numpy()  # (N, C, H, W) float32
+
+    batch_np = batch
+    if use_uint8:
+        batch_np = (batch * 255.0).round().clip(0, 255).astype(np.uint8)
 
     buffer = io.BytesIO()
-    np.save(buffer, batch)
-    buffer.seek(0)
+    np.save(buffer, batch_np)
+    payload = buffer.getvalue()
 
-    response = requests.post(
+    post = session.post if session is not None else requests.post
+    t0 = time.perf_counter()
+    # Fast path: raw octet-stream body.
+    response = post(
         api_url,
-        files={"file": ("batch.npy", buffer, "application/octet-stream")},
+        data=payload,
+        headers={"Content-Type": "application/octet-stream"},
+        timeout=300,
     )
+
+    # Compatibility fallback (multipart, float32) on HTTP 400 only. Always
+    # re-serialises from the original float32 batch regardless of
+    # use_uint8, so the fallback is correct against old servers that only
+    # understand float32.
+    if response.status_code == 400:
+        print(
+            "Fast raw-body request returned HTTP 400; "
+            "retrying with legacy multipart file upload."
+        )
+        fallback_buffer = io.BytesIO()
+        np.save(fallback_buffer, batch)  # original float32
+        fallback_buffer.seek(0)
+        response = post(
+            api_url,
+            files={"file": ("batch.npy", fallback_buffer, "application/octet-stream")},
+            timeout=300,
+        )
+
+    t1 = time.perf_counter()
     response.raise_for_status()
-
     outputs = response.json()["predictions"]
+    t2 = time.perf_counter()
 
-    preds = []
-    for pred in outputs:
-        preds.append({
-            "boxes": torch.tensor(pred["boxes"], dtype=torch.float32),
+    print("~~ HTTP round-trip:", t1 - t0)
+    print("~~~ JSON decode:", t2 - t1)
+    return [
+        {
+            "boxes":  torch.tensor(pred["boxes"],  dtype=torch.float32),
             "labels": torch.tensor(pred["labels"], dtype=torch.int64),
             "scores": torch.tensor(pred["scores"], dtype=torch.float32),
-        })
-
-    return preds
+        }
+        for pred in outputs
+    ]
 
 def average_summaries(all_summaries):
     '''Average a list of ``collectSummaryResults()`` dicts across epochs.

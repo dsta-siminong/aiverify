@@ -10,12 +10,12 @@ binary_classification_pipeline = {
         "/home/bjieyong/aiverify/cvrob/bccd/BCCD/JPEGImages"
     ),
     "model_path": str(
-        "/home/bjieyong/aiverify/cvrob/bccd/BCCD/bccdModel"#"/home/bjieyong/aiverify/cvrob/bccd/bccd_api.json"
+        "/home/bjieyong/aiverify/cvrob/bccd/bccd_api.json"#"/home/bjieyong/aiverify/cvrob/bccd/BCCD/bccdModel"#
     ),
     "ground_truth_path": str(
         "/home/bjieyong/aiverify/cvrob/bccd/BCCD/bccd_detection.csv"
     ),
-    "run_pipeline": True,
+    "run_pipeline": False,
     "model_type": ModelType.DETECTION,
     "ground_truth": "label",
     "plugin_argument_values": {

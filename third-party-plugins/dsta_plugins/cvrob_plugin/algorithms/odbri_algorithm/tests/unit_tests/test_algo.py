@@ -35,7 +35,7 @@ valid_data_path = str(
     "/home/bjieyong/aiverify/cvrob/bccd/BCCD/JPEGImages"
 )
 valid_model_path = str(
-    "/home/bjieyong/aiverify/cvrob/bccd/BCCD/bccdModel"#"/home/bjieyong/aiverify/cvrob/bccd/bccd_api.json"#
+    "/home/bjieyong/aiverify/cvrob/bccd/bccd_api.json"#"/home/bjieyong/aiverify/cvrob/bccd/BCCD/bccdModel"#
 )
 valid_ground_truth_path = str(
     "/home/bjieyong/aiverify/cvrob/bccd/BCCD/bccd_detection.csv"
@@ -50,9 +50,9 @@ test_dict = {"data_str": "data_str"}
 test_tuple = ("data_str", "data_str")
 test_none = None
 
-plugin_type = PluginType.PIPELINE
-plugin_type_param = "pipeline_path"#"filename"
-i_type = IPipeline
+plugin_type = PluginType.MODEL
+plugin_type_param = "filename"#"pipeline_path"#
+i_type = IModel
 class ObjectTest:
     def __init__(self):
         test_discover_plugin()

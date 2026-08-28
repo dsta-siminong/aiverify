@@ -1,7 +1,7 @@
 {
   "cid": "odaugvm_algorithm",
   "gid": "cvrob_plugin",
-  "name": "ObjDet Algorithm v Metric Algorithm",
+  "name": "ObjDet Augmentation v Metric Algorithm",
   "modelType": [
     "classification",
     "detection"

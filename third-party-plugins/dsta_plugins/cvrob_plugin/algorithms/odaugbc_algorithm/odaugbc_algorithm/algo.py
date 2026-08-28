@@ -3,6 +3,7 @@ from pathlib import Path, PurePath
 from typing import Dict, List, Tuple, Union, Callable, Any, Optional
 import copy
 import shutil
+import time
 
 from aiverify_test_engine.interfaces.ialgorithm import IAlgorithm
 from aiverify_test_engine.interfaces.idata import IData
@@ -1077,6 +1078,7 @@ class Plugin(cvrob_algo_common.BasePlugin):
                 coco_score_threshold=0.0,  # match original create_coco_predictions default
             )
             
+            t_coco_start = time.perf_counter()
             cocoDt = cocoGt.loadRes(pr_json)  # initialize COCO prediction api
             cocoEval = COCOeval(cocoGt, cocoDt, 'bbox')  # initialize COCO evaluation api
             cocoEval.evaluate()
@@ -1093,6 +1095,7 @@ class Plugin(cvrob_algo_common.BasePlugin):
             pr_df = cocoEval.computePRCurveData(average='macro')
             cocopr_df = cocoEval.computeCocoPRCurveData()  #TODO: KIV doing this by class
             per_class_report = cocoEval.generateReport(iouThr=self._iou_thres)
+            print(f"COCO eval block: {time.perf_counter() - t_coco_start:.2f}s")
 
             for k in det_stats['per_class']:
                 assert k in per_class_report
@@ -1102,7 +1105,7 @@ class Plugin(cvrob_algo_common.BasePlugin):
 
             # Overall + per-class AP now come from the COCO accumulator at
             # iou_thres (single source of truth), not from TorchMetrics.
-            overall_ap, per_class_ap = self._extract_coco_ap(cocoEval, class_names)
+            overall_ap, per_class_ap = self._extract_coco_ap(cocoEval)
             det_stats["map"] = overall_ap
             for k in det_stats['per_class']:
                 det_stats['per_class'][k]["map"] = per_class_ap.get(k, float("nan"))

@@ -44,36 +44,93 @@ def get_prediction_from_image_api(model, display_image):
     """
     Predict the class of a single image via an HTTP API.
 
-    Serialises the image to ``.npy``, POSTs it to the API URL, and returns the
-    predicted class from the JSON response.
+    Mirrors the wire-format handling of the batch detection path:
+
+    * The server is probed via ``/health`` to see whether it advertises uint8
+      support. If it does, the image is quantised to uint8 for a smaller
+      payload (the server scales it back to ``[0, 1]`` float on-device);
+      otherwise float32 is sent.
+    * The primary request sends the raw ``.npy`` bytes as
+      ``application/octet-stream`` (the fast path served by ``app_uint8.py``).
+    * If an older server (``app.py``) rejects that with HTTP 400, the request
+      is retried with the legacy multipart ``files={"file": ...}`` upload using
+      the original float32 array.
 
     Args:
         model (str): API URL that accepts a ``.npy`` image and returns a prediction.
-        display_image (np.ndarray): Image array to classify.
+        display_image (np.ndarray): CHW image array (float32 in ``[0, 1]``) to classify.
 
     Returns:
-        dict: prediction of the image represented by the bounding boxes of detection, 
+        dict: prediction of the image represented by the bounding boxes of detection,
         labels for classes of the boxes, and the scores of each detection
 
     Raises:
-        requests.HTTPError: If the API request returns an error status.
+        requests.HTTPError:
+            If the API request returns an error status after any applicable
+            fallback has been attempted.
     """
     API_URL = model
 
-    # display_image: (C, H, W)
-    batch = np.expand_dims(display_image.astype(np.float32), axis=0)
+    session = requests.Session()
+    try:
+        # ------------------------------------------------------------------
+        # Negotiate wire format once. Newer servers (app_uint8.py) advertise
+        # uint8 support via /health; older servers (app.py) may lack /health
+        # or not advertise it, so float32 remains the safe default.
+        # ------------------------------------------------------------------
+        use_uint8 = False
+        try:
+            base = API_URL.rsplit("/", 1)[0]
+            h = session.get(f"{base}/health", timeout=5).json()
+            use_uint8 = "uint8" in h.get("accepts_dtypes", [])
+        except Exception:
+            use_uint8 = False
 
-    buffer = io.BytesIO()
-    np.save(buffer, batch)
-    buffer.seek(0)
+        # display_image: (C, H, W) float32 in [0, 1] -> NCHW batch of 1
+        batch = np.expand_dims(np.asarray(display_image, dtype=np.float32), axis=0)
 
-    response = requests.post(
-        API_URL,
-        files={"file": ("array.npy", buffer, "application/octet-stream")},
-    )
-    response.raise_for_status()
+        if use_uint8:
+            batch = (batch * 255.0).round().clip(0, 255).astype(np.uint8)
 
-    result = response.json()
+        buffer = io.BytesIO()
+        np.save(buffer, batch)
+        payload = buffer.getvalue()
+
+        # --------------------------------------------------------------
+        # Fast path: raw .npy bytes as application/octet-stream.
+        # --------------------------------------------------------------
+        response = session.post(
+            API_URL,
+            data=payload,
+            headers={"Content-Type": "application/octet-stream"},
+            timeout=300,
+        )
+
+        # --------------------------------------------------------------
+        # Compatibility fallback: older servers expect a multipart upload
+        # with a field named "file". Only retry on HTTP 400. Re-send as
+        # float32, which old servers always understand.
+        # --------------------------------------------------------------
+        if response.status_code == 400:
+            print(
+                "Fast raw-body request returned HTTP 400; "
+                "retrying with legacy multipart file upload."
+            )
+
+            fallback_buffer = io.BytesIO()
+            np.save(fallback_buffer, np.expand_dims(np.asarray(display_image, dtype=np.float32), axis=0))
+            fallback_buffer.seek(0)
+
+            response = session.post(
+                API_URL,
+                files={"file": ("array.npy", fallback_buffer, "application/octet-stream")},
+                timeout=300,
+            )
+
+        response.raise_for_status()
+        result = response.json()
+    finally:
+        session.close()
 
     # Return the prediction for the single image
     prediction = result["predictions"][0]
@@ -273,32 +330,75 @@ def predict_api(api_url, images):
     Stacks the batch, serialises it to ``.npy``, POSTs it to the API URL, and
     reassembles the JSON response into per-image prediction tensors.
 
+    The server is probed via ``/health`` to see whether it advertises uint8
+    support. If it does, the batch is quantised to uint8 for a smaller payload
+    (the server scales it back to ``[0, 1]`` float on-device); otherwise
+    float32 is sent. The primary request uses a raw ``application/octet-stream``
+    body (fast path); an HTTP 400 falls back to the legacy multipart float32
+    upload for older servers.
+
     Args:
         api_url (str): API URL accepting a ``.npy`` batch and returning
             ``{"predictions": [...]}``.
-        images (list[torch.Tensor]): Batch of image tensors.
+        images (list[torch.Tensor]): Batch of image tensors (float32 in ``[0, 1]``).
 
     Returns:
         list[dict]: One prediction dict per image with ``boxes``, ``labels``,
             and ``scores`` tensors.
 
     Raises:
-        requests.HTTPError: If the API request returns an error status.
+        requests.HTTPError:
+            If the API request returns an error status after any applicable
+            fallback has been attempted.
     """
-    # images is List[Tensor]
-    batch = torch.stack(images).cpu().numpy()
+    # images is List[Tensor], float32 in [0, 1]
+    batch = torch.stack(images).cpu().numpy()  # (N, C, H, W) float32
 
-    buffer = io.BytesIO()
-    np.save(buffer, batch)
-    buffer.seek(0)
+    session = requests.Session()
+    try:
+        use_uint8 = False
+        try:
+            base = api_url.rsplit("/", 1)[0]
+            h = session.get(f"{base}/health", timeout=5).json()
+            use_uint8 = "uint8" in h.get("accepts_dtypes", [])
+        except Exception:
+            use_uint8 = False
 
-    response = requests.post(
-        api_url,
-        files={"file": ("batch.npy", buffer, "application/octet-stream")},
-    )
-    response.raise_for_status()
+        batch_np = batch
+        if use_uint8:
+            batch_np = (batch * 255.0).round().clip(0, 255).astype(np.uint8)
 
-    outputs = response.json()["predictions"]
+        buffer = io.BytesIO()
+        np.save(buffer, batch_np)
+        payload = buffer.getvalue()
+
+        # Fast path: raw octet-stream body.
+        response = session.post(
+            api_url,
+            data=payload,
+            headers={"Content-Type": "application/octet-stream"},
+            timeout=300,
+        )
+
+        # Compatibility fallback (multipart, float32) on HTTP 400 only.
+        if response.status_code == 400:
+            print(
+                "Fast raw-body request returned HTTP 400; "
+                "retrying with legacy multipart file upload."
+            )
+            fallback_buffer = io.BytesIO()
+            np.save(fallback_buffer, batch)  # original float32
+            fallback_buffer.seek(0)
+            response = session.post(
+                api_url,
+                files={"file": ("batch.npy", fallback_buffer, "application/octet-stream")},
+                timeout=300,
+            )
+
+        response.raise_for_status()
+        outputs = response.json()["predictions"]
+    finally:
+        session.close()
 
     preds = []
     for pred in outputs:

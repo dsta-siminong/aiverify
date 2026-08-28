@@ -14,6 +14,14 @@ import ast
 from nrtk.impls.perturb_image.optical.otf import CircularAperturePerturber, DefocusPerturber, DetectorPerturber, JitterPerturber, TurbulenceAperturePerturber
 # from nrtk.impls.perturb_image.photometric.enhance import SharpnessPerturber, BrightnessPerturber
 from nrtk.impls.perturb_image.environment import WaterDropletPerturber, HazePerturber
+import torch.multiprocessing
+torch.multiprocessing.set_sharing_strategy('file_system')
+
+# Module-level HTTP session reused across all requests to the remote
+# augmentation service. Connection pooling / keep-alive avoids a fresh
+# TCP (and TLS) handshake on every per-image request.
+_HTTP_SESSION = requests.Session()
+
 
 GEOMETRIC = {"Rotate", "Shear", "Translate", "Perspective", "ScaleUp", "ScaleDown"}
 DETERMINISTIC = {"None", "BrightnessUp", "BrightnessDown", "GaussianBlur", "ScaleUp", "ScaleDown", "Compression"}
@@ -277,7 +285,7 @@ def handle_url_algos(aug_dict, aug_algos):
         requests.HTTPError: If the ``/health`` request fails.
     """
     if aug_algos == ["all"]:
-        r = requests.get(f"{aug_dict['url']}/health", timeout=10)
+        r = _HTTP_SESSION.get(f"{aug_dict['url']}/health", timeout=10)
         aug_algos = r.json()['available_augmentations']
     for algo in aug_algos:
         aug_dict[algo] = AugmentationUrl(aug_dict['url'], algo)
@@ -719,9 +727,10 @@ class Augmentation:
             dataset,
             batch_size=testloader.batch_size,
             shuffle=False,
-            num_workers=0,
+            num_workers=4,
             pin_memory=False,
             collate_fn=testloader.collate_fn,
+            persistent_workers=True
         )
 
     def corr_func_sample(self, image, target, severity_idx):
@@ -926,7 +935,7 @@ class AugmentationUrl:
         """
         if self.name in ["None", None]:
             return True
-        r = requests.get(f"{self.url}/deterministic", params={"aug_name": self.name}, timeout=10)
+        r = _HTTP_SESSION.get(f"{self.url}/deterministic", params={"aug_name": self.name}, timeout=10)
         r.raise_for_status()
         return r.json()["deterministic"]
 
@@ -945,7 +954,7 @@ class AugmentationUrl:
         if self.name in ["None", None]:
             return False
         try:
-            r = requests.get(f"{self.url}/geometric", params={"aug_name": self.name}, timeout=10)
+            r = _HTTP_SESSION.get(f"{self.url}/geometric", params={"aug_name": self.name}, timeout=10)
             r.raise_for_status()
         except requests.exceptions.RequestException:
             # Server doesn't expose a /geometric endpoint at all (e.g. an
@@ -969,7 +978,7 @@ class AugmentationUrl:
         """
         if self.name in ["None", None]:
             return ["None"]
-        r = requests.get(f"{self.url}/severities", params={"aug_name": self.name}, timeout=10)
+        r = _HTTP_SESSION.get(f"{self.url}/severities", params={"aug_name": self.name}, timeout=10)
         r.raise_for_status()
         return r.json()["severities"]
 
@@ -988,7 +997,7 @@ class AugmentationUrl:
         self.random_seed = x
         if self.name in ["None", None]:
             return
-        r = requests.post(f"{self.url}/seed", json={"aug_name": self.name, "seed": x}, timeout=10)
+        r = _HTTP_SESSION.post(f"{self.url}/seed", json={"aug_name": self.name, "seed": x}, timeout=10)
         r.raise_for_status()
 
     def _corrupt_image_via_api(self, image, severity):
@@ -1002,7 +1011,7 @@ class AugmentationUrl:
         files = {"file": ("image.npy", buf, "application/octet-stream")}
         data = {"aug_name": self.name, "severity": severity}
 
-        r = requests.post(f"{self.url}/corrupt", files=files, data=data, timeout=60)
+        r = _HTTP_SESSION.post(f"{self.url}/corrupt", files=files, data=data, timeout=60)
         r.raise_for_status()
 
         return np.load(io.BytesIO(r.content))[0]
@@ -1041,7 +1050,7 @@ class AugmentationUrl:
             "labels": labels,
         }
 
-        r = requests.post(f"{self.url}/corrupt_bbox", json=payload, timeout=60)
+        r = _HTTP_SESSION.post(f"{self.url}/corrupt_bbox", json=payload, timeout=60)
         r.raise_for_status()
         resp = r.json()
 
