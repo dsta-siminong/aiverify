@@ -1,0 +1,231 @@
+export const cid = "augmentation_by_class_algorithm"
+//export const ib_cid = "augbyclass_inputblock"
+
+
+<div style={{ marginBottom: "1rem" }}>
+  <div
+    style={{
+      textAlign: "center",
+      fontWeight: "bold",
+      fontSize: "2.2rem",
+      color: "#b91c1c",
+      textDecoration: "underline"
+    }}
+  >
+    {props.properties.title}
+  </div>
+</div>
+
+import {
+  transformData,
+  ClassLineChart,
+  PopulationChart,
+  StackedBarChart,
+  ClassMetricsTable
+} from './augbyclass-chart.jsx';
+
+{props.getResults(cid)?(
+  (() => {
+    const args = props.getResults(cid).ALGORITHM_ARGUMENTS;
+
+    return (
+      <div style={{
+        border: "1px solid #e5e7eb",
+        borderRadius: "8px",
+        padding: "1rem",
+        background: "#fafafa",
+        margin: "1rem 0"
+      }}>
+        <div style={{
+          fontWeight: "bold",
+          marginBottom: "0.75rem",
+          fontSize: "1.05rem"
+        }}>
+          Algorithm Parameters
+        </div>
+
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <tbody>
+            {Object.entries(args).map(([key, value]) => (
+              <tr key={key}>
+                <td style={{
+                  fontWeight: "600",
+                  padding: "0.35rem 0.5rem",
+                  verticalAlign: "top",
+                  width: "35%"
+                }}>
+                  {key.replace(/_/g, " ")}
+                </td>
+                <td style={{
+                  padding: "0.35rem 0.5rem",
+                  color: "#374151",
+                  wordBreak: "break-all"
+                }}>
+                  {String(value)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  })()
+):(
+  <div>No algorithm data</div>
+)}
+
+export const ConfusionMatricesSection = ({ props }) => {
+  const resultsData = props.getResults ? props.getResults(cid).results : null;
+
+  if (!resultsData || resultsData.length === 0) {
+    return <div>No results data available</div>;
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "3rem" }}>
+      <h2
+        style={{
+          textAlign: "center",
+          fontWeight: "bold",
+          textDecoration: "underline",
+          color: "red",
+          marginBottom: "2rem",
+        }}
+      >
+        Confusion Matrices
+      </h2>
+
+      {(() => {
+        // The baseline "None" severity is the same unaugmented model for every
+        // augmentation entry, so show it once overall, in its own "Base" card,
+        // taken from whichever augmentation happens to have it.
+        const baseline = resultsData
+          .map((item) => item.confusion_matrix?.["None"])
+          .find((paths) => paths);
+
+        if (!baseline) return null;
+
+        return (
+          <div
+            style={{
+              border: "1px solid #ccc",
+              borderRadius: "10px",
+              padding: "2rem",
+            }}
+          >
+            <h3
+              style={{
+                textAlign: "center",
+                fontWeight: "bold",
+                marginBottom: "2rem",
+              }}
+            >
+              Base
+            </h3>
+
+            {renderSeverityEntry(props, "None", baseline, 0)}
+          </div>
+        );
+      })()}
+
+      {resultsData.map((augmentationItem, index) => {
+        const { Augmentation, confusion_matrix } = augmentationItem;
+
+        if (!confusion_matrix) {
+          return (
+            <div
+              key={index}
+              style={{
+                padding: "1em",
+                border: "1px dashed #ccc",
+                borderRadius: "8px",
+                textAlign: "center",
+                color: "#777",
+              }}
+            >
+              <h3>{Augmentation}</h3>
+              <div>No image available in sample</div>
+            </div>
+          );
+        }
+
+        // For every augmentation, show just the first and last (mildest and
+        // most severe) non-baseline severities.
+        const nonNoneEntries = Object.entries(confusion_matrix).filter(
+          ([severity]) => severity !== "None"
+        );
+        const firstSeverity = nonNoneEntries[0];
+        const lastSeverity = nonNoneEntries[nonNoneEntries.length - 1];
+
+        const displayEntries = [];
+        if (firstSeverity) displayEntries.push(firstSeverity);
+        if (lastSeverity && lastSeverity[0] !== firstSeverity?.[0]) {
+          displayEntries.push(lastSeverity);
+        }
+
+        return (
+          <div
+            key={index}
+            style={{
+              border: "1px solid #ccc",
+              borderRadius: "10px",
+              padding: "2rem",
+            }}
+          >
+            <h3
+              style={{
+                textAlign: "center",
+                fontWeight: "bold",
+                marginBottom: "2rem",
+              }}
+            >
+              {Augmentation}
+            </h3>
+
+            {displayEntries.map(([severity, paths], i) =>
+              renderSeverityEntry(props, severity, paths, i)
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+export function renderSeverityEntry(props, severity, paths, key) {
+  const [pngPath, htmlPath] = paths;
+
+  let pngUrl = null;
+  let htmlUrl = null;
+
+  try {
+    pngUrl = props.getArtifactURL(cid, pngPath);
+    htmlUrl = props.getArtifactURL(cid, htmlPath);
+  } catch (err) {
+    console.error("Artifact URL error:", err);
+  }
+
+  return (
+    <div key={key} style={{ marginBottom: "3rem", breakInside: "avoid", pageBreakInside: "avoid" }}>
+      <h4 style={{ textAlign: "center", fontWeight: "bold", textDecoration: "underline", marginTop: "1rem", marginBottom: "1rem" }}> Confusion Matrix Plot for severity: {severity}</h4>
+
+      {htmlUrl && (
+        <div style={{ width: "100%", height: "500px", marginBottom: "1rem" }}>
+          <iframe
+            src={htmlUrl}
+            title={`Confusion Matrix HTML - ${severity}`}
+            style={{
+              width: "100%",
+              height: "100%",
+              border: "1px solid #ccc",
+              borderRadius: "6px",
+              display: "block"
+            }}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+<ConfusionMatricesSection props={props} />

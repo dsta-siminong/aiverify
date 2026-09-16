@@ -1,0 +1,31 @@
+{
+  "cid": "augbyclass_cmgraph_plotly_short_widget",
+  "widgetSize": {
+    "minW": 12,
+    "minH": 1,
+    "maxW": 12,
+    "maxH": 36
+  },
+  "name": "[2a4.5s] Augmentations By Class Widget for Confusion Matrix Line Graphs (FOR PLOTLY, problematic classes only)",
+  "description": "Augmentations By Class Widget for Confusion Matrix Line Graphs (plotly), filtered to only show classes where TP/FP/FN/TN's share of the population swings by more than 20 percentage points across severities under augmentation",
+  "dynamicHeight": true,
+  "dependencies": [
+    {
+      "cid": "augmentation_by_class_algorithm"
+    }
+  ],
+  "mockdata": [
+    {
+      "type": "Algorithm",
+      "cid": "augmentation_by_class_algorithm",
+      "datapath": "augmentation_by_class_algorithm.sample.json"
+    }
+  ],
+  "properties": [
+    {
+      "key": "title",
+      "helper": "Set the widget title (default \"AUGMENTATIONS BY CLASS - CONFUSION MATRIX - PLOTLY (PROBLEMATIC CLASSES)\")",
+      "default": "AUGMENTATIONS BY CLASS - CONFUSION MATRIX - PLOTLY (PROBLEMATIC CLASSES)"
+    }
+  ]
+}

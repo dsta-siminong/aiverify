@@ -79,8 +79,8 @@ class ObjectTest:
         model_type = ModelType.CLASSIFICATION
         input_args = {
             "class_names": "Barge,CG-P,ContainerShip,Cruise,Dredger,Ferry,LNG-LPG,RORO,Sampan,Trawler-FishingVessel,Tugboat,Warship,Yacht",
-            "aug_library": "http://localhost:8100",
-            'aug_methods': 'Rain',
+            "aug_library": "albumentations",#"http://localhost:8100",
+            'aug_methods': 'Erasing,Rain,Rotate,GaussianBlur,GaussianNoise',
             'custom_parameters': None,
             "num_epochs": 1,
             # "model_api_url": "http://localhost:8000/predict_array",

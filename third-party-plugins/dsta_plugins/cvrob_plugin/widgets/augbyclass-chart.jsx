@@ -99,6 +99,195 @@ export function transformData(data, data2, severities, class_names) {
   return combined;
 }
 
+export const RECALL_DROP_THRESHOLD = 0.25;
+
+export function getProblematicClasses(combined, classNames, threshold = RECALL_DROP_THRESHOLD) {
+  const flagged = new Set();
+  for (const className of Object.values(classNames)) {
+    const classRows = combined.filter((r) => r.class === className);
+    const baseline = classRows.find((r) => r.severity === "None");
+    if (!baseline) continue;
+
+    const baselineSupport = (baseline.TP ?? 0) + (baseline.FN ?? 0);
+    if (baselineSupport === 0) continue; // no ground truth for this class
+
+    const baselineRecall = baseline.TP / baselineSupport;
+    let minRecall = baselineRecall;
+
+    for (const row of classRows) {
+      if (row.severity === "None") continue;
+      const support = (row.TP ?? 0) + (row.FN ?? 0);
+      if (support === 0) continue;
+      const recall = row.TP / support;
+      if (recall < minRecall) minRecall = recall;
+    }
+
+    if (baselineRecall - minRecall > threshold) flagged.add(className);
+  }
+  return flagged;
+}
+
+export const COUNT_SHARE_SHIFT_THRESHOLD = 0.10;
+
+// Flags a class if any of TP/FP/FN/TN, expressed as a share of that row's total
+// population (TP+FP+FN+TN), moves by more than `threshold` (in either direction)
+// relative to the baseline ("None") severity, at any augmented severity. This
+// catches distributional blowups (e.g. a surge in false positives) that recall-only
+// or precision-only checks can miss when recall happens to hold steady or improve.
+export function getProblematicClassesByCountShift(combined, classNames, threshold = COUNT_SHARE_SHIFT_THRESHOLD) {
+  const flagged = new Set();
+  const countMetrics = ["TP", "FP", "FN", "TN"];
+
+  for (const className of Object.values(classNames)) {
+    const classRows = combined.filter((r) => r.class === className);
+    const baseline = classRows.find((r) => r.severity === "None");
+    if (!baseline) continue;
+
+    const baselineTotal = (baseline.TP ?? 0) + (baseline.FP ?? 0) + (baseline.FN ?? 0) + (baseline.TN ?? 0);
+    if (baselineTotal === 0) continue;
+
+    for (const row of classRows) {
+      if (row.severity === "None") continue;
+
+      const rowTotal = (row.TP ?? 0) + (row.FP ?? 0) + (row.FN ?? 0) + (row.TN ?? 0);
+      if (rowTotal === 0) continue;
+
+      for (const metric of countMetrics) {
+        const baselineShare = (baseline[metric] ?? 0) / baselineTotal;
+        const rowShare = (row[metric] ?? 0) / rowTotal;
+        if (Math.abs(rowShare - baselineShare) > threshold) {
+          flagged.add(className);
+          break;
+        }
+      }
+      if (flagged.has(className)) break;
+    }
+  }
+  return flagged;
+}
+
+export function getProblematicClassesByPerformance(combined, classNames, threshold = RECALL_DROP_THRESHOLD) {
+  const flagged = new Set();
+  for (const className of Object.values(classNames)) {
+    const classRows = combined.filter((r) => r.class === className);
+    const baseline = classRows.find((r) => r.severity === "None");
+    if (!baseline) continue;
+
+    const baselineSupport = (baseline.TP ?? 0) + (baseline.FN ?? 0);
+    if (baselineSupport === 0) continue; // no ground truth for this class
+
+    const baselineRecall = baseline.TP / baselineSupport;
+    const baselinePredicted = (baseline.TP ?? 0) + (baseline.FP ?? 0);
+    const baselinePrecision = baselinePredicted > 0 ? baseline.TP / baselinePredicted : null;
+
+    let minRecall = baselineRecall;
+    let minPrecision = baselinePrecision;
+
+    for (const row of classRows) {
+      if (row.severity === "None") continue;
+
+      const support = (row.TP ?? 0) + (row.FN ?? 0);
+      if (support > 0) {
+        const recall = row.TP / support;
+        if (recall < minRecall) minRecall = recall;
+      }
+
+      const predicted = (row.TP ?? 0) + (row.FP ?? 0);
+      if (predicted > 0 && baselinePrecision !== null) {
+        const precision = row.TP / predicted;
+        if (precision < minPrecision) minPrecision = precision;
+      }
+    }
+
+    const recallDrop = baselineRecall - minRecall;
+    const precisionDrop = baselinePrecision !== null ? baselinePrecision - minPrecision : 0;
+
+    if (recallDrop > threshold || precisionDrop > threshold) flagged.add(className);
+  }
+  return flagged;
+}
+
+export const POPULATION_CHANGE_THRESHOLD = 0.25;
+
+export function getProblematicClassesByPopulation(combined, classNames, threshold = POPULATION_CHANGE_THRESHOLD) {
+  const flagged = new Set();
+  for (const className of Object.values(classNames)) {
+    const classRows = combined.filter((r) => r.class === className);
+    const baseline = classRows.find((r) => r.severity === "None");
+    if (!baseline) continue;
+
+    const baselinePop = baseline.preds_population ?? ((baseline.TP ?? 0) + (baseline.FP ?? 0));
+
+    for (const row of classRows) {
+      if (row.severity === "None") continue;
+      const pop = row.preds_population ?? ((row.TP ?? 0) + (row.FP ?? 0));
+
+      if (baselinePop === 0) {
+        if (pop > 0) {
+          flagged.add(className);
+          break;
+        }
+        continue;
+      }
+
+      const relativeChange = (pop - baselinePop) / baselinePop;
+      if (Math.abs(relativeChange) > threshold) {
+        flagged.add(className);
+        break;
+      }
+    }
+  }
+  return flagged;
+}
+
+export const METRIC_SPREAD_THRESHOLD = 0.20;
+
+// Flags a class if, across all severities for an augmentation (including the
+// baseline "None" row), any of the given metrics swings by more than `threshold`
+// between its max and min value. Ratio metrics (precision/recall/f1-score) are
+// already 0-1 shares, so the threshold is a percentage-point spread; for raw
+// confusion-matrix counts (TP/FP/FN/TN), pass `countShare` as `getValue` so each
+// count is compared as a share of that row's total population, putting it on the
+// same percentage-point scale.
+export function getProblematicClassesByMetricSpread(
+  combined,
+  classNames,
+  metrics,
+  threshold = METRIC_SPREAD_THRESHOLD,
+  getValue = (row, metric) => row[metric]
+) {
+  const flagged = new Set();
+
+  for (const className of Object.values(classNames)) {
+    const classRows = combined.filter((r) => r.class === className);
+    if (classRows.length === 0) continue;
+
+    for (const metric of metrics) {
+      const values = classRows
+        .map((row) => getValue(row, metric))
+        .filter((v) => typeof v === "number" && !Number.isNaN(v));
+      if (values.length === 0) continue;
+
+      const spread = Math.max(...values) - Math.min(...values);
+      if (spread > threshold) {
+        flagged.add(className);
+        break;
+      }
+    }
+  }
+
+  return flagged;
+}
+
+// Converts a TP/FP/FN/TN count to its share of that row's total population
+// (TP+FP+FN+TN). Use as the `getValue` argument to
+// getProblematicClassesByMetricSpread for confusion-matrix widgets.
+export function countShare(row, metric) {
+  const total = (row.TP ?? 0) + (row.FP ?? 0) + (row.FN ?? 0) + (row.TN ?? 0);
+  if (total === 0) return null;
+  return (row[metric] ?? 0) / total;
+}
+
 export function ClassLineChart({ combined, className, metrics }) {
   const sub_df = combined.filter((r) => r.class === className);
   const labels = sub_df.map((r) => r.severity);
@@ -656,6 +845,17 @@ export function ClassMetricsTable({ combined, className , metrics }) {
                           (row?.TN ?? 0);
 
                         const pct = total > 0 ? (value / total) * 100 : 0;
+
+                        value = `${value.toFixed(1)} (${pct.toFixed(1)}%)`;
+                      } else if (["preds_population", "actual_population"].includes(metric)) {
+                        // Express population counts as a share of the whole dataset:
+                        // the sum of actual_population across all classes at this
+                        // severity (i.e. the total number of samples).
+                        const datasetSize = combined
+                          .filter((r) => r.severity === sev)
+                          .reduce((sum, r) => sum + (r.actual_population ?? 0), 0);
+
+                        const pct = datasetSize > 0 ? (value / datasetSize) * 100 : 0;
 
                         value = `${value.toFixed(1)} (${pct.toFixed(1)}%)`;
                       } else {

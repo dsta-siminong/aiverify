@@ -1,0 +1,31 @@
+{
+  "cid": "augbyclass_perf_short_widget",
+  "widgetSize": {
+    "minW": 12,
+    "minH": 1,
+    "maxW": 12,
+    "maxH": 36
+  },
+  "name": "[2b2s] Augmentations By Class Model Performance Widget (problematic classes only)",
+  "description": "Augmentations By Class Model Performance, filtered to only show classes where precision, recall, or f1-score swings by more than 20 percentage points across severities under augmentation",
+  "dynamicHeight": true,
+  "dependencies": [
+    {
+      "cid": "augmentation_by_class_algorithm"
+    }
+  ],
+  "mockdata": [
+    {
+      "type": "Algorithm",
+      "cid": "augmentation_by_class_algorithm",
+      "datapath": "augmentation_by_class_algorithm.sample.json"
+    }
+  ],
+  "properties": [
+    {
+      "key": "title",
+      "helper": "Set the widget title (default \"AUGMENTATIONS BY CLASS - MODEL PERFORMANCE (PROBLEMATIC CLASSES)\")",
+      "default": "AUGMENTATIONS BY CLASS - MODEL PERFORMANCE (PROBLEMATIC CLASSES)"
+    }
+  ]
+}

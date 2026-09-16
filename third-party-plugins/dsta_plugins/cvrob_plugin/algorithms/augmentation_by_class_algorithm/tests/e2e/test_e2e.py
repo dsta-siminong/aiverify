@@ -20,8 +20,8 @@ binary_classification_pipeline = {
     "ground_truth": "label",
     "plugin_argument_values": {
         "class_names": "Barge,CG-P,ContainerShip,Cruise,Dredger,Ferry,LNG-LPG,RORO,Sampan,Trawler-FishingVessel,Tugboat,Warship,Yacht",
-        "aug_library": 'http://localhost:8100',
-        'aug_methods': 'Rain',
+        "aug_library": "albumentations",#"http://localhost:8100",
+        'aug_methods': 'Erasing,Rain,Rotate,GaussianBlur,GaussianNoise',
         'custom_parameters': None,
         "num_epochs": 1,
         # "model_api_url": "http://localhost:8000/predict_array",
